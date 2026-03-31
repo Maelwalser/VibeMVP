@@ -7,122 +7,230 @@ import (
 	"time"
 )
 
-// TargetEnvironment describes where the app is deployed.
-type TargetEnvironment string
+// ── Enum types ────────────────────────────────────────────────────────────────
+
+type ArchPattern string
 
 const (
-	EnvCloudNative TargetEnvironment = "cloud-native"
-	EnvOnPremise   TargetEnvironment = "on-premise"
-	EnvEdge        TargetEnvironment = "edge"
-	EnvLocal       TargetEnvironment = "local"
+	ArchMonolith        ArchPattern = "monolith"
+	ArchModularMonolith ArchPattern = "modular-monolith"
+	ArchMicroservices   ArchPattern = "microservices"
+	ArchEventDriven     ArchPattern = "event-driven"
 )
 
-// SystemTopology describes the architectural pattern.
-type SystemTopology string
+type CommProtocol string
 
 const (
-	TopoMonolith    SystemTopology = "monolith"
-	TopoMicro       SystemTopology = "microservices"
-	TopoServerless  SystemTopology = "serverless"
-	TopoEventDriven SystemTopology = "event-driven"
+	ProtoREST       CommProtocol = "REST"
+	ProtoGraphQL    CommProtocol = "GraphQL"
+	ProtoGRPC       CommProtocol = "gRPC"
+	ProtoWebSockets CommProtocol = "WebSockets"
+	ProtoMixed      CommProtocol = "mixed"
 )
 
-// ScalingStrategy describes how the system scales.
-type ScalingStrategy string
+type SerializationFmt string
 
 const (
-	ScaleHorizontal ScalingStrategy = "horizontal"
-	ScaleVertical   ScalingStrategy = "vertical"
-	ScaleBoth       ScalingStrategy = "both"
-	ScaleNone       ScalingStrategy = "none"
+	SerialJSON        SerializationFmt = "JSON"
+	SerialProtobuf    SerializationFmt = "Protobuf"
+	SerialMessagePack SerializationFmt = "MessagePack"
+	SerialMixed       SerializationFmt = "mixed"
 )
 
-// DatabaseType describes the primary database type.
+type ComputeEnv string
+
+const (
+	ComputeServerless     ComputeEnv = "serverless"
+	ComputeContainerized  ComputeEnv = "containerized"
+	ComputeBareMetalVM    ComputeEnv = "bare-metal/VM"
+)
+
 type DatabaseType string
 
 const (
-	DBPostgres  DatabaseType = "PostgreSQL"
-	DBMySQL     DatabaseType = "MySQL"
-	DBMongo     DatabaseType = "MongoDB"
-	DBDynamo    DatabaseType = "DynamoDB"
-	DBRedis     DatabaseType = "Redis"
-	DBSQLite    DatabaseType = "SQLite"
-	DBOther     DatabaseType = "other"
+	DBPostgres DatabaseType = "PostgreSQL"
+	DBMySQL    DatabaseType = "MySQL"
+	DBMongo    DatabaseType = "MongoDB"
+	DBDynamo   DatabaseType = "DynamoDB"
+	DBSQLite   DatabaseType = "SQLite"
+	DBOther    DatabaseType = "other"
 )
 
-// APIParadigm describes how data is exposed.
-type APIParadigm string
+type CacheStore string
 
 const (
-	APIREST    APIParadigm = "REST"
-	APIGraphQL APIParadigm = "GraphQL"
-	APIGrpc    APIParadigm = "gRPC"
-	APITrpc    APIParadigm = "tRPC"
-	APIMixed   APIParadigm = "mixed"
+	CacheRedis     CacheStore = "Redis"
+	CacheMemcached CacheStore = "Memcached"
+	CacheNone      CacheStore = "none"
 )
 
-// --- Pillar structs ---
+type RenderingMode string
 
-type ArchitecturePillar struct {
-	TargetEnvironment TargetEnvironment `json:"target_environment"`
-	CloudProvider     string            `json:"cloud_provider,omitempty"`
-	Topology          SystemTopology    `json:"topology"`
-	ScalingStrategy   ScalingStrategy   `json:"scaling_strategy"`
-	ScalingNotes      string            `json:"scaling_notes,omitempty"`
+const (
+	RenderSPA RenderingMode = "SPA"
+	RenderSSR RenderingMode = "SSR"
+	RenderSSG RenderingMode = "SSG"
+	RenderISR RenderingMode = "ISR"
+)
+
+type DesktopFramework string
+
+const (
+	DeskElectron DesktopFramework = "Electron"
+	DeskTauri    DesktopFramework = "Tauri"
+	DeskQt       DesktopFramework = "Qt"
+	DeskNative   DesktopFramework = "native (Swift/WPF)"
+	DeskOther    DesktopFramework = "other"
+)
+
+type E2EFramework string
+
+const (
+	E2EPlaywright E2EFramework = "Playwright"
+	E2ECypress    E2EFramework = "Cypress"
+	E2ENone       E2EFramework = "none"
+)
+
+type CIPlatform string
+
+const (
+	CIGitHubActions CIPlatform = "GitHub Actions"
+	CIGitLabCI      CIPlatform = "GitLab CI"
+	CICircleCI      CIPlatform = "CircleCI"
+	CIJenkins       CIPlatform = "Jenkins"
+	CINone          CIPlatform = "none"
+)
+
+type SecretsBackend string
+
+const (
+	SecretsVault    SecretsBackend = "HashiCorp Vault"
+	SecretsAWS      SecretsBackend = "AWS Secrets Manager"
+	SecretsGCP      SecretsBackend = "GCP Secret Manager"
+	SecretsEnvFiles SecretsBackend = "env files"
+	SecretsNone     SecretsBackend = "none"
+)
+
+type LogSolution string
+
+const (
+	LogELK        LogSolution = "ELK Stack"
+	LogDatadog    LogSolution = "Datadog"
+	LogSplunk     LogSolution = "Splunk"
+	LogCloudWatch LogSolution = "CloudWatch"
+	LogOther      LogSolution = "other"
+)
+
+// ── Phase 1: Universal Global Constants ──────────────────────────────────────
+
+// DomainPillar captures entity relationships, RBAC, and compliance boundaries.
+type DomainPillar struct {
+	EntityRelationships string `json:"entity_relationships"` // ER model description
+	Cardinality         string `json:"cardinality"`          // e.g. "User 1:N Order"
+	CascadingRules      string `json:"cascading_rules"`
+	RBACMatrix          string `json:"rbac_matrix"`
+	Compliance          string `json:"compliance"` // GDPR, HIPAA, PCI-DSS, none
 }
 
-type TechStackPillar struct {
-	FrontendFramework  string `json:"frontend_framework"`
-	FrontendVersion    string `json:"frontend_version"`
-	StateManagement    string `json:"state_management"`
-	StylingParadigm    string `json:"styling_paradigm"`
-	BackendLanguage    string `json:"backend_language"`
-	BackendFramework   string `json:"backend_framework"`
-	RuntimeEnvironment string `json:"runtime_environment"`
-	ThirdParty         string `json:"third_party_integrations"`
+// TopologyPillar defines the structural model and inter-domain contracts.
+type TopologyPillar struct {
+	ArchPattern     ArchPattern      `json:"arch_pattern"`
+	CommProtocol    CommProtocol     `json:"comm_protocol"`
+	Serialization   SerializationFmt `json:"serialization"`
+	DomainNotes     string           `json:"domain_notes,omitempty"`
 }
 
-type DataArchPillar struct {
-	DatabaseType     DatabaseType `json:"database_type"`
-	SecondaryDB      string       `json:"secondary_db,omitempty"`
-	CoreEntities     string       `json:"core_entities"`
-	APIParadigm      APIParadigm  `json:"api_paradigm"`
-	CachingStrategy  string       `json:"caching_strategy,omitempty"`
+// GlobalNFRPillar holds SLOs and disaster recovery parameters.
+type GlobalNFRPillar struct {
+	UptimeSLO      string `json:"uptime_slo"`       // e.g. "99.9%"
+	ConcurrentConn string `json:"concurrent_conn"`  // e.g. "5000"
+	RTO            string `json:"rto"`              // Recovery Time Objective
+	RPO            string `json:"rpo"`              // Recovery Point Objective
+	NFRNotes       string `json:"nfr_notes,omitempty"`
 }
 
-type FunctionalSpecPillar struct {
-	UserRoles     string `json:"user_roles"`
-	CoreJourneys  string `json:"core_journeys"`
-	ErrorHandling string `json:"error_handling"`
+// ── Phase 2: Domain-Specific Execution Paths ─────────────────────────────────
+
+// BackendPillar covers server compute, runtime, databases, queues, and external APIs.
+type BackendPillar struct {
+	ComputeEnv    ComputeEnv   `json:"compute_env"`
+	CloudProvider string       `json:"cloud_provider,omitempty"`
+	Runtime       string       `json:"runtime"`        // e.g. "Go 1.23"
+	Framework     string       `json:"framework"`      // e.g. "Gin", "Echo"
+	PrimaryDB     DatabaseType `json:"primary_db"`
+	CacheStore    CacheStore   `json:"cache_store"`
+	CacheStrategy string       `json:"cache_strategy"` // TTL / event-driven / mixed
+	MessageBroker string       `json:"message_broker"` // Kafka, RabbitMQ, SQS, none
+	ExternalAPIs  string       `json:"external_apis"`  // retry, rate-limit, fallback notes
 }
 
-type NFRPillar struct {
-	Encryption      string `json:"encryption"`
-	Sanitization    string `json:"input_sanitization"`
-	RateLimiting    string `json:"rate_limiting"`
-	LatencyTarget   string `json:"latency_target"`
-	Compliance      string `json:"compliance"`
-	Accessibility   string `json:"accessibility"`
+// FrontendPillar covers web rendering, framework, state management, styling, and browser support.
+type FrontendPillar struct {
+	Rendering     RenderingMode `json:"rendering"`
+	Framework     string        `json:"framework"`      // e.g. "React 18", "Next.js 14"
+	ServerState   string        `json:"server_state"`   // e.g. "React Query", "Apollo"
+	ClientState   string        `json:"client_state"`   // e.g. "Zustand", "Redux"
+	Styling       string        `json:"styling"`        // Tailwind, CSS-in-JS, SASS
+	BrowserMatrix string        `json:"browser_matrix"` // e.g. "Chromium>100, Safari>15"
 }
 
-type DevWorkflowPillar struct {
-	ProjectStructure string `json:"project_structure"`
-	TestFramework    string `json:"test_framework"`
-	CoverageTarget   string `json:"coverage_target"`
-	CIPlatform       string `json:"ci_platform"`
-	Linting          string `json:"linting"`
-	Formatting       string `json:"formatting"`
+// DesktopPillar covers OS targets, frameworks, hardware access, IPC, and distribution.
+type DesktopPillar struct {
+	TargetOS      string           `json:"target_os"`      // e.g. "Windows 10/11, macOS Silicon"
+	AppFramework  DesktopFramework `json:"app_framework"`
+	HWAccess      string           `json:"hw_access"`      // GPU, USB, filesystem
+	IPCModel      string           `json:"ipc_model"`      // main/renderer IPC security
+	Distribution  string           `json:"distribution"`   // .exe, .dmg, .AppImage, OTA strategy
 }
 
-// Manifest is the root structure holding all six pillars.
+// ── Phase 3: Lifecycle Operations & Tooling ───────────────────────────────────
+
+// TestingPillar defines coverage targets per test taxonomy.
+type TestingPillar struct {
+	UnitCoverage    string       `json:"unit_coverage"`    // e.g. "80%"
+	IntegCoverage   string       `json:"integ_coverage"`
+	E2EFramework    E2EFramework `json:"e2e_framework"`
+	E2ECoverage     string       `json:"e2e_coverage"`
+	TestingStrategy string       `json:"testing_strategy,omitempty"` // additional notes
+}
+
+// CICDPillar defines pipeline gates, environment strategy, and secrets management.
+type CICDPillar struct {
+	CIPlatform    CIPlatform     `json:"ci_platform"`
+	PipelineGates string         `json:"pipeline_gates"` // blocking checks: lint, tests, vuln scan
+	EnvStrategy   string         `json:"env_strategy"`   // dev/staging/prod definitions
+	SecretsMgmt   SecretsBackend `json:"secrets_mgmt"`
+}
+
+// TelemetryPillar defines logging, metrics, tracing, and alerting strategy.
+type TelemetryPillar struct {
+	LogSolution LogSolution `json:"log_solution"`
+	LogFormat   string      `json:"log_format"`  // JSON structured, plaintext
+	Metrics     string      `json:"metrics"`     // Prometheus, Datadog, CloudWatch, none
+	Tracing     string      `json:"tracing"`     // Jaeger, Zipkin, OpenTelemetry, none
+	Alerting    string      `json:"alerting,omitempty"`
+}
+
+// ── Root manifest ─────────────────────────────────────────────────────────────
+
+// Manifest is the root document holding all three phases.
 type Manifest struct {
-	CreatedAt    time.Time            `json:"created_at"`
-	Architecture ArchitecturePillar   `json:"architecture"`
-	TechStack    TechStackPillar      `json:"tech_stack"`
-	DataArch     DataArchPillar       `json:"data_architecture"`
-	Functional   FunctionalSpecPillar `json:"functional_specs"`
-	NFR          NFRPillar            `json:"non_functional_requirements"`
-	DevWorkflow  DevWorkflowPillar    `json:"dev_workflow"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Phase 1 – Universal Global Constants
+	Domain    DomainPillar    `json:"domain"`
+	Topology  TopologyPillar  `json:"topology"`
+	GlobalNFR GlobalNFRPillar `json:"global_nfr"`
+
+	// Phase 2 – Domain-Specific Execution Paths
+	Backend  BackendPillar  `json:"backend"`
+	Frontend FrontendPillar `json:"frontend"`
+	Desktop  DesktopPillar  `json:"desktop"`
+
+	// Phase 3 – Lifecycle Operations & Tooling
+	Testing   TestingPillar   `json:"testing"`
+	CICD      CICDPillar      `json:"cicd"`
+	Telemetry TelemetryPillar `json:"telemetry"`
 }
 
 // Save writes the manifest to path as indented JSON.

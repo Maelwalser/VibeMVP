@@ -334,8 +334,8 @@ func (m Model) execCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.statusErr = false
 
 	default:
-		// :1-6 to jump to section by number
-		if len(cmd) == 1 && cmd[0] >= '1' && cmd[0] <= '6' {
+		// :1-9 to jump to section by number
+		if len(cmd) == 1 && cmd[0] >= '1' && cmd[0] <= '9' {
 			idx := int(cmd[0]-'1')
 			if idx < len(m.sections) {
 				m.activeSection = idx
@@ -387,50 +387,76 @@ func (m Model) BuildManifest() *manifest.Manifest {
 	}
 
 	return &manifest.Manifest{
-		Architecture: manifest.ArchitecturePillar{
-			TargetEnvironment: manifest.TargetEnvironment(get("arch", "target_env")),
-			CloudProvider:     get("arch", "cloud_provider"),
-			Topology:          manifest.SystemTopology(get("arch", "topology")),
-			ScalingStrategy:   manifest.ScalingStrategy(get("arch", "scaling")),
-			ScalingNotes:      get("arch", "scaling_notes"),
+		// Phase 1 – Universal Global Constants
+		Domain: manifest.DomainPillar{
+			EntityRelationships: get("domain", "er_model"),
+			Cardinality:         get("domain", "cardinality"),
+			CascadingRules:      get("domain", "cascading"),
+			RBACMatrix:          get("domain", "rbac_matrix"),
+			Compliance:          get("domain", "compliance"),
 		},
-		TechStack: manifest.TechStackPillar{
-			FrontendFramework:  get("stack", "fe_framework"),
-			FrontendVersion:    get("stack", "fe_version"),
-			StateManagement:    get("stack", "state_mgmt"),
-			StylingParadigm:    get("stack", "styling"),
-			BackendLanguage:    get("stack", "be_language"),
-			BackendFramework:   get("stack", "be_framework"),
-			RuntimeEnvironment: get("stack", "runtime"),
-			ThirdParty:         get("stack", "integrations"),
+		Topology: manifest.TopologyPillar{
+			ArchPattern:   manifest.ArchPattern(get("topology", "arch_pattern")),
+			CommProtocol:  manifest.CommProtocol(get("topology", "comm_protocol")),
+			Serialization: manifest.SerializationFmt(get("topology", "serialization")),
+			DomainNotes:   get("topology", "domain_notes"),
 		},
-		DataArch: manifest.DataArchPillar{
-			DatabaseType:    manifest.DatabaseType(get("data", "db_type")),
-			SecondaryDB:     get("data", "secondary_db"),
-			CoreEntities:    get("data", "entities"),
-			APIParadigm:     manifest.APIParadigm(get("data", "api_paradigm")),
-			CachingStrategy: get("data", "caching"),
+		GlobalNFR: manifest.GlobalNFRPillar{
+			UptimeSLO:      get("gnfr", "uptime_slo"),
+			ConcurrentConn: get("gnfr", "concurrent_conn"),
+			RTO:            get("gnfr", "rto"),
+			RPO:            get("gnfr", "rpo"),
+			NFRNotes:       get("gnfr", "nfr_notes"),
 		},
-		Functional: manifest.FunctionalSpecPillar{
-			UserRoles:     get("features", "user_roles"),
-			CoreJourneys:  get("features", "core_journeys"),
-			ErrorHandling: get("features", "error_handling"),
+
+		// Phase 2 – Domain-Specific Execution Paths
+		Backend: manifest.BackendPillar{
+			ComputeEnv:    manifest.ComputeEnv(get("backend", "compute_env")),
+			CloudProvider: get("backend", "cloud_provider"),
+			Runtime:       get("backend", "runtime"),
+			Framework:     get("backend", "be_framework"),
+			PrimaryDB:     manifest.DatabaseType(get("backend", "primary_db")),
+			CacheStore:    manifest.CacheStore(get("backend", "cache_store")),
+			CacheStrategy: get("backend", "cache_strategy"),
+			MessageBroker: get("backend", "msg_broker"),
+			ExternalAPIs:  get("backend", "external_apis"),
 		},
-		NFR: manifest.NFRPillar{
-			Encryption:    get("nfr", "encryption"),
-			Sanitization:  get("nfr", "sanitization"),
-			RateLimiting:  get("nfr", "rate_limiting"),
-			LatencyTarget: get("nfr", "latency_target"),
-			Compliance:    get("nfr", "compliance"),
-			Accessibility: get("nfr", "accessibility"),
+		Frontend: manifest.FrontendPillar{
+			Rendering:     manifest.RenderingMode(get("frontend", "rendering")),
+			Framework:     get("frontend", "fe_framework"),
+			ServerState:   get("frontend", "server_state"),
+			ClientState:   get("frontend", "client_state"),
+			Styling:       get("frontend", "styling"),
+			BrowserMatrix: get("frontend", "browser_matrix"),
 		},
-		DevWorkflow: manifest.DevWorkflowPillar{
-			ProjectStructure: get("workflow", "project_structure"),
-			TestFramework:    get("workflow", "test_framework"),
-			CoverageTarget:   get("workflow", "coverage_target"),
-			CIPlatform:       get("workflow", "ci_platform"),
-			Linting:          get("workflow", "linting"),
-			Formatting:       get("workflow", "formatting"),
+		Desktop: manifest.DesktopPillar{
+			TargetOS:     get("desktop", "target_os"),
+			AppFramework: manifest.DesktopFramework(get("desktop", "app_framework")),
+			HWAccess:     get("desktop", "hw_access"),
+			IPCModel:     get("desktop", "ipc_model"),
+			Distribution: get("desktop", "distribution"),
+		},
+
+		// Phase 3 – Lifecycle Operations & Tooling
+		Testing: manifest.TestingPillar{
+			UnitCoverage:    get("testing", "unit_coverage"),
+			IntegCoverage:   get("testing", "integ_coverage"),
+			E2EFramework:    manifest.E2EFramework(get("testing", "e2e_framework")),
+			E2ECoverage:     get("testing", "e2e_coverage"),
+			TestingStrategy: get("testing", "test_strategy"),
+		},
+		CICD: manifest.CICDPillar{
+			CIPlatform:    manifest.CIPlatform(get("cicd", "ci_platform")),
+			PipelineGates: get("cicd", "pipeline_gates"),
+			EnvStrategy:   get("cicd", "env_strategy"),
+			SecretsMgmt:   manifest.SecretsBackend(get("cicd", "secrets_mgmt")),
+		},
+		Telemetry: manifest.TelemetryPillar{
+			LogSolution: manifest.LogSolution(get("telemetry", "log_solution")),
+			LogFormat:   get("telemetry", "log_format"),
+			Metrics:     get("telemetry", "metrics"),
+			Tracing:     get("telemetry", "tracing"),
+			Alerting:    get("telemetry", "alerting"),
 		},
 	}
 }

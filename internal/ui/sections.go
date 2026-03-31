@@ -11,12 +11,12 @@ const (
 
 // Field represents a single form field within a section.
 type Field struct {
-	Key     string    // machine key (e.g. "target_env")
-	Label   string    // padded display label
+	Key     string    // machine key (e.g. "arch_pattern")
+	Label   string    // padded display label — must be exactly 14 chars
 	Kind    FieldKind
-	Value   string    // current string value
-	Options []string  // KindSelect: available choices
-	SelIdx  int       // KindSelect: currently selected index
+	Value   string   // current string value
+	Options []string // KindSelect: available choices
+	SelIdx  int      // KindSelect: currently selected index
 }
 
 // DisplayValue returns the rendered value string for NORMAL mode.
@@ -27,7 +27,7 @@ func (f Field) DisplayValue() string {
 		}
 		return f.Options[f.SelIdx]
 	}
-	// Truncate long single-line previews for textarea
+	// Show a one-line preview for textarea fields.
 	v := f.Value
 	if f.Kind == KindTextArea && len(v) > 0 {
 		lines := splitLines(v)
@@ -56,164 +56,370 @@ func (f *Field) CyclePrev() {
 	f.Value = f.Options[f.SelIdx]
 }
 
-// Section groups related fields under a pillar.
+// Section groups related fields under a phase pillar.
 type Section struct {
-	ID     string  // short identifier (e.g. "arch")
-	Abbr   string  // 3-char tab label
+	ID     string  // short identifier (e.g. "domain")
+	Abbr   string  // tab label
 	Title  string  // full title
-	Desc   string  // one-line description
+	Desc   string  // one-line description shown as a comment
 	Fields []Field
 }
 
-// initSections returns the six-pillar section definitions.
+// initSections returns the nine section definitions across three phases.
 func initSections() []Section {
 	return []Section{
+		// ── Phase 1 · Universal Global Constants ──────────────────────────────
+
 		{
-			ID:   "arch",
-			Abbr: "ARCH",
-			Title: "System Architecture & Deployment",
-			Desc:  "Where and how will this application live?",
+			ID:    "domain",
+			Abbr:  "DOMAIN",
+			Title: "Phase 1 · Domain & Business Logic",
+			Desc:  "Entity relationships, RBAC matrix, and compliance boundaries.",
 			Fields: []Field{
 				{
-					Key:     "target_env",
-					Label:   "target_env    ",
+					Key:   "er_model",
+					Label: "er_model      ",
+					Kind:  KindTextArea,
+				},
+				{
+					Key:     "cardinality",
+					Label:   "cardinality   ",
 					Kind:    KindSelect,
-					Options: []string{"cloud-native", "on-premise", "edge", "local"},
+					Options: []string{"1:1", "1:N", "M:N", "mixed"},
+					SelIdx:  3,
+					Value:   "mixed",
+				},
+				{
+					Key:   "cascading",
+					Label: "cascading     ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "rbac_matrix",
+					Label: "rbac_matrix   ",
+					Kind:  KindTextArea,
+				},
+				{
+					Key:     "compliance",
+					Label:   "compliance    ",
+					Kind:    KindSelect,
+					Options: []string{"none", "GDPR", "HIPAA", "PCI-DSS", "GDPR+HIPAA", "custom"},
+				},
+			},
+		},
+
+		{
+			ID:    "topology",
+			Abbr:  "TOPO",
+			Title: "Phase 1 · System Topology & Communication",
+			Desc:  "Architecture pattern and inter-domain communication contracts.",
+			Fields: []Field{
+				{
+					Key:     "arch_pattern",
+					Label:   "arch_pattern  ",
+					Kind:    KindSelect,
+					Options: []string{"monolith", "modular-monolith", "microservices", "event-driven"},
+				},
+				{
+					Key:     "comm_protocol",
+					Label:   "comm_protocol ",
+					Kind:    KindSelect,
+					Options: []string{"REST", "GraphQL", "gRPC", "WebSockets", "mixed"},
+				},
+				{
+					Key:     "serialization",
+					Label:   "serialization ",
+					Kind:    KindSelect,
+					Options: []string{"JSON", "Protobuf", "MessagePack", "mixed"},
+				},
+				{
+					Key:   "domain_notes",
+					Label: "domain_notes  ",
+					Kind:  KindTextArea,
+				},
+			},
+		},
+
+		{
+			ID:    "gnfr",
+			Abbr:  "GNFR",
+			Title: "Phase 1 · Global Non-Functional Requirements",
+			Desc:  "Quantifiable SLOs and disaster recovery objectives.",
+			Fields: []Field{
+				{
+					Key:   "uptime_slo",
+					Label: "uptime_slo    ",
+					Kind:  KindText,
+					Value: "99.9%",
+				},
+				{
+					Key:   "concurrent_conn",
+					Label: "concurrent_con",
+					Kind:  KindText,
+				},
+				{
+					Key:   "rto",
+					Label: "rto           ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "rpo",
+					Label: "rpo           ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "nfr_notes",
+					Label: "nfr_notes     ",
+					Kind:  KindTextArea,
+				},
+			},
+		},
+
+		// ── Phase 2 · Domain-Specific Execution Paths ─────────────────────────
+
+		{
+			ID:    "backend",
+			Abbr:  "BACK",
+			Title: "Phase 2 · Path A: Backend Server / API",
+			Desc:  "Compute environment, runtime, data persistence, queuing, and external APIs.",
+			Fields: []Field{
+				{
+					Key:     "compute_env",
+					Label:   "compute_env   ",
+					Kind:    KindSelect,
+					Options: []string{"serverless", "containerized", "bare-metal/VM"},
 				},
 				{
 					Key:     "cloud_provider",
 					Label:   "cloud_provider",
 					Kind:    KindSelect,
-					Options: []string{"AWS", "GCP", "Azure", "N/A"},
-					SelIdx:  3,
-					Value:   "N/A",
+					Options: []string{"N/A", "AWS", "GCP", "Azure"},
 				},
 				{
-					Key:     "topology",
-					Label:   "topology      ",
+					Key:   "runtime",
+					Label: "runtime       ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "be_framework",
+					Label: "be_framework  ",
+					Kind:  KindText,
+				},
+				{
+					Key:     "primary_db",
+					Label:   "primary_db    ",
 					Kind:    KindSelect,
-					Options: []string{"monolith", "microservices", "serverless", "event-driven"},
+					Options: []string{"PostgreSQL", "MySQL", "MongoDB", "DynamoDB", "SQLite", "other"},
 				},
 				{
-					Key:     "scaling",
-					Label:   "scaling       ",
+					Key:     "cache_store",
+					Label:   "cache_store   ",
 					Kind:    KindSelect,
-					Options: []string{"horizontal", "vertical", "both", "none"},
-					SelIdx:  3,
-					Value:   "none",
+					Options: []string{"none", "Redis", "Memcached"},
 				},
 				{
-					Key:   "scaling_notes",
-					Label: "scaling_notes ",
+					Key:     "cache_strategy",
+					Label:   "cache_strategy",
+					Kind:    KindSelect,
+					Options: []string{"none", "TTL", "event-driven", "mixed"},
+				},
+				{
+					Key:     "msg_broker",
+					Label:   "msg_broker    ",
+					Kind:    KindSelect,
+					Options: []string{"none", "RabbitMQ", "Kafka", "SQS", "other"},
+				},
+				{
+					Key:   "external_apis",
+					Label: "external_apis ",
+					Kind:  KindTextArea,
+				},
+			},
+		},
+
+		{
+			ID:    "frontend",
+			Abbr:  "FRONT",
+			Title: "Phase 2 · Path B: Web Frontend",
+			Desc:  "Rendering topology, framework, state management, styling, and browser matrix.",
+			Fields: []Field{
+				{
+					Key:     "rendering",
+					Label:   "rendering     ",
+					Kind:    KindSelect,
+					Options: []string{"SPA", "SSR", "SSG", "ISR"},
+				},
+				{
+					Key:   "fe_framework",
+					Label: "fe_framework  ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "server_state",
+					Label: "server_state  ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "client_state",
+					Label: "client_state  ",
+					Kind:  KindText,
+				},
+				{
+					Key:     "styling",
+					Label:   "styling       ",
+					Kind:    KindSelect,
+					Options: []string{"Tailwind", "CSS-in-JS", "SASS", "CSS Modules", "other"},
+				},
+				{
+					Key:   "browser_matrix",
+					Label: "browser_matrix",
 					Kind:  KindText,
 				},
 			},
 		},
+
 		{
-			ID:   "stack",
-			Abbr: "STACK",
-			Title: "Technology Stack & Boundaries",
-			Desc:  "Languages, frameworks, runtimes, and third-party integrations.",
-			Fields: []Field{
-				{Key: "fe_framework",  Label: "fe_framework  ", Kind: KindText},
-				{Key: "fe_version",    Label: "fe_version    ", Kind: KindText},
-				{Key: "state_mgmt",    Label: "state_mgmt    ", Kind: KindText},
-				{Key: "styling",       Label: "styling       ", Kind: KindText},
-				{Key: "be_language",   Label: "be_language   ", Kind: KindText},
-				{Key: "be_framework",  Label: "be_framework  ", Kind: KindText},
-				{Key: "runtime",       Label: "runtime       ", Kind: KindText},
-				{Key: "integrations",  Label: "integrations  ", Kind: KindTextArea},
-			},
-		},
-		{
-			ID:   "data",
-			Abbr: "DATA",
-			Title: "Data Architecture",
-			Desc:  "Database schemas, relationships, and API paradigms.",
+			ID:    "desktop",
+			Abbr:  "DESK",
+			Title: "Phase 2 · Path C: Desktop Application",
+			Desc:  "Target OS, app framework, hardware access, IPC, and distribution.",
 			Fields: []Field{
 				{
-					Key:     "db_type",
-					Label:   "db_type       ",
-					Kind:    KindSelect,
-					Options: []string{"PostgreSQL", "MySQL", "MongoDB", "DynamoDB", "Redis", "SQLite", "other"},
-				},
-				{Key: "secondary_db",  Label: "secondary_db  ", Kind: KindText},
-				{Key: "entities",      Label: "entities      ", Kind: KindTextArea},
-				{
-					Key:     "api_paradigm",
-					Label:   "api_paradigm  ",
-					Kind:    KindSelect,
-					Options: []string{"REST", "GraphQL", "gRPC", "tRPC", "mixed"},
-				},
-				{Key: "caching",       Label: "caching       ", Kind: KindText},
-			},
-		},
-		{
-			ID:   "features",
-			Abbr: "FEAT",
-			Title: "Functional Specifications",
-			Desc:  "User roles, core journeys, and error handling strategies.",
-			Fields: []Field{
-				{Key: "user_roles",    Label: "user_roles    ", Kind: KindTextArea},
-				{Key: "core_journeys", Label: "core_journeys ", Kind: KindTextArea},
-				{Key: "error_handling",Label: "error_handling", Kind: KindTextArea},
-			},
-		},
-		{
-			ID:   "nfr",
-			Abbr: "NFR",
-			Title: "Non-Functional Requirements",
-			Desc:  "Security, performance, compliance, and accessibility.",
-			Fields: []Field{
-				{
-					Key:     "encryption",
-					Label:   "encryption    ",
-					Kind:    KindSelect,
-					Options: []string{"AES-256 + TLS 1.3", "TLS 1.3 only", "AES-256 only", "none"},
+					Key:   "target_os",
+					Label: "target_os     ",
+					Kind:  KindText,
 				},
 				{
-					Key:     "sanitization",
-					Label:   "sanitization  ",
+					Key:     "app_framework",
+					Label:   "app_framework ",
 					Kind:    KindSelect,
-					Options: []string{"yes", "no"},
+					Options: []string{"N/A", "Electron", "Tauri", "Qt", "native (Swift/WPF)", "other"},
 				},
-				{Key: "rate_limiting",  Label: "rate_limiting ", Kind: KindText},
-				{Key: "latency_target", Label: "latency_target", Kind: KindText},
-				{Key: "compliance",     Label: "compliance    ", Kind: KindText},
 				{
-					Key:     "accessibility",
-					Label:   "accessibility ",
+					Key:   "hw_access",
+					Label: "hw_access     ",
+					Kind:  KindTextArea,
+				},
+				{
+					Key:   "ipc_model",
+					Label: "ipc_model     ",
+					Kind:  KindText,
+				},
+				{
+					Key:     "distribution",
+					Label:   "distribution  ",
 					Kind:    KindSelect,
-					Options: []string{"WCAG 2.1 AA", "WCAG 2.1 AAA", "none"},
-					SelIdx:  2,
-					Value:   "none",
+					Options: []string{"N/A", ".exe (Squirrel)", ".dmg", ".AppImage", "all platforms", "other"},
 				},
 			},
 		},
+
+		// ── Phase 3 · Lifecycle Operations & Tooling ──────────────────────────
+
 		{
-			ID:   "workflow",
-			Abbr: "FLOW",
-			Title: "Development Workflow & Tooling",
-			Desc:  "Project structure, testing strategy, CI, and linting.",
+			ID:    "testing",
+			Abbr:  "TEST",
+			Title: "Phase 3 · Verification & Testing",
+			Desc:  "Coverage targets per test taxonomy: unit, integration, and E2E.",
 			Fields: []Field{
 				{
-					Key:     "project_structure",
-					Label:   "proj_structure",
-					Kind:    KindSelect,
-					Options: []string{"feature-based", "layer-based", "domain-driven", "standard Go"},
+					Key:   "unit_coverage",
+					Label: "unit_coverage ",
+					Kind:  KindText,
+					Value: "80%",
 				},
-				{Key: "test_framework",  Label: "test_framework", Kind: KindText},
-				{Key: "coverage_target", Label: "coverage      ", Kind: KindText, Value: "80%"},
+				{
+					Key:   "integ_coverage",
+					Label: "integ_coverage",
+					Kind:  KindText,
+					Value: "70%",
+				},
+				{
+					Key:     "e2e_framework",
+					Label:   "e2e_framework ",
+					Kind:    KindSelect,
+					Options: []string{"none", "Playwright", "Cypress"},
+				},
+				{
+					Key:   "e2e_coverage",
+					Label: "e2e_coverage  ",
+					Kind:  KindText,
+				},
+				{
+					Key:   "test_strategy",
+					Label: "test_strategy ",
+					Kind:  KindTextArea,
+				},
+			},
+		},
+
+		{
+			ID:    "cicd",
+			Abbr:  "CICD",
+			Title: "Phase 3 · CI/CD Pipeline",
+			Desc:  "Automated pipeline gates, environment strategy, and secrets management.",
+			Fields: []Field{
 				{
 					Key:     "ci_platform",
 					Label:   "ci_platform   ",
 					Kind:    KindSelect,
-					Options: []string{"GitHub Actions", "GitLab CI", "CircleCI", "Jenkins", "none"},
-					SelIdx:  4,
-					Value:   "none",
+					Options: []string{"none", "GitHub Actions", "GitLab CI", "CircleCI", "Jenkins"},
 				},
-				{Key: "linting",     Label: "linting       ", Kind: KindText},
-				{Key: "formatting",  Label: "formatting    ", Kind: KindText},
+				{
+					Key:   "pipeline_gates",
+					Label: "pipeline_gates",
+					Kind:  KindTextArea,
+				},
+				{
+					Key:   "env_strategy",
+					Label: "env_strategy  ",
+					Kind:  KindText,
+					Value: "dev / staging / prod",
+				},
+				{
+					Key:     "secrets_mgmt",
+					Label:   "secrets_mgmt  ",
+					Kind:    KindSelect,
+					Options: []string{"env files", "HashiCorp Vault", "AWS Secrets Manager", "GCP Secret Manager", "none"},
+				},
+			},
+		},
+
+		{
+			ID:    "telemetry",
+			Abbr:  "TELEM",
+			Title: "Phase 3 · Telemetry & Observability",
+			Desc:  "Logging, metrics, distributed tracing, and alerting strategy.",
+			Fields: []Field{
+				{
+					Key:     "log_solution",
+					Label:   "log_solution  ",
+					Kind:    KindSelect,
+					Options: []string{"other", "ELK Stack", "Datadog", "Splunk", "CloudWatch"},
+				},
+				{
+					Key:     "log_format",
+					Label:   "log_format    ",
+					Kind:    KindSelect,
+					Options: []string{"JSON structured", "plaintext", "mixed"},
+				},
+				{
+					Key:     "metrics",
+					Label:   "metrics       ",
+					Kind:    KindSelect,
+					Options: []string{"none", "Prometheus", "Datadog", "CloudWatch", "other"},
+				},
+				{
+					Key:     "tracing",
+					Label:   "tracing       ",
+					Kind:    KindSelect,
+					Options: []string{"none", "OpenTelemetry", "Jaeger", "Zipkin"},
+				},
+				{
+					Key:   "alerting",
+					Label: "alerting      ",
+					Kind:  KindText,
+				},
 			},
 		},
 	}

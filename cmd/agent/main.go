@@ -25,17 +25,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// After the TUI exits, check if there's a completed manifest to report.
+	// After the TUI exits, print a summary if the manifest was populated.
 	if m, ok := finalModel.(ui.Model); ok {
 		mf := m.BuildManifest()
-		if mf.Architecture.TargetEnvironment != "" {
+		if mf.Topology.ArchPattern != "" {
 			fmt.Printf("\nManifest saved to %s\n", manifestPath)
-			fmt.Printf("Architecture : %s / %s\n",
-				mf.Architecture.TargetEnvironment,
-				mf.Architecture.Topology)
-			fmt.Printf("Backend      : %s %s\n",
-				mf.TechStack.BackendLanguage,
-				mf.TechStack.BackendFramework)
+			fmt.Printf("Topology  : %s · %s\n", mf.Topology.ArchPattern, mf.Topology.CommProtocol)
+			fmt.Printf("Backend   : %s  [%s]\n", mf.Backend.Runtime, mf.Backend.PrimaryDB)
+			fmt.Printf("SLO       : %s uptime  RTO=%s  RPO=%s\n",
+				mf.GlobalNFR.UptimeSLO, mf.GlobalNFR.RTO, mf.GlobalNFR.RPO)
 		}
 	}
 }
