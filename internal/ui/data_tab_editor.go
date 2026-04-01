@@ -84,6 +84,7 @@ type DataTabEditor struct {
 	// CACHING sub-tab
 	cachingFields  []Field
 	cachingFormIdx int
+	cachingEnabled bool
 
 	// FILE STORAGE sub-tab
 	fileStorages []manifest.FileStorageDef
@@ -95,6 +96,7 @@ type DataTabEditor struct {
 	// GOVERNANCE sub-tab
 	governanceFields []Field
 	govFormIdx       int
+	govEnabled       bool
 
 	// Shared
 	internalMode dtMode
@@ -396,30 +398,35 @@ func fsDefFromForm(fields []Field) manifest.FileStorageDef {
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) ToManifestDataPillar() manifest.DataPillar {
-	return manifest.DataPillar{
-		Databases: dt.dbEditor.Sources,
-		Domains:   dt.domains,
-		Entities:  dt.dataEditor.Entities,
-		Caching: manifest.CachingConfig{
+	p := manifest.DataPillar{
+		Databases:    dt.dbEditor.Sources,
+		Domains:      dt.domains,
+		Entities:     dt.dataEditor.Entities,
+		FileStorages: dt.fileStorages,
+	}
+	if dt.cachingEnabled {
+		p.Caching = manifest.CachingConfig{
 			Layer:        fieldGet(dt.cachingFields, "layer"),
 			Strategy:     fieldGet(dt.cachingFields, "strategy"),
 			Invalidation: fieldGet(dt.cachingFields, "invalidation"),
 			TTL:          fieldGet(dt.cachingFields, "ttl"),
 			Entities:     fieldGetMulti(dt.cachingFields, "entities"),
-		},
-		FileStorages: dt.fileStorages,
-		Governance: manifest.DataGovernanceConfig{
+		}
+	}
+	if dt.govEnabled {
+		p.Governance = manifest.DataGovernanceConfig{
 			RetentionPolicy:      fieldGet(dt.governanceFields, "retention_policy"),
 			DeleteStrategy:       fieldGet(dt.governanceFields, "delete_strategy"),
 			PIIEncryption:        fieldGet(dt.governanceFields, "pii_encryption"),
 			ComplianceFrameworks: fieldGetMulti(dt.governanceFields, "compliance_frameworks"),
 			DataResidency:        fieldGet(dt.governanceFields, "data_residency"),
 			ArchivalStorage:      fieldGet(dt.governanceFields, "archival_storage"),
-		},
-		MigrationTool:  fieldGet(dt.governanceFields, "migration_tool"),
-		BackupStrategy: fieldGet(dt.governanceFields, "backup_strategy"),
-		SearchTech:     fieldGet(dt.governanceFields, "search_tech"),
+		}
+		p.MigrationTool = fieldGet(dt.governanceFields, "migration_tool")
+		p.BackupStrategy = fieldGet(dt.governanceFields, "backup_strategy")
+		p.SearchTech = fieldGet(dt.governanceFields, "search_tech")
 	}
+	return p
 }
 
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
@@ -453,7 +460,10 @@ func (dt DataTabEditor) HintLine() string {
 			return StyleInsertMode.Render(" -- INSERT -- ") +
 				StyleHelpDesc.Render("  Esc: normal  Tab: next field")
 		}
-		return hintBar("j/k", "navigate", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		if !dt.cachingEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab")
+		}
+		return hintBar("j/k", "navigate", "Space", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
 	case dataTabFileStorage:
 		return dt.fsHintLine()
 	case dataTabGovernance:
@@ -461,7 +471,10 @@ func (dt DataTabEditor) HintLine() string {
 			return StyleInsertMode.Render(" -- INSERT -- ") +
 				StyleHelpDesc.Render("  Esc: normal  Tab: next field")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		if !dt.govEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab")
+		}
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
 	}
 	return ""
 }
@@ -1200,6 +1213,13 @@ func (dt DataTabEditor) updateRelForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 // ── Caching update ────────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	if !dt.cachingEnabled {
+		if key.String() == "a" {
+			dt.cachingEnabled = true
+			dt.cachingFormIdx = 0
+		}
+		return dt, nil
+	}
 	// Refresh entities options with current domain names
 	dt = dt.withRefreshedCachingEntities()
 	switch key.String() {
@@ -1228,7 +1248,7 @@ func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "i":
+	case "i", "a":
 		if dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
 			return dt.tryEnterInsert()
 		}
@@ -1239,6 +1259,13 @@ func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 // ── Governance update ─────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	if !dt.govEnabled {
+		if key.String() == "a" {
+			dt.govEnabled = true
+			dt.govFormIdx = 0
+		}
+		return dt, nil
+	}
 	switch key.String() {
 	case "j", "down":
 		if dt.govFormIdx < len(dt.governanceFields)-1 {
@@ -1265,7 +1292,7 @@ func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "i":
+	case "i", "a":
 		if dt.governanceFields[dt.govFormIdx].Kind == KindText {
 			return dt.tryEnterInsert()
 		}
@@ -1493,9 +1520,13 @@ func (dt DataTabEditor) viewDomains(w int) []string {
 }
 
 func (dt DataTabEditor) viewCaching(w int) []string {
-	dt = dt.withRefreshedCachingEntities()
 	var lines []string
 	lines = append(lines, StyleSectionDesc.Render("  # Caching Strategy"), "")
+	if !dt.cachingEnabled {
+		lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		return lines
+	}
+	dt = dt.withRefreshedCachingEntities()
 	lines = append(lines, renderFormFieldsWithDropdown(w, dt.cachingFields, dt.cachingFormIdx, dt.internalMode == dtInsert, dt.formInput, dt.ddOpen, dt.ddOptIdx)...)
 	return lines
 }
@@ -1538,6 +1569,10 @@ func (dt DataTabEditor) viewFileStorage(w int) []string {
 func (dt DataTabEditor) viewGovernance(w int) []string {
 	var lines []string
 	lines = append(lines, StyleSectionDesc.Render("  # Data Governance & Privacy"), "")
+	if !dt.govEnabled {
+		lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		return lines
+	}
 	lines = append(lines, renderFormFieldsWithDropdown(w, dt.governanceFields, dt.govFormIdx, dt.internalMode == dtInsert, dt.formInput, dt.ddOpen, dt.ddOptIdx)...)
 	return lines
 }

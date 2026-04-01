@@ -214,8 +214,9 @@ type ContractsEditor struct {
 	epFormIdx int
 
 	// API Versioning (simple field form)
-	versioningFields []Field
-	verFormIdx       int
+	versioningFields  []Field
+	verFormIdx        int
+	versioningEnabled bool
 
 	// External APIs
 	externalAPIs []manifest.ExternalAPIDef
@@ -386,16 +387,19 @@ func (ce *ContractsEditor) SetDomainDefs(domains []manifest.DomainDef) {
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (ce ContractsEditor) ToManifestContractsPillar() manifest.ContractsPillar {
-	return manifest.ContractsPillar{
-		DTOs:      ce.dtos,
-		Endpoints: ce.endpoints,
-		Versioning: manifest.APIVersioning{
+	p := manifest.ContractsPillar{
+		DTOs:         ce.dtos,
+		Endpoints:    ce.endpoints,
+		ExternalAPIs: ce.externalAPIs,
+	}
+	if ce.versioningEnabled {
+		p.Versioning = manifest.APIVersioning{
 			Strategy:          fieldGet(ce.versioningFields, "strategy"),
 			CurrentVersion:    fieldGet(ce.versioningFields, "current_version"),
 			DeprecationPolicy: fieldGet(ce.versioningFields, "deprecation"),
-		},
-		ExternalAPIs: ce.externalAPIs,
+		}
 	}
+	return p
 }
 
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
@@ -432,7 +436,10 @@ func (ce ContractsEditor) HintLine() string {
 			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
 		}
 	case contractsTabVersioning:
-		return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		if !ce.versioningEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab")
+		}
+		return hintBar("j/k", "navigate", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab")
 	case contractsTabExternal:
 		switch ce.extSubView {
 		case ceViewList:
@@ -1172,6 +1179,13 @@ func (ce *ContractsEditor) saveEPForm() {
 // ── Versioning update ─────────────────────────────────────────────────────────
 
 func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea.Cmd) {
+	if !ce.versioningEnabled {
+		if key.String() == "a" {
+			ce.versioningEnabled = true
+			ce.verFormIdx = 0
+		}
+		return ce, nil
+	}
 	switch key.String() {
 	case "j", "down":
 		if ce.verFormIdx < len(ce.versioningFields)-1 {
@@ -1194,7 +1208,7 @@ func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "i":
+	case "i", "a":
 		if ce.versioningFields[ce.verFormIdx].Kind == KindText {
 			return ce.tryEnterInsert()
 		}
@@ -1461,6 +1475,10 @@ func (ce ContractsEditor) viewEndpoints(w int) []string {
 func (ce ContractsEditor) viewVersioning(w int) []string {
 	var lines []string
 	lines = append(lines, StyleSectionDesc.Render("  # API Versioning"), "")
+	if !ce.versioningEnabled {
+		lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		return lines
+	}
 	lines = append(lines, renderFormFieldsWithDropdown(w, ce.versioningFields, ce.verFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
 	return lines
 }
