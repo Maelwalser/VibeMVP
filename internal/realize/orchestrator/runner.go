@@ -12,6 +12,7 @@ import (
 	"github.com/vibe-mvp/internal/realize/dag"
 	"github.com/vibe-mvp/internal/realize/output"
 	"github.com/vibe-mvp/internal/realize/skills"
+	"github.com/vibe-mvp/internal/realize/state"
 	"github.com/vibe-mvp/internal/realize/verify"
 )
 
@@ -21,6 +22,7 @@ type TaskRunner struct {
 	agent      agent.Agent
 	verifier   verify.Verifier
 	writer     *output.Writer
+	state      *state.Store
 	skillDocs  []skills.Doc
 	maxRetries int
 	verbose    bool
@@ -82,6 +84,11 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 			if err := os.RemoveAll(tmpDir); err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] warning: failed to remove temp dir %s: %v\n", r.task.ID, tmpDir, err)
+			}
+			if err := r.state.MarkCompleted(r.task.ID); err != nil {
+				// Non-fatal: files are committed; losing the progress marker just
+				// means this task might re-run on the next resume.
+				fmt.Fprintf(os.Stderr, "[%s] warning: failed to persist progress: %v\n", r.task.ID, err)
 			}
 			fmt.Fprintf(os.Stderr, "[%s] done (%d files)\n", r.task.ID, len(result.Files))
 			return nil

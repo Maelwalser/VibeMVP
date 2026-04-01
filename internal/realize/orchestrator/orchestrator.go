@@ -13,6 +13,7 @@ import (
 	"github.com/vibe-mvp/internal/realize/dag"
 	"github.com/vibe-mvp/internal/realize/output"
 	"github.com/vibe-mvp/internal/realize/skills"
+	"github.com/vibe-mvp/internal/realize/state"
 	"github.com/vibe-mvp/internal/realize/verify"
 )
 
@@ -73,6 +74,15 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		return fmt.Errorf("create output writer: %w", err)
 	}
 
+	// Load (or create) the progress state for resume support.
+	st, err := state.Load(o.cfg.OutputDir)
+	if err != nil {
+		return fmt.Errorf("load progress state: %w", err)
+	}
+	if n := st.CompletedCount(); n > 0 {
+		fmt.Fprintf(os.Stderr, "realize: resuming — %d task(s) already completed, skipping them\n", n)
+	}
+
 	// Set up agent and verifier registry.
 	a := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose)
 	verifiers := verify.NewRegistry()
@@ -84,7 +94,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	for waveIdx, wave := range d.Levels() {
 		fmt.Fprintf(os.Stderr, "realize: wave %d (%d tasks): %v\n", waveIdx, len(wave), wave)
 
-		if err := o.runWave(ctx, wave, d, reg, a, verifiers, writer); err != nil {
+		if err := o.runWave(ctx, wave, d, reg, a, verifiers, writer, st); err != nil {
 			return fmt.Errorf("wave %d: %w", waveIdx, err)
 		}
 	}
@@ -94,6 +104,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 }
 
 // runWave executes all tasks in a wave concurrently, bounded by cfg.Parallelism.
+// Tasks that are already recorded as completed in st are skipped.
 func (o *Orchestrator) runWave(
 	ctx context.Context,
 	taskIDs []string,
@@ -102,12 +113,19 @@ func (o *Orchestrator) runWave(
 	a agent.Agent,
 	verifiers *verify.Registry,
 	writer *output.Writer,
+	st *state.Store,
 ) error {
 	sem := make(chan struct{}, o.cfg.Parallelism)
 	g, gctx := errgroup.WithContext(ctx)
 
 	for _, id := range taskIDs {
 		id := id // capture for goroutine
+
+		if st.IsCompleted(id) {
+			fmt.Fprintf(os.Stderr, "[%s] skipping (already completed)\n", id)
+			continue
+		}
+
 		g.Go(func() error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -123,6 +141,7 @@ func (o *Orchestrator) runWave(
 				agent:      a,
 				verifier:   verifiers.ForTask(task),
 				writer:     writer,
+				state:      st,
 				skillDocs:  skillDocs,
 				maxRetries: o.cfg.MaxRetries,
 				verbose:    o.cfg.Verbose,
