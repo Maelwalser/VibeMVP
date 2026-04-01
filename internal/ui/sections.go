@@ -168,6 +168,15 @@ func initSections() []Section {
 				{Key: "_crosscut", Kind: KindDataModel},
 			},
 		},
+		{
+			ID:    "realize",
+			Abbr:  "REALIZE",
+			Title: "Realize",
+			Desc:  "Output directory, app name, model, and realization options.",
+			Fields: []Field{
+				{Key: "_realize", Kind: KindDataModel},
+			},
+		},
 	}
 }
 

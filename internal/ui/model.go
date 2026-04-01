@@ -53,6 +53,9 @@ type Model struct {
 	frontendEditor  FrontendEditor
 	infraEditor     InfraEditor
 	crossCutEditor  CrossCutEditor
+	realizeEditor   RealizeEditor
+
+	realizeTriggered bool
 
 	cmdBuffer string
 	statusMsg string
@@ -98,6 +101,7 @@ func NewModel(onSave SaveFunc) Model {
 		frontendEditor:  newFrontendEditor(),
 		infraEditor:     newInfraEditor(),
 		crossCutEditor:  newCrossCutEditor(),
+		realizeEditor:   newRealizeEditor(),
 		providerMenu:    newProviderMenu(),
 		onSave:          onSave,
 	}
@@ -114,12 +118,13 @@ func (m Model) activeSectionID() string {
 	return m.sections[m.activeSection].ID
 }
 
-func (m Model) isBackendSection() bool    { return m.activeSectionID() == "backend" }
-func (m Model) isDataSection() bool       { return m.activeSectionID() == "data" }
-func (m Model) isContractsSection() bool  { return m.activeSectionID() == "contracts" }
-func (m Model) isFrontendSection() bool   { return m.activeSectionID() == "frontend" }
-func (m Model) isInfraSection() bool      { return m.activeSectionID() == "infrastructure" }
-func (m Model) isCrossCutSection() bool   { return m.activeSectionID() == "crosscut" }
+func (m Model) isBackendSection() bool   { return m.activeSectionID() == "backend" }
+func (m Model) isDataSection() bool      { return m.activeSectionID() == "data" }
+func (m Model) isContractsSection() bool { return m.activeSectionID() == "contracts" }
+func (m Model) isFrontendSection() bool  { return m.activeSectionID() == "frontend" }
+func (m Model) isInfraSection() bool     { return m.activeSectionID() == "infrastructure" }
+func (m Model) isCrossCutSection() bool  { return m.activeSectionID() == "crosscut" }
+func (m Model) isRealizeSection() bool   { return m.activeSectionID() == "realize" }
 
 // activeMode returns the effective mode, delegating to sub-editors when appropriate.
 func (m Model) activeMode() Mode {
@@ -136,6 +141,8 @@ func (m Model) activeMode() Mode {
 		return m.infraEditor.Mode()
 	case m.isCrossCutSection():
 		return m.crossCutEditor.Mode()
+	case m.isRealizeSection():
+		return m.realizeEditor.Mode()
 	}
 	return m.mode
 }
@@ -149,6 +156,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textArea.SetWidth(m.width - 4)
 		m.textArea.SetHeight(m.contentHeight() - 4)
 		return m, nil
+	}
+	if _, ok := msg.(RealizeMsg); ok {
+		m.realizeTriggered = true
+		m2, saveCmd := m.execSave()
+		return m2, tea.Sequence(saveCmd, tea.Quit)
 	}
 
 	switch m.mode {
@@ -253,6 +265,9 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modified = true
 	case m.isCrossCutSection():
 		m.crossCutEditor, cmd = m.crossCutEditor.Update(msg)
+		m.modified = true
+	case m.isRealizeSection():
+		m.realizeEditor, cmd = m.realizeEditor.Update(msg)
 		m.modified = true
 	}
 
@@ -426,12 +441,16 @@ func (m Model) BuildManifest() *manifest.Manifest {
 		Frontend:  m.frontendEditor.ToManifestFrontendPillar(),
 		Infra:     m.infraEditor.ToManifestInfraPillar(),
 		CrossCut:  m.crossCutEditor.ToManifestCrossCutPillar(),
+		Realize:   m.realizeEditor.ToManifestRealizeOptions(),
 
 		// Legacy flat fields for backward compatibility
 		Databases: dataPillar.Databases,
 		Entities:  dataPillar.Entities,
 	}
 }
+
+// RealizeTriggered reports whether the user requested realization.
+func (m Model) RealizeTriggered() bool { return m.realizeTriggered }
 
 // ── View ──────────────────────────────────────────────────────────────────────
 
@@ -521,9 +540,11 @@ func (m Model) renderContent(w int) string {
 		return m.infraEditor.View(w, ch)
 	case m.isCrossCutSection():
 		return m.crossCutEditor.View(w, ch)
+	case m.isRealizeSection():
+		return m.realizeEditor.View(w, ch)
 	}
 
-	// Fallback: should not be reached for 6-section layout
+	// Fallback: should not be reached for 7-section layout
 	sec := m.sections[m.activeSection]
 	return m.renderFieldList(w, ch, sec)
 }
@@ -678,6 +699,8 @@ func (m Model) renderCmdLine(w int) string {
 		line = m.infraEditor.HintLine()
 	case m.isCrossCutSection():
 		line = m.crossCutEditor.HintLine()
+	case m.isRealizeSection():
+		line = m.realizeEditor.HintLine()
 	default:
 		switch m.mode {
 		case ModeNormal:
