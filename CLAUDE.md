@@ -22,9 +22,12 @@ The resulting manifest is serialized to `manifest.json` and intended for downstr
 | TUI framework | `github.com/charmbracelet/bubbletea` v1.3.10 |
 | TUI components | `github.com/charmbracelet/bubbles` v1.0.0 (textarea, textinput) |
 | Styling/layout | `github.com/charmbracelet/lipgloss` v1.1.0 |
-| Entry point | `cmd/agent/main.go` |
+| TUI entry point | `cmd/agent/main.go` |
+| Realize entry point | `cmd/realize/main.go` |
 | Manifest types | `internal/manifest/manifest.go` |
-| UI components | `internal/ui/` (12 files, ~7,700 lines) |
+| UI components | `internal/ui/` (12 files, ~11,700 lines) |
+| Code generation engine | `internal/realize/` (DAG, agent, skills, verifiers, orchestrator) |
+| Claude model | `claude-opus-4-6` (realize default) |
 
 ---
 
@@ -33,30 +36,58 @@ The resulting manifest is serialized to `manifest.json` and intended for downstr
 ```
 vibeMVP/
 ├── cmd/
-│   └── agent/
-│       └── main.go              # Entry point — sets up save callback, runs Bubble Tea program
+│   ├── agent/
+│   │   └── main.go              # TUI entry point — sets up save callback, runs Bubble Tea program
+│   └── realize/
+│       └── main.go              # Code-gen entry point — CLI flags, runs orchestrator
 ├── internal/
 │   ├── manifest/
-│   │   └── manifest.go          # All data model types (~700 lines); JSON serialization
-│   └── ui/
-│       ├── model.go             # Root TUI model, vim modes, tab routing (~640 lines)
-│       ├── styles.go            # Tokyo Night palette, all lipgloss styles (~145 lines)
-│       ├── sections.go          # Section/field definitions, FieldKind enum (~146 lines)
-│       ├── render_helpers.go    # Shared rendering utilities (~263 lines)
-│       ├── backend_editor.go    # Backend tab — env, services, comm, messaging, gateway, auth (~1,435 lines)
-│       ├── data_tab_editor.go   # Data tab — databases, domains, caching, file storage (~1,091 lines)
-│       ├── data_editor.go       # Entity/column schema editor (~1,179 lines)
-│       ├── db_editor.go         # Database source editor (~533 lines)
-│       ├── contracts_editor.go  # DTOs, endpoints, versioning (~885 lines)
-│       ├── frontend_editor.go   # Tech stack, theming, pages, navigation (~725 lines)
-│       ├── infra_editor.go      # Networking, CI/CD, observability (~386 lines)
-│       └── crosscut_editor.go   # Testing, documentation (~313 lines)
+│   │   └── manifest.go          # All data model types (~745 lines); JSON serialization
+│   ├── ui/
+│   │   ├── model.go             # Root TUI model, vim modes, tab routing (~651 lines)
+│   │   ├── styles.go            # Tokyo Night palette, all lipgloss styles (~145 lines)
+│   │   ├── sections.go          # Section/field definitions, FieldKind enum (~189 lines)
+│   │   ├── render_helpers.go    # Shared rendering utilities (~449 lines)
+│   │   ├── backend_editor.go    # Backend tab — env, services, comm, messaging, gateway, auth (~2,418 lines)
+│   │   ├── data_tab_editor.go   # Data tab — databases, domains, caching, file storage (~1,561 lines)
+│   │   ├── data_editor.go       # Entity/column schema editor (~1,179 lines)
+│   │   ├── db_editor.go         # Database source editor (~533 lines)
+│   │   ├── contracts_editor.go  # DTOs, endpoints, versioning (~1,492 lines)
+│   │   ├── frontend_editor.go   # Tech stack, theming, pages, navigation (~1,256 lines)
+│   │   ├── infra_editor.go      # Networking, CI/CD, observability (~585 lines)
+│   │   └── crosscut_editor.go   # Testing, documentation (~520 lines)
+│   └── realize/
+│       ├── agent/
+│       │   ├── agent.go         # Claude API client, tool-use loop (~134 lines)
+│       │   ├── context.go       # Agent context struct (~13 lines)
+│       │   └── prompt.go        # System/user prompt builders (~118 lines)
+│       ├── dag/
+│       │   ├── dag.go           # DAG struct, topological sort, cycle detection (~149 lines)
+│       │   ├── builder.go       # Manifest → DAG task graph construction (~399 lines)
+│       │   └── payload.go       # Task payload types (~39 lines)
+│       ├── orchestrator/
+│       │   ├── orchestrator.go  # Config, entrypoint, task dispatch (~202 lines)
+│       │   └── runner.go        # Per-task runner: agent call + verify + retry (~103 lines)
+│       ├── output/
+│       │   └── writer.go        # File output writer (~74 lines)
+│       ├── skills/
+│       │   ├── registry.go      # In-memory skill registry (~17 lines)
+│       │   └── loader.go        # Load skill markdown files from disk (~239 lines)
+│       └── verify/
+│           ├── verifier.go      # Verifier interface + factory (~130 lines)
+│           ├── go_verifier.go   # go build + go vet verifier (~113 lines)
+│           ├── ts_verifier.go   # tsc verifier (~59 lines)
+│           ├── python_verifier.go # python -m py_compile verifier (~63 lines)
+│           ├── tf_verifier.go   # terraform validate verifier (~64 lines)
+│           └── null_verifier.go # No-op verifier for unknown languages (~13 lines)
 ├── system-declaration-menu.md   # Full specification: all options for every field
 ├── go.mod / go.sum
 └── LICENSE
 ```
 
 File size budget: **800 lines max** per file. Extract utilities if approaching this limit.
+
+> Several UI files already exceed 800 lines due to accumulated features. When touching these files, extract helpers to `render_helpers.go` or split sub-tab logic into dedicated files.
 
 ---
 
@@ -159,7 +190,68 @@ Sub-tabs: **Testing** · **Docs**
 
 ---
 
-## 6. Manifest Output
+## 6. Realize Engine (Code Generation)
+
+`cmd/realize` is the downstream consumer of `manifest.json`. It drives an agentic code-generation pipeline.
+
+### 6.1 Pipeline Overview
+
+```
+manifest.json
+    ↓
+dag.Builder.Build()   → execution DAG (tasks with dependency edges)
+    ↓
+orchestrator.Run()    → parallel task dispatch (bounded by --parallel flag)
+    ↓  (per task)
+runner.Run()          → agent.Call() → verify.Check() → retry up to MaxRetries
+    ↓
+output.Writer         → writes generated files under --output directory
+```
+
+### 6.2 DAG Task IDs
+
+Tasks follow a naming convention derived from manifest entries:
+
+| Pattern | Example |
+|---------|---------|
+| `data.<alias>` | `data.postgres` |
+| `svc.<name>` | `svc.api-gateway` |
+| `contracts` | `contracts` |
+| `frontend` | `frontend` |
+| `infra.<component>` | `infra.networking` |
+| `crosscut.<component>` | `crosscut.testing` |
+
+### 6.3 Skills System
+
+Skills are markdown files in `.vibemvp/skills/` (configurable via `--skills`). Each file defines a named generation skill. The `skills.Loader` reads them at startup; the `skills.Registry` makes them available to the agent prompt builder.
+
+### 6.4 Verifiers
+
+After each agent call, a language-appropriate verifier checks the output:
+
+| Language | Verifier | Check |
+|----------|----------|-------|
+| Go | `go_verifier` | `go build` + `go vet` |
+| TypeScript | `ts_verifier` | `tsc --noEmit` |
+| Python | `python_verifier` | `python -m py_compile` |
+| Terraform | `tf_verifier` | `terraform validate` |
+| Other | `null_verifier` | always passes |
+
+### 6.5 CLI Flags
+
+```
+--manifest  path to manifest.json      (default: manifest.json)
+--output    output directory            (default: output)
+--skills    skills directory            (default: .vibemvp/skills)
+--retries   max retry attempts per task (default: 3)
+--parallel  max concurrent tasks        (default: 1)
+--dry-run   print task plan, no agents
+--verbose   print token usage + thinking logs
+```
+
+---
+
+## 7. Manifest Output
 
 Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
@@ -179,7 +271,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
 ---
 
-## 7. Key Bindings Reference
+## 8. Key Bindings Reference
 
 ### Global (Normal Mode)
 | Key | Action |
@@ -215,7 +307,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
 ---
 
-## 8. Go Engineering Standards
+## 9. Go Engineering Standards
 
 - **Error handling:** Never swallow errors. Use `fmt.Errorf("context: %w", err)` for wrapping.
 - **Immutability:** Favor passing structs by value. Return new copies rather than mutating in place.
@@ -228,7 +320,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
 ---
 
-## 9. Specification Reference
+## 10. Specification Reference
 
 `system-declaration-menu.md` is the canonical specification for all menu options, field names, and valid values across all 6 pillars. When adding or modifying any editor field, cross-reference this document to ensure alignment.
 
