@@ -501,9 +501,10 @@ func (p ProviderMenu) View() string {
 
 // renderHeaders returns the column header row.
 func (p ProviderMenu) renderHeaders() string {
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim))
-	active := lipgloss.NewStyle().Foreground(lipgloss.Color(clrCyan)).Bold(true).Underline(true)
-	dropdown := lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Bold(true)
+	bg := lipgloss.Color(clrBg2)
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Background(bg)
+	active := lipgloss.NewStyle().Foreground(lipgloss.Color(clrCyan)).Bold(true).Underline(true).Background(bg)
+	dropdown := lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Bold(true).Background(bg)
 
 	h0, h1, h2, h3 := dim, dim, dim, dim
 	switch p.focus {
@@ -525,7 +526,7 @@ func (p ProviderMenu) renderHeaders() string {
 
 // renderDividers returns the ─── separator row under the headers.
 func (p ProviderMenu) renderDividers() string {
-	s := lipgloss.NewStyle().Foreground(lipgloss.Color(clrComment))
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(clrComment)).Background(lipgloss.Color(clrBg2))
 	return pmRow(
 		s.Render(strings.Repeat("─", 8)),
 		s.Render(strings.Repeat("─", 8)),
@@ -576,28 +577,34 @@ func (p ProviderMenu) buildProviderCol() []string {
 	for i, prov := range p.providers {
 		isCur := i == p.cursor
 		isSel := i == p.selectedProv
+		isHL := isCur && p.focus == pmFocusProviders
 
-		arrow := "  "
+		rowBg := lipgloss.Color(clrBg2)
+		if isHL {
+			rowBg = lipgloss.Color(clrBgHL)
+		}
+
+		arrow := lipgloss.NewStyle().Background(rowBg).Render("  ")
 		if isCur {
-			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Render("▶ ")
+			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(rowBg).Render("▶ ")
 		}
 
 		var label string
 		switch {
 		case isSel && !isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render("✓ " + prov.label)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Background(lipgloss.Color(clrBg2)).Render("✓ " + prov.label)
 		case isSel && isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render(prov.label)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Background(rowBg).Render(prov.label)
 		case isCur && p.focus == pmFocusProviders:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Render(prov.label)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Background(rowBg).Render(prov.label)
 		case isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Render(prov.label)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Background(lipgloss.Color(clrBg2)).Render(prov.label)
 		default:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Render(prov.label)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Background(lipgloss.Color(clrBg2)).Render(prov.label)
 		}
 
 		cell := arrow + label
-		if isCur && p.focus == pmFocusProviders {
+		if isHL {
 			cell = pmHighlight(cell, pmCol1W)
 		}
 		lines = append(lines, cell)
@@ -614,6 +621,12 @@ func (p ProviderMenu) buildModelCol() []string {
 	for i, tier := range models {
 		isCur := i == p.modelCursor
 		isSel := p.selectedProv == p.cursor && p.selectedModel == i
+		isHL := isCur && p.focus == pmFocusModels && !p.dropdownOpen
+
+		rowBg := lipgloss.Color(clrBg2)
+		if isHL {
+			rowBg = lipgloss.Color(clrBgHL)
+		}
 
 		// Choose display name: show "Tier Ver" when a version is confirmed.
 		displayName := tier.name
@@ -625,33 +638,33 @@ func (p ProviderMenu) buildModelCol() []string {
 		var indicator string
 		if isCur && p.focus == pmFocusModels {
 			if p.dropdownOpen {
-				indicator = " " + StyleSelectArrow.Render("▴")
+				indicator = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(lipgloss.Color(clrBg2)).Render(" ▴")
 			} else {
-				indicator = " " + StyleSelectArrow.Render("▾")
+				indicator = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(rowBg).Render(" ▾")
 			}
 		}
 
-		arrow := "  "
+		arrow := lipgloss.NewStyle().Background(rowBg).Render("  ")
 		if isCur {
-			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Render("▶ ")
+			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(rowBg).Render("▶ ")
 		}
 
 		var label string
 		switch {
 		case isSel && !isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render("✓ " + displayName)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Background(lipgloss.Color(clrBg2)).Render("✓ " + displayName)
 		case isSel && isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render(displayName)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Background(rowBg).Render(displayName)
 		case isCur && p.focus == pmFocusModels:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Render(displayName)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Background(rowBg).Render(displayName)
 		case isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Render(displayName)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Background(lipgloss.Color(clrBg2)).Render(displayName)
 		default:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Render(displayName)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Background(lipgloss.Color(clrBg2)).Render(displayName)
 		}
 
 		cell := arrow + label + indicator
-		if isCur && p.focus == pmFocusModels && !p.dropdownOpen {
+		if isHL {
 			cell = pmHighlight(cell, pmCol2W)
 		}
 		lines = append(lines, cell)
@@ -660,14 +673,18 @@ func (p ProviderMenu) buildModelCol() []string {
 		if isCur && p.dropdownOpen {
 			for j, v := range tier.versions {
 				isVCur := j == p.versionCursor
+				vBg := lipgloss.Color(clrBg2)
+				if isVCur {
+					vBg = lipgloss.Color(clrBgHL)
+				}
 
 				var vArrow, vLabel string
 				if isVCur {
-					vArrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Render("  ▸ ")
-					vLabel = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Render(v)
+					vArrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(vBg).Render("  ▸ ")
+					vLabel = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Background(vBg).Render(v)
 				} else {
-					vArrow = "    "
-					vLabel = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Render(v)
+					vArrow = lipgloss.NewStyle().Background(lipgloss.Color(clrBg2)).Render("    ")
+					vLabel = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Background(lipgloss.Color(clrBg2)).Render(v)
 				}
 
 				vCell := vArrow + vLabel
@@ -691,26 +708,32 @@ func (p ProviderMenu) buildAuthCol() []string {
 			p.selectedModel >= 0 &&
 			p.selectedVersion >= 0 &&
 			i == p.selectedAuth
+		isHL := isCur && p.focus == pmFocusAuth
 
-		arrow := "  "
+		rowBg := lipgloss.Color(clrBg2)
+		if isHL {
+			rowBg = lipgloss.Color(clrBgHL)
+		}
+
+		arrow := lipgloss.NewStyle().Background(rowBg).Render("  ")
 		if isCur && p.focus == pmFocusAuth {
-			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Render("▶ ")
+			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Background(rowBg).Render("▶ ")
 		}
 
 		var label string
 		switch {
 		case isSel:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render("✓ " + a)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Background(lipgloss.Color(clrBg2)).Render("✓ " + a)
 		case isCur && p.focus == pmFocusAuth:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Render(a)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Background(rowBg).Render(a)
 		case isCur:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Render(a)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Background(lipgloss.Color(clrBg2)).Render(a)
 		default:
-			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Render(a)
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Background(lipgloss.Color(clrBg2)).Render(a)
 		}
 
 		cell := arrow + label
-		if isCur && p.focus == pmFocusAuth {
+		if isHL {
 			cell = pmHighlight(cell, pmCol3W)
 		}
 		lines = append(lines, cell)
@@ -725,16 +748,18 @@ func pmRow(col0, col1, col2, col3 string) string {
 	return pmPad(col0, pmCol0W) + pmPad(col1, pmCol1W) + pmPad(col2, pmCol2W) + col3
 }
 
-// pmPad pads s with spaces until its visible width equals toW.
+// pmPad pads s with background-colored spaces until its visible width equals toW.
 func pmPad(s string, toW int) string {
 	if pad := toW - lipgloss.Width(s); pad > 0 {
-		return s + strings.Repeat(" ", pad)
+		return s + lipgloss.NewStyle().Background(lipgloss.Color(clrBg2)).Render(strings.Repeat(" ", pad))
 	}
 	return s
 }
 
-// pmHighlight pads s to colW and applies the cursor-line background.
+// pmHighlight pads s to colW with highlight-colored spaces and applies the cursor-line background.
 func pmHighlight(s string, colW int) string {
-	padded := pmPad(s, colW)
-	return StyleCurLine.Render(padded)
+	if pad := colW - lipgloss.Width(s); pad > 0 {
+		s = s + lipgloss.NewStyle().Background(lipgloss.Color(clrBgHL)).Render(strings.Repeat(" ", pad))
+	}
+	return StyleCurLine.Render(s)
 }
