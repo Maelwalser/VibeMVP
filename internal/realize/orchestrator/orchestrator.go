@@ -61,7 +61,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 
 	// Print plan in dry-run mode.
 	if o.cfg.DryRun {
-		return o.printPlan(d)
+		return o.printPlan(d, m.Providers)
 	}
 
 	// Load skill registry.
@@ -91,6 +91,14 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 
 	// Build a default agent; per-section agents are resolved below.
 	defaultAgent := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose)
+
+	// Log configured per-section model assignments.
+	for sectionID, pa := range m.Providers {
+		if pa.Credential != "" {
+			fmt.Fprintf(os.Stderr, "realize: section %q → %s %s %s\n",
+				sectionID, pa.Provider, pa.Model, pa.Version)
+		}
+	}
 
 	fmt.Fprintf(os.Stderr, "realize: starting %d tasks across %d wave(s)\n",
 		len(d.Tasks), len(d.Levels()))
@@ -167,38 +175,69 @@ func (o *Orchestrator) runWave(
 // resolveAgent returns a task-specific agent if the manifest has a provider
 // assignment for the task's section, otherwise returns the default agent.
 func resolveAgent(taskID string, providers manifest.ProviderAssignments, def agent.Agent, verbose bool) agent.Agent {
-	if providers == nil {
+	pa, ok := providerFor(taskID, providers)
+	if !ok || pa.Credential == "" {
 		return def
 	}
-	// Task IDs follow the pattern "<section>.<name>" or just "<section>".
+	switch pa.Provider {
+	case "Claude":
+		model := claudeModelID(pa.Model, pa.Version)
+		return agent.NewClaudeAgentWithKey(model, defaultMaxTokens, verbose, pa.Credential)
+	case "ChatGPT":
+		model := openaiModelID(pa.Model, pa.Version)
+		return agent.NewOpenAIAgent("https://api.openai.com", pa.Credential, model, defaultMaxTokens, verbose)
+	case "Gemini":
+		model := geminiModelID(pa.Model, pa.Version)
+		return agent.NewGeminiAgent(pa.Credential, model, defaultMaxTokens, verbose)
+	case "Mistral":
+		model := mistralModelID(pa.Model, pa.Version)
+		return agent.NewOpenAIAgent("https://api.mistral.ai", pa.Credential, model, defaultMaxTokens, verbose)
+	case "Llama":
+		model := llamaModelID(pa.Model, pa.Version)
+		return agent.NewOpenAIAgent("https://api.groq.com/openai", pa.Credential, model, defaultMaxTokens, verbose)
+	default:
+		return def
+	}
+}
+
+// providerFor returns the ProviderAssignment for the section that owns taskID.
+// Task IDs follow "<section>.<name>" or just "<section>".
+func providerFor(taskID string, providers manifest.ProviderAssignments) (manifest.ProviderAssignment, bool) {
+	if providers == nil {
+		return manifest.ProviderAssignment{}, false
+	}
 	sectionID := taskID
 	if dot := strings.Index(taskID, "."); dot >= 0 {
 		sectionID = taskID[:dot]
 	}
 	pa, ok := providers[sectionID]
-	if !ok || pa.Credential == "" {
-		return def
-	}
-	// Only Claude is supported natively; other providers fall back to default.
-	if pa.Provider != "Claude" {
-		return def
-	}
-	model := claudeModelID(pa.Model, pa.Version)
-	return agent.NewClaudeAgentWithKey(model, defaultMaxTokens, verbose, pa.Credential)
+	return pa, ok
 }
 
-// claudeModelID converts a tier name + version to the Anthropic model string.
+// describeProvider returns a human-readable model label for dry-run output,
+// e.g. "Claude Opus 4.6" or "Gemini Flash 2.0". Falls back to "default" when
+// the section has no configured provider.
+func describeProvider(taskID string, providers manifest.ProviderAssignments) string {
+	pa, ok := providerFor(taskID, providers)
+	if !ok || pa.Credential == "" {
+		return "default (" + defaultModel + ")"
+	}
+	s := pa.Provider
+	if pa.Model != "" {
+		s += " " + pa.Model
+	}
+	if pa.Version != "" {
+		s += " " + pa.Version
+	}
+	return s
+}
+
+// claudeModelID maps a tier name + version to the Anthropic model string.
 func claudeModelID(tier, version string) string {
 	switch tier {
 	case "Haiku":
-		if version == "3.5" {
-			return "claude-haiku-4-5-20251001"
-		}
 		return "claude-haiku-4-5-20251001"
 	case "Sonnet":
-		if version == "4.5" || version == "4.6" {
-			return "claude-sonnet-4-6"
-		}
 		return "claude-sonnet-4-6"
 	case "Opus":
 		return "claude-opus-4-6"
@@ -207,14 +246,100 @@ func claudeModelID(tier, version string) string {
 	}
 }
 
+// openaiModelID maps ChatGPT tier + version to the OpenAI model string.
+func openaiModelID(tier, version string) string {
+	switch tier {
+	case "Mini":
+		if version == "o3-mini" {
+			return "o3-mini"
+		}
+		return "gpt-4o-mini"
+	case "4o":
+		if version == "4o-2024" {
+			return "gpt-4o-2024-11-20"
+		}
+		return "gpt-4o"
+	case "o1":
+		if version == "o1-preview" {
+			return "o1-preview"
+		}
+		return "o1"
+	default:
+		return "gpt-4o"
+	}
+}
+
+// geminiModelID maps a Gemini tier + version to the Google model string.
+func geminiModelID(tier, version string) string {
+	switch tier {
+	case "Flash":
+		if version == "1.5" {
+			return "gemini-1.5-flash"
+		}
+		return "gemini-2.0-flash"
+	case "Pro":
+		if version == "1.5" {
+			return "gemini-1.5-pro"
+		}
+		return "gemini-2.0-pro-exp"
+	case "Ultra":
+		return "gemini-ultra"
+	default:
+		return "gemini-2.0-flash"
+	}
+}
+
+// mistralModelID maps a Mistral tier + version to the Mistral API model string.
+func mistralModelID(tier, version string) string {
+	switch tier {
+	case "Nemo":
+		return "open-mistral-nemo"
+	case "Small":
+		if version == "3.0" {
+			return "mistral-small-2402"
+		}
+		return "mistral-small-2409"
+	case "Large":
+		if version == "2.0" {
+			return "mistral-large-2407"
+		}
+		return "mistral-large-2411"
+	default:
+		return "mistral-large-2411"
+	}
+}
+
+// llamaModelID maps a Llama tier + version to the Groq model string.
+func llamaModelID(tier, version string) string {
+	switch tier {
+	case "8B":
+		if version == "3.1" {
+			return "llama-3.1-8b-instant"
+		}
+		return "llama-3.2-8b-preview"
+	case "70B":
+		if version == "3.1" {
+			return "llama-3.1-70b-versatile"
+		}
+		return "llama-3.3-70b-versatile"
+	case "405B":
+		return "llama-3.1-405b-reasoning"
+	default:
+		return "llama-3.3-70b-versatile"
+	}
+}
+
 // printPlan prints the task DAG in dry-run mode without invoking any agents.
-func (o *Orchestrator) printPlan(d *dag.DAG) error {
+// Only tasks whose section has a configured provider show the model label;
+// unconfigured tasks show the default model.
+func (o *Orchestrator) printPlan(d *dag.DAG, providers manifest.ProviderAssignments) error {
 	fmt.Printf("Execution plan (%d tasks, %d waves):\n\n", len(d.Tasks), len(d.Levels()))
 	for i, wave := range d.Levels() {
 		fmt.Printf("Wave %d:\n", i)
 		for _, id := range wave {
 			task := d.Tasks[id]
-			fmt.Printf("  [%s] %s\n", task.Kind, task.Label)
+			model := describeProvider(id, providers)
+			fmt.Printf("  [%s] %s  →  %s\n", task.Kind, task.Label, model)
 			if len(task.Dependencies) > 0 {
 				fmt.Printf("    deps: %v\n", task.Dependencies)
 			}
