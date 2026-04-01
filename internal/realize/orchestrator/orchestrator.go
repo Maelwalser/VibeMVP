@@ -11,6 +11,7 @@ import (
 	"github.com/vibe-mvp/internal/manifest"
 	"github.com/vibe-mvp/internal/realize/agent"
 	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-mvp/internal/realize/memory"
 	"github.com/vibe-mvp/internal/realize/output"
 	"github.com/vibe-mvp/internal/realize/skills"
 	"github.com/vibe-mvp/internal/realize/state"
@@ -83,9 +84,10 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		fmt.Fprintf(os.Stderr, "realize: resuming — %d task(s) already completed, skipping them\n", n)
 	}
 
-	// Set up agent and verifier registry.
+	// Set up agent, verifier registry, and shared memory.
 	a := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose)
 	verifiers := verify.NewRegistry()
+	mem := memory.New()
 
 	fmt.Fprintf(os.Stderr, "realize: starting %d tasks across %d wave(s)\n",
 		len(d.Tasks), len(d.Levels()))
@@ -94,7 +96,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	for waveIdx, wave := range d.Levels() {
 		fmt.Fprintf(os.Stderr, "realize: wave %d (%d tasks): %v\n", waveIdx, len(wave), wave)
 
-		if err := o.runWave(ctx, wave, d, reg, a, verifiers, writer, st); err != nil {
+		if err := o.runWave(ctx, wave, d, reg, a, verifiers, writer, st, mem); err != nil {
 			return fmt.Errorf("wave %d: %w", waveIdx, err)
 		}
 	}
@@ -114,6 +116,7 @@ func (o *Orchestrator) runWave(
 	verifiers *verify.Registry,
 	writer *output.Writer,
 	st *state.Store,
+	mem *memory.SharedMemory,
 ) error {
 	sem := make(chan struct{}, o.cfg.Parallelism)
 	g, gctx := errgroup.WithContext(ctx)
@@ -142,6 +145,7 @@ func (o *Orchestrator) runWave(
 				verifier:   verifiers.ForTask(task),
 				writer:     writer,
 				state:      st,
+				memory:     mem,
 				skillDocs:  skillDocs,
 				maxRetries: o.cfg.MaxRetries,
 				verbose:    o.cfg.Verbose,
