@@ -606,31 +606,18 @@ func (dt DataTabEditor) Update(msg tea.Msg) (DataTabEditor, tea.Cmd) {
 		return dt, nil
 	}
 
-	// Sub-tab switching with h/l (only when not in a sub-view)
-	canSwitchTab := dt.activeTab != dataTabDomains || dt.domainSubView == domainViewList
-	if dt.activeTab == dataTabFileStorage && dt.fsSubView != fsViewList {
-		canSwitchTab = false
-	}
-	// Do not switch tabs when the DB editor is in form view or insert mode
-	if dt.activeTab == dataTabDatabases && (dt.dbEditor.view == dbeViewForm || dt.dbEditor.internalMode == dbeInsert) {
-		canSwitchTab = false
-	}
-
-	if canSwitchTab {
-		switch key.String() {
-		case "h", "left":
-			if dt.activeTab > 0 {
-				dt.activeTab--
-				dt.resetFieldIdx()
-			}
-			return dt, nil
-		case "l", "right":
-			if int(dt.activeTab) < len(dataTabLabels)-1 {
-				dt.activeTab++
-				dt.resetFieldIdx()
-			}
-			return dt, nil
+	// Sub-tab switching always available in normal mode
+	switch key.String() {
+	case "h", "left":
+		if dt.activeTab > 0 {
+			dt.activeTab--
 		}
+		return dt, nil
+	case "l", "right":
+		if int(dt.activeTab) < len(dataTabLabels)-1 {
+			dt.activeTab++
+		}
+		return dt, nil
 	}
 
 	switch dt.activeTab {
