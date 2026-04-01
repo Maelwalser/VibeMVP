@@ -11,10 +11,43 @@ import (
 type pmFocus int
 
 const (
-	pmFocusProviders pmFocus = iota
+	pmFocusSections pmFocus = iota
+	pmFocusProviders
 	pmFocusModels
 	pmFocusAuth
 )
+
+// sectionEntry is a tab section that can be assigned a provider.
+type sectionEntry struct {
+	id    string
+	label string
+	badge string // 1-char abbreviation shown in tab bar
+}
+
+// ProviderSelection holds a confirmed provider/model/auth triple.
+type ProviderSelection struct {
+	Provider string
+	Model    string
+	Version  string
+	Auth     string
+}
+
+// IsSet reports whether this selection is fully configured.
+func (p ProviderSelection) IsSet() bool {
+	return p.Provider != "" && p.Model != "" && p.Auth != ""
+}
+
+// Short returns a compact display string like "Claude Sonnet 4.5 / API Key".
+func (p ProviderSelection) Short() string {
+	if !p.IsSet() {
+		return ""
+	}
+	model := p.Model
+	if p.Version != "" {
+		model += " " + p.Version
+	}
+	return p.Provider + " · " + model
+}
 
 // modelTier represents one tier of a provider (e.g. "Sonnet") with its
 // concrete version strings (e.g. "4.5", "4.0", "3.5").
@@ -30,9 +63,15 @@ type providerEntry struct {
 	authMethods []string
 }
 
-// ProviderMenu is the centered modal for picking provider → model version → auth.
+// ProviderMenu is the centered modal for picking section → provider → model version → auth.
 // It carries no integration logic — UI only.
 type ProviderMenu struct {
+	// Section column
+	sectionList   []sectionEntry
+	sectionCursor int
+	assignments   map[int]ProviderSelection // sectionList index → confirmed selection
+
+	// Provider/model/auth columns
 	providers       []providerEntry
 	cursor          int     // hovered row in provider list
 	modelCursor     int     // hovered row in model list
@@ -40,14 +79,24 @@ type ProviderMenu struct {
 	focus           pmFocus // column that owns input
 	dropdownOpen    bool    // version dropdown visible
 	versionCursor   int     // hovered row inside the dropdown
-	selectedProv    int     // -1 = none confirmed
+	selectedProv    int     // -1 = none confirmed (for current section)
 	selectedModel   int     // -1 = none confirmed (index in models slice)
 	selectedVersion int     // -1 = none confirmed (index in tier.versions)
 	selectedAuth    int     // -1 = none confirmed
 }
 
 func newProviderMenu() ProviderMenu {
-	return ProviderMenu{
+	pm := ProviderMenu{
+		sectionList: []sectionEntry{
+			{id: "backend", label: "Backend", badge: "B"},
+			{id: "data", label: "Data", badge: "D"},
+			{id: "contracts", label: "Contracts", badge: "C"},
+			{id: "frontend", label: "Frontend", badge: "F"},
+			{id: "infrastructure", label: "Infra", badge: "I"},
+			{id: "crosscut", label: "CrossCut", badge: "X"},
+			{id: "realize", label: "Realize", badge: "R"},
+		},
+		assignments: make(map[int]ProviderSelection),
 		providers: []providerEntry{
 			{
 				label: "Claude",
@@ -107,6 +156,122 @@ func newProviderMenu() ProviderMenu {
 		selectedVersion: -1,
 		selectedAuth:    -1,
 	}
+	return pm
+}
+
+// SectionAssignment returns the confirmed ProviderSelection for the given section ID,
+// and whether one exists.
+func (p ProviderMenu) SectionAssignment(sectionID string) (ProviderSelection, bool) {
+	for i, s := range p.sectionList {
+		if s.id == sectionID {
+			sel, ok := p.assignments[i]
+			return sel, ok && sel.IsSet()
+		}
+	}
+	return ProviderSelection{}, false
+}
+
+// loadSectionState restores the provider/model/auth cursor positions from the
+// assignment saved for the currently selected section.
+func (p ProviderMenu) loadSectionState() ProviderMenu {
+	sel, ok := p.assignments[p.sectionCursor]
+	if !ok || !sel.IsSet() {
+		p.selectedProv = -1
+		p.selectedModel = -1
+		p.selectedVersion = -1
+		p.selectedAuth = -1
+		p.cursor = 0
+		p.modelCursor = 0
+		p.authCursor = 0
+		return p
+	}
+
+	// Restore provider cursor.
+	for i, prov := range p.providers {
+		if prov.label == sel.Provider {
+			p.cursor = i
+			p.selectedProv = i
+			break
+		}
+	}
+
+	// Restore model + version cursors.
+	if p.selectedProv >= 0 {
+		models := p.providers[p.selectedProv].models
+		for i, tier := range models {
+			if tier.name == sel.Model {
+				p.modelCursor = i
+				p.selectedModel = i
+				for j, v := range tier.versions {
+					if v == sel.Version {
+						p.selectedVersion = j
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// Restore auth cursor.
+	if p.selectedProv >= 0 {
+		auths := p.providers[p.selectedProv].authMethods
+		for i, a := range auths {
+			if a == sel.Auth {
+				p.authCursor = i
+				p.selectedAuth = i
+				break
+			}
+		}
+	}
+
+	return p
+}
+
+// confirmCurrentSelection saves the current provider/model/auth choices as the
+// assignment for the active section, if all three are confirmed.
+func (p ProviderMenu) confirmCurrentSelection() ProviderMenu {
+	if p.selectedProv < 0 || p.selectedModel < 0 || p.selectedVersion < 0 || p.selectedAuth < 0 {
+		return p
+	}
+
+	prov := p.providers[p.selectedProv]
+	tier := prov.models[p.selectedModel]
+
+	sel := ProviderSelection{
+		Provider: prov.label,
+		Model:    tier.name,
+		Version:  tier.versions[p.selectedVersion],
+		Auth:     prov.authMethods[p.selectedAuth],
+	}
+
+	// Copy map (immutable pattern).
+	newAssignments := make(map[int]ProviderSelection, len(p.assignments)+1)
+	for k, v := range p.assignments {
+		newAssignments[k] = v
+	}
+	newAssignments[p.sectionCursor] = sel
+	p.assignments = newAssignments
+	return p
+}
+
+// clearCurrentSection removes the assignment for the active section.
+func (p ProviderMenu) clearCurrentSection() ProviderMenu {
+	newAssignments := make(map[int]ProviderSelection, len(p.assignments))
+	for k, v := range p.assignments {
+		if k != p.sectionCursor {
+			newAssignments[k] = v
+		}
+	}
+	p.assignments = newAssignments
+	p.selectedProv = -1
+	p.selectedModel = -1
+	p.selectedVersion = -1
+	p.selectedAuth = -1
+	p.cursor = 0
+	p.modelCursor = 0
+	p.authCursor = 0
+	return p
 }
 
 // Update handles keyboard input and returns a new ProviderMenu (immutable).
@@ -125,6 +290,11 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 			vers := p.providers[p.cursor].models[p.modelCursor].versions
 			if p.versionCursor < len(vers)-1 {
 				p.versionCursor++
+			}
+		case p.focus == pmFocusSections:
+			if p.sectionCursor < len(p.sectionList)-1 {
+				p.sectionCursor++
+				p = p.loadSectionState()
 			}
 		case p.focus == pmFocusProviders:
 			if p.cursor < len(p.providers)-1 {
@@ -150,6 +320,11 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 			if p.versionCursor > 0 {
 				p.versionCursor--
 			}
+		case p.focus == pmFocusSections:
+			if p.sectionCursor > 0 {
+				p.sectionCursor--
+				p = p.loadSectionState()
+			}
 		case p.focus == pmFocusProviders:
 			if p.cursor > 0 {
 				p.cursor--
@@ -170,6 +345,8 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 	case "l", "tab":
 		if !p.dropdownOpen {
 			switch p.focus {
+			case pmFocusSections:
+				p.focus = pmFocusProviders
 			case pmFocusProviders:
 				p.focus = pmFocusModels
 			case pmFocusModels:
@@ -180,6 +357,8 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 	case "h", "shift+tab":
 		if !p.dropdownOpen {
 			switch p.focus {
+			case pmFocusProviders:
+				p.focus = pmFocusSections
 			case pmFocusModels:
 				p.focus = pmFocusProviders
 			case pmFocusAuth:
@@ -187,9 +366,20 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 			}
 		}
 
+	// ── Clear current section assignment ─────────────────────────────────────
+	case "x":
+		if p.focus == pmFocusSections {
+			p = p.clearCurrentSection()
+		}
+
 	// ── Confirm / open dropdown ───────────────────────────────────────────────
 	case "enter":
 		switch p.focus {
+		case pmFocusSections:
+			// Move focus to providers, loading existing state.
+			p = p.loadSectionState()
+			p.focus = pmFocusProviders
+
 		case pmFocusProviders:
 			p.selectedProv = p.cursor
 			p.selectedModel, p.selectedVersion, p.selectedAuth = -1, -1, -1
@@ -217,6 +407,10 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 
 		case pmFocusAuth:
 			p.selectedAuth = p.authCursor
+			// Save assignment for the current section.
+			p = p.confirmCurrentSelection()
+			// Return focus to sections so the user can configure the next one.
+			p.focus = pmFocusSections
 		}
 
 	// ── Cancel dropdown (handled here; modal-level Esc is in model.go) ────────
@@ -224,6 +418,16 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 		if p.dropdownOpen {
 			p.dropdownOpen = false
 			p.versionCursor = 0
+		} else if p.focus != pmFocusSections {
+			// Step back one column.
+			switch p.focus {
+			case pmFocusAuth:
+				p.focus = pmFocusModels
+			case pmFocusModels:
+				p.focus = pmFocusProviders
+			case pmFocusProviders:
+				p.focus = pmFocusSections
+			}
 		}
 	}
 
@@ -233,13 +437,14 @@ func (p ProviderMenu) Update(msg tea.Msg) ProviderMenu {
 // ── Layout constants ──────────────────────────────────────────────────────────
 
 const (
-	pmCol1W = 16 // provider column visible width
+	pmCol0W = 12 // section column visible width
+	pmCol1W = 12 // provider column visible width
 	pmCol2W = 16 // model column visible width
-	pmCol3W = 14 // auth column visible width (last, not padded by pmRow)
+	pmCol3W = 12 // auth column visible width (last, not padded by pmRow)
 	// pmBoxW is the Width() argument for StyleModalBorder.
 	// StyleModalBorder has Padding(0,1) + RoundedBorder, so actual rendered
 	// width = pmBoxW + 2 (padding) + 2 (border) = pmBoxW + 4.
-	pmBoxW = pmCol1W + pmCol2W + pmCol3W // 46 → total box ≈ 50 chars
+	pmBoxW = pmCol0W + pmCol1W + pmCol2W + pmCol3W // 52 → total box ≈ 56 chars
 )
 
 // ── View ──────────────────────────────────────────────────────────────────────
@@ -253,12 +458,16 @@ func (p ProviderMenu) View() string {
 	rows = append(rows, p.renderDividers())
 
 	// Build each column independently so the model dropdown can expand freely.
+	col0 := p.buildSectionCol()
 	col1 := p.buildProviderCol()
 	col2 := p.buildModelCol()
 	col3 := p.buildAuthCol()
 
 	// Pad shorter columns to the same height.
-	h := max(max(len(col1), len(col2)), len(col3))
+	h := max(max(len(col0), len(col1)), max(len(col2), len(col3)))
+	for len(col0) < h {
+		col0 = append(col0, "")
+	}
 	for len(col1) < h {
 		col1 = append(col1, "")
 	}
@@ -270,32 +479,36 @@ func (p ProviderMenu) View() string {
 	}
 
 	for i := 0; i < h; i++ {
-		rows = append(rows, pmRow(col1[i], col2[i], col3[i]))
+		rows = append(rows, pmRow(col0[i], col1[i], col2[i], col3[i]))
 	}
 
 	rows = append(rows, "") // spacer before hints
 
 	// Context-sensitive hint bar.
 	var hints string
-	if p.dropdownOpen {
+	switch {
+	case p.dropdownOpen:
 		hints = hintBar("j/k", "version", "Enter", "confirm", "Esc", "cancel")
-	} else {
-		hints = hintBar("j/k", "nav", "h/l", "col", "Enter", "pick", "M", "close")
+	case p.focus == pmFocusSections:
+		hints = hintBar("j/k", "section", "Enter/l", "configure", "x", "clear", "M", "close")
+	default:
+		hints = hintBar("j/k", "nav", "h/l", "col", "Enter", "pick", "Esc", "back")
 	}
 	rows = append(rows, hints)
 
 	return StyleModalBorder.Width(pmBoxW).Render(strings.Join(rows, "\n"))
 }
 
-// renderHeaders returns the column header row, with the active column
-// highlighted in cyan; turns yellow while a dropdown is open.
+// renderHeaders returns the column header row.
 func (p ProviderMenu) renderHeaders() string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim))
 	active := lipgloss.NewStyle().Foreground(lipgloss.Color(clrCyan)).Bold(true).Underline(true)
 	dropdown := lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Bold(true)
 
-	h1, h2, h3 := dim, dim, dim
+	h0, h1, h2, h3 := dim, dim, dim, dim
 	switch p.focus {
+	case pmFocusSections:
+		h0 = active
 	case pmFocusProviders:
 		h1 = active
 	case pmFocusModels:
@@ -307,17 +520,54 @@ func (p ProviderMenu) renderHeaders() string {
 	case pmFocusAuth:
 		h3 = active
 	}
-	return pmRow(h1.Render("PROVIDER"), h2.Render("MODEL"), h3.Render("AUTH"))
+	return pmRow(h0.Render("SECTION"), h1.Render("PROVIDER"), h2.Render("MODEL"), h3.Render("AUTH"))
 }
 
 // renderDividers returns the ─── separator row under the headers.
 func (p ProviderMenu) renderDividers() string {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(clrComment))
 	return pmRow(
-		s.Render(strings.Repeat("─", 10)),
+		s.Render(strings.Repeat("─", 8)),
+		s.Render(strings.Repeat("─", 8)),
 		s.Render(strings.Repeat("─", 9)),
 		s.Render(strings.Repeat("─", 8)),
 	)
+}
+
+// buildSectionCol returns one string per row for the section column.
+func (p ProviderMenu) buildSectionCol() []string {
+	lines := make([]string, 0, len(p.sectionList))
+	for i, sec := range p.sectionList {
+		isCur := i == p.sectionCursor
+		_, hasAssignment := p.assignments[i]
+		isAssigned := hasAssignment && p.assignments[i].IsSet()
+
+		arrow := "  "
+		if isCur {
+			arrow = lipgloss.NewStyle().Foreground(lipgloss.Color(clrYellow)).Render("▶ ")
+		}
+
+		var label string
+		switch {
+		case isAssigned && !isCur:
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render("✓ " + sec.label)
+		case isAssigned && isCur:
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrGreen)).Render(sec.label)
+		case isCur && p.focus == pmFocusSections:
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrBlue)).Bold(true).Render(sec.label)
+		case isCur:
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg)).Render(sec.label)
+		default:
+			label = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).Render(sec.label)
+		}
+
+		cell := arrow + label
+		if isCur && p.focus == pmFocusSections {
+			cell = pmHighlight(cell, pmCol0W)
+		}
+		lines = append(lines, cell)
+	}
+	return lines
 }
 
 // buildProviderCol returns one string per row for the provider column.
@@ -470,9 +720,9 @@ func (p ProviderMenu) buildAuthCol() []string {
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
-// pmRow assembles three column cells into one display line.
-func pmRow(col1, col2, col3 string) string {
-	return pmPad(col1, pmCol1W) + pmPad(col2, pmCol2W) + col3
+// pmRow assembles four column cells into one display line.
+func pmRow(col0, col1, col2, col3 string) string {
+	return pmPad(col0, pmCol0W) + pmPad(col1, pmCol1W) + pmPad(col2, pmCol2W) + col3
 }
 
 // pmPad pads s with spaces until its visible width equals toW.

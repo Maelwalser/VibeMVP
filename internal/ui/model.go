@@ -628,10 +628,15 @@ func (m Model) renderFieldList(w, h int, sec Section) string {
 func (m Model) renderTabBar(w int) string {
 	var parts []string
 	for i, s := range m.sections {
+		badge := m.providerBadge(s.ID)
+		label := s.Abbr
+		if badge != "" {
+			label = s.Abbr + " " + badge
+		}
 		if i == m.activeSection {
-			parts = append(parts, StyleTabActive.Render(s.Abbr))
+			parts = append(parts, StyleTabActive.Render(label))
 		} else {
-			parts = append(parts, StyleTabInactive.Render(s.Abbr))
+			parts = append(parts, StyleTabInactive.Render(label))
 		}
 	}
 	tabs := strings.Join(parts, "")
@@ -640,6 +645,31 @@ func (m Model) renderTabBar(w int) string {
 		tabs += StyleTabBar.Render(strings.Repeat(" ", w-rawW))
 	}
 	return tabs
+}
+
+// providerBadge returns a short colored indicator for the provider assigned to
+// the given section ID, or an empty string if none is assigned.
+func (m Model) providerBadge(sectionID string) string {
+	sel, ok := m.providerMenu.SectionAssignment(sectionID)
+	if !ok {
+		return ""
+	}
+	// One-letter abbreviations per provider.
+	abbrs := map[string]string{
+		"Claude":  "C",
+		"ChatGPT": "G",
+		"Gemini":  "Ge",
+		"Mistral": "Mi",
+		"Llama":   "L",
+		"Custom":  "?",
+	}
+	letter, ok := abbrs[sel.Provider]
+	if !ok {
+		letter = sel.Provider[:1]
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrGreen)).
+		Render("[" + letter + "]")
 }
 
 func (m Model) renderStatusLine(w int) string {
