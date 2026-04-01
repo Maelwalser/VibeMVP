@@ -447,3 +447,64 @@ func newFormInput() textinput.Model {
 	fi.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim))
 	return fi
 }
+
+// placeOverlay paints fg on top of bg at position (x, y), where x and y are
+// zero-based visible-column and line indices. Lines outside bg bounds are
+// skipped. The portion of each bg line to the right of the overlay is
+// preserved as plain (un-styled) text so the overlay always looks clean.
+func placeOverlay(bg, fg string, x, y int) string {
+	bgLines := strings.Split(bg, "\n")
+	fgLines := strings.Split(fg, "\n")
+
+	for i, fgLine := range fgLines {
+		idx := y + i
+		if idx < 0 || idx >= len(bgLines) {
+			continue
+		}
+		fgW := lipgloss.Width(fgLine)
+		bgW := lipgloss.Width(bgLines[idx])
+
+		// Left part: bg up to column x (ANSI-aware truncation).
+		left := lipgloss.NewStyle().MaxWidth(x).Render(bgLines[idx])
+		leftW := lipgloss.Width(left)
+		if leftW < x {
+			left += strings.Repeat(" ", x-leftW)
+		}
+
+		// Right part: plain text after the overlay's right edge.
+		right := ""
+		rightStart := x + fgW
+		if rightStart < bgW {
+			plain := stripANSI(bgLines[idx])
+			runes := []rune(plain)
+			if rightStart < len(runes) {
+				right = string(runes[rightStart:])
+			}
+		}
+
+		bgLines[idx] = left + fgLine + right
+	}
+
+	return strings.Join(bgLines, "\n")
+}
+
+// stripANSI removes ANSI CSI escape sequences from s, returning plain text.
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			// Skip CSI sequence: ESC [ ... <terminator>
+			i += 2
+			for i < len(s) && (s[i] < 0x40 || s[i] > 0x7e) {
+				i++
+			}
+			if i < len(s) {
+				i++ // consume terminator
+			}
+		} else {
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}

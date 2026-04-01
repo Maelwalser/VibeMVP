@@ -62,6 +62,9 @@ type Model struct {
 	width  int
 	height int
 
+	providerMenuOpen bool
+	providerMenu     ProviderMenu
+
 	onSave SaveFunc
 }
 
@@ -95,6 +98,7 @@ func NewModel(onSave SaveFunc) Model {
 		frontendEditor:  newFrontendEditor(),
 		infraEditor:     newInfraEditor(),
 		crossCutEditor:  newCrossCutEditor(),
+		providerMenu:    newProviderMenu(),
 		onSave:          onSave,
 	}
 }
@@ -166,8 +170,30 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.statusMsg = ""
 
+	// Provider menu intercepts all input when open.
+	if m.providerMenuOpen {
+		switch key.String() {
+		case "M":
+			m.providerMenuOpen = false
+		case "esc":
+			// Esc closes the version dropdown first; a second Esc closes the modal.
+			if m.providerMenu.dropdownOpen {
+				m.providerMenu = m.providerMenu.Update(msg)
+			} else {
+				m.providerMenuOpen = false
+			}
+		default:
+			m.providerMenu = m.providerMenu.Update(msg)
+		}
+		return m, nil
+	}
+
 	// Global keys always processed regardless of section.
 	switch key.String() {
+	case "M":
+		m.providerMenuOpen = true
+		return m, nil
+
 	case "ctrl+c":
 		// Behave like Escape: exit insert/form/dropdown modes in sub-editors
 		escMsg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -423,9 +449,35 @@ func (m Model) View() string {
 		return "Loading…"
 	}
 
+	base := m.renderBaseView()
+
+	if m.providerMenuOpen {
+		modal := m.providerMenu.View()
+		modalLines := strings.Split(modal, "\n")
+		modalH := len(modalLines)
+		modalW := 0
+		for _, l := range modalLines {
+			if w := lipgloss.Width(l); w > modalW {
+				modalW = w
+			}
+		}
+		x := (m.width - modalW) / 2
+		y := (m.height - modalH) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		return placeOverlay(base, modal, x, y)
+	}
+
+	return base
+}
+
+func (m Model) renderBaseView() string {
 	var b strings.Builder
 	w := m.width
-
 	b.WriteString(m.renderHeader(w))
 	b.WriteString("\n")
 	b.WriteString(m.renderContent(w))
@@ -434,7 +486,6 @@ func (m Model) View() string {
 	b.WriteString(m.renderStatusLine(w))
 	b.WriteString("\n")
 	b.WriteString(m.renderCmdLine(w))
-
 	return b.String()
 }
 

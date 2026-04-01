@@ -142,4 +142,10 @@ var (
 	StyleCursor = lipgloss.NewStyle().
 		Background(lipgloss.Color(clrFg)).
 		Foreground(lipgloss.Color(clrBg))
+
+	StyleModalBorder = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(clrBlue)).
+		Background(lipgloss.Color(clrBg2)).
+		Padding(0, 1)
 )
