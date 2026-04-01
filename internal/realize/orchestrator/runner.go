@@ -10,6 +10,7 @@ import (
 
 	"github.com/vibe-mvp/internal/realize/agent"
 	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-mvp/internal/realize/memory"
 	"github.com/vibe-mvp/internal/realize/output"
 	"github.com/vibe-mvp/internal/realize/skills"
 	"github.com/vibe-mvp/internal/realize/state"
@@ -23,6 +24,7 @@ type TaskRunner struct {
 	verifier   verify.Verifier
 	writer     *output.Writer
 	state      *state.Store
+	memory     *memory.SharedMemory
 	skillDocs  []skills.Doc
 	maxRetries int
 	verbose    bool
@@ -39,9 +41,10 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		}
 
 		ac := &agent.Context{
-			Task:           r.task,
-			SkillDocs:      r.skillDocs,
-			PreviousErrors: lastVerifyOutput,
+			Task:              r.task,
+			SkillDocs:         r.skillDocs,
+			PreviousErrors:    lastVerifyOutput,
+			DependencyOutputs: r.memory.DepsOf(r.task),
 		}
 
 		result, err := r.agent.Run(ctx, ac)
@@ -85,6 +88,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			if err := os.RemoveAll(tmpDir); err != nil {
 				fmt.Fprintf(os.Stderr, "[%s] warning: failed to remove temp dir %s: %v\n", r.task.ID, tmpDir, err)
 			}
+			// Publish generated files to shared memory so downstream agents can
+			// reference the types, schemas, and interfaces this task produced.
+			r.memory.Record(r.task, result.Files)
 			if err := r.state.MarkCompleted(r.task.ID); err != nil {
 				// Non-fatal: files are committed; losing the progress marker just
 				// means this task might re-run on the next resume.

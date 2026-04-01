@@ -618,6 +618,7 @@ func newBackendEditor() BackendEditor {
 		commEditor:      newBeListEditor(),
 		eventEditor:     newBeListEditor(),
 		formInput:       newFormInput(),
+		dropdownOpen:    true,
 	}
 }
 
