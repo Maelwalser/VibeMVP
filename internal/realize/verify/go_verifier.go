@@ -33,6 +33,14 @@ func (g *GoVerifier) Verify(ctx context.Context, outputDir string, files []strin
 			continue
 		}
 
+		// Resolve dependencies before building.
+		tidyOut, tidyErr := runCmd(ctx, absDir, "go", "mod", "tidy")
+		if tidyErr != nil {
+			combined.WriteString(fmt.Sprintf("=== go mod tidy in %s ===\n%s\n", dir, tidyOut))
+			allPassed = false
+			continue
+		}
+
 		// Run go build.
 		buildOut, err := runCmd(ctx, absDir, "go", "build", "./...")
 		combined.WriteString(fmt.Sprintf("=== go build in %s ===\n%s\n", dir, buildOut))
