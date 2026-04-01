@@ -28,6 +28,16 @@ type TaskRunner struct {
 	skillDocs  []skills.Doc
 	maxRetries int
 	verbose    bool
+	logFn      func(string) // optional; nil falls back to os.Stderr
+}
+
+func (r *TaskRunner) log(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if r.logFn != nil {
+		r.logFn(msg)
+	} else {
+		fmt.Fprintln(os.Stderr, msg)
+	}
 }
 
 // writeDebugLog appends a structured attempt record to .realize/debug/<task-id>.log.
@@ -54,7 +64,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 
 	for attempt := 0; attempt <= r.maxRetries; attempt++ {
 		if attempt > 0 {
-			fmt.Fprintf(os.Stderr, "[%s] retry %d/%d\n", r.task.ID, attempt, r.maxRetries)
+			r.log("[%s] retry %d/%d", r.task.ID, attempt, r.maxRetries)
 		}
 
 		ac := &agent.Context{
@@ -71,7 +81,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 			if isRateLimitError(err) {
 				wait := time.Duration(attempt+1) * 60 * time.Second
-				fmt.Fprintf(os.Stderr, "[%s] rate limited — waiting %s before retry\n", r.task.ID, wait)
+				r.log("[%s] rate limited — waiting %s before retry", r.task.ID, wait)
 				select {
 				case <-time.After(wait):
 				case <-ctx.Done():
@@ -94,12 +104,12 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			return fmt.Errorf("task %s: verifier error: %w", r.task.ID, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "[%s] verify: passed=%v\n", r.task.ID, vResult.Passed)
+		r.log("[%s] verify: passed=%v", r.task.ID, vResult.Passed)
 		if r.verbose || !vResult.Passed {
 			r.writeDebugLog(attempt, vResult.Passed, vResult.Output)
 		}
 		if r.verbose {
-			fmt.Fprintf(os.Stderr, "%s\n", vResult.Output)
+			r.log("%s", vResult.Output)
 		}
 
 		if vResult.Passed {
@@ -107,7 +117,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 				return fmt.Errorf("task %s: commit files: %w", r.task.ID, err)
 			}
 			if err := os.RemoveAll(tmpDir); err != nil {
-				fmt.Fprintf(os.Stderr, "[%s] warning: failed to remove temp dir %s: %v\n", r.task.ID, tmpDir, err)
+				r.log("[%s] warning: failed to remove temp dir %s: %v", r.task.ID, tmpDir, err)
 			}
 			// Publish generated files to shared memory so downstream agents can
 			// reference the types, schemas, and interfaces this task produced.
@@ -115,9 +125,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			if err := r.state.MarkCompleted(r.task.ID); err != nil {
 				// Non-fatal: files are committed; losing the progress marker just
 				// means this task might re-run on the next resume.
-				fmt.Fprintf(os.Stderr, "[%s] warning: failed to persist progress: %v\n", r.task.ID, err)
+				r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 			}
-			fmt.Fprintf(os.Stderr, "[%s] done (%d files)\n", r.task.ID, len(result.Files))
+			r.log("[%s] done (%d files)", r.task.ID, len(result.Files))
 			return nil
 		}
 

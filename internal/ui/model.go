@@ -47,13 +47,15 @@ type Model struct {
 	textArea  textarea.Model
 
 	// ── Main tab editors (one per section) ───────────────────────────────────
-	backendEditor   BackendEditor
-	dataTabEditor   DataTabEditor
-	contractsEditor ContractsEditor
-	frontendEditor  FrontendEditor
-	infraEditor     InfraEditor
-	crossCutEditor  CrossCutEditor
-	realizeEditor   RealizeEditor
+	backendEditor      BackendEditor
+	dataTabEditor      DataTabEditor
+	contractsEditor    ContractsEditor
+	frontendEditor     FrontendEditor
+	infraEditor        InfraEditor
+	crossCutEditor     CrossCutEditor
+	realizeEditor      RealizeEditor
+	realizationScreen  RealizationScreen
+	showRealization    bool
 
 	realizeTriggered bool
 
@@ -92,18 +94,19 @@ func NewModel(onSave SaveFunc) Model {
 		Background(lipgloss.Color(clrBgHL))
 
 	return Model{
-		sections:        initSections(),
-		textInput:       ti,
-		textArea:        ta,
-		backendEditor:   newBackendEditor(),
-		dataTabEditor:   newDataTabEditor(),
-		contractsEditor: newContractsEditor(),
-		frontendEditor:  newFrontendEditor(),
-		infraEditor:     newInfraEditor(),
-		crossCutEditor:  newCrossCutEditor(),
-		realizeEditor:   newRealizeEditor(),
-		providerMenu:    newProviderMenu(),
-		onSave:          onSave,
+		sections:          initSections(),
+		textInput:         ti,
+		textArea:          ta,
+		backendEditor:     newBackendEditor(),
+		dataTabEditor:     newDataTabEditor(),
+		contractsEditor:   newContractsEditor(),
+		frontendEditor:    newFrontendEditor(),
+		infraEditor:       newInfraEditor(),
+		crossCutEditor:    newCrossCutEditor(),
+		realizeEditor:     newRealizeEditor(),
+		realizationScreen: newRealizationScreen(),
+		providerMenu:      newProviderMenu(),
+		onSave:            onSave,
 	}
 }
 
@@ -160,7 +163,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(RealizeMsg); ok {
 		m.realizeTriggered = true
 		m2, saveCmd := m.execSave()
-		return m2, tea.Sequence(saveCmd, tea.Quit)
+		m = m2.(Model)
+		mf := m.BuildManifest()
+		var startCmd tea.Cmd
+		m.realizationScreen, startCmd = m.realizationScreen.Start("manifest.json", mf)
+		m.showRealization = true
+		return m, tea.Sequence(saveCmd, startCmd)
+	}
+
+	// Route all messages to the realization screen while it is active.
+	if m.showRealization {
+		var cmd tea.Cmd
+		m.realizationScreen, cmd = m.realizationScreen.Update(msg)
+		if m.realizationScreen.WantsQuit() {
+			return m, tea.Quit
+		}
+		return m, cmd
 	}
 
 	switch m.mode {
@@ -531,6 +549,11 @@ func (m Model) renderHeader(w int) string {
 func (m Model) renderContent(w int) string {
 	ch := m.contentHeight()
 
+	// Show realization screen in place of the config form while running.
+	if m.showRealization && m.isRealizeSection() {
+		return m.realizationScreen.View(w, ch)
+	}
+
 	switch {
 	case m.isBackendSection():
 		return m.backendEditor.View(w, ch)
@@ -734,7 +757,11 @@ func (m Model) renderCmdLine(w int) string {
 	case m.isCrossCutSection():
 		line = m.crossCutEditor.HintLine()
 	case m.isRealizeSection():
-		line = m.realizeEditor.HintLine()
+		if m.showRealization {
+			line = m.realizationScreen.HintLine()
+		} else {
+			line = m.realizeEditor.HintLine()
+		}
 	default:
 		switch m.mode {
 		case ModeNormal:
