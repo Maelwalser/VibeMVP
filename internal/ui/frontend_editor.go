@@ -490,23 +490,18 @@ func (fe FrontendEditor) Update(msg tea.Msg) (FrontendEditor, tea.Cmd) {
 		return fe, nil
 	}
 
-	// Sub-tab switching (from top-level only)
-	canSwitch := fe.activeTab != feTabPages || fe.pageSubView == ceViewList
-	if canSwitch {
-		switch key.String() {
-		case "h", "left":
-			if fe.activeTab > 0 {
-				fe.activeTab--
-				fe.resetIdx()
-			}
-			return fe, nil
-		case "l", "right":
-			if int(fe.activeTab) < len(feTabLabels)-1 {
-				fe.activeTab++
-				fe.resetIdx()
-			}
-			return fe, nil
+	// Sub-tab switching always available in normal mode
+	switch key.String() {
+	case "h", "left":
+		if fe.activeTab > 0 {
+			fe.activeTab--
 		}
+		return fe, nil
+	case "l", "right":
+		if int(fe.activeTab) < len(feTabLabels)-1 {
+			fe.activeTab++
+		}
+		return fe, nil
 	}
 
 	switch fe.activeTab {

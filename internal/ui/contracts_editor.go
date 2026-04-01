@@ -558,25 +558,18 @@ func (ce ContractsEditor) Update(msg tea.Msg) (ContractsEditor, tea.Cmd) {
 		return ce.updateDropdown(key)
 	}
 
-	// Sub-tab switching (only from top-level lists)
-	canSwitch := (ce.activeTab == contractsTabDTOs && ce.dtoSubView == ceViewList) ||
-		(ce.activeTab == contractsTabEndpoints && ce.epSubView == ceViewList) ||
-		ce.activeTab == contractsTabVersioning ||
-		(ce.activeTab == contractsTabExternal && ce.extSubView == ceViewList)
-
-	if canSwitch {
-		switch key.String() {
-		case "h", "left":
-			if ce.activeTab > 0 {
-				ce.activeTab--
-			}
-			return ce, nil
-		case "l", "right":
-			if int(ce.activeTab) < len(contractsTabLabels)-1 {
-				ce.activeTab++
-			}
-			return ce, nil
+	// Sub-tab switching always available in normal mode
+	switch key.String() {
+	case "h", "left":
+		if ce.activeTab > 0 {
+			ce.activeTab--
 		}
+		return ce, nil
+	case "l", "right":
+		if int(ce.activeTab) < len(contractsTabLabels)-1 {
+			ce.activeTab++
+		}
+		return ce, nil
 	}
 
 	switch ce.activeTab {

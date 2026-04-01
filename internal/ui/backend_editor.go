@@ -1197,14 +1197,12 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 		be.gBuf = false
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "l", "right":
 		be.countBuf = ""
 		be.gBuf = false
 		if be.activeTabIdx < len(be.activeTabs())-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "j", "down":
 		count := parseVimCount(be.countBuf)
@@ -1323,12 +1321,10 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "h", "left":
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "b":
 		be.ArchConfirmed = false
@@ -1486,12 +1482,10 @@ func (be BackendEditor) updateCommList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "h", "left":
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "b":
 		be.ArchConfirmed = false
@@ -1570,12 +1564,10 @@ func (be BackendEditor) updateMessaging(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 	case "h", "left":
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "l", "right":
 		if be.activeTabIdx < len(be.activeTabs())-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "b":
 		be.ArchConfirmed = false
@@ -2158,12 +2150,10 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "h", "left":
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "b":
 		be.ArchConfirmed = false
@@ -2296,14 +2286,12 @@ func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		be.gBuf = false
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
-			be.activeField = 0
 		}
 	case "l", "right":
 		be.countBuf = ""
 		be.gBuf = false
 		if be.activeTabIdx < len(be.activeTabs())-1 {
 			be.activeTabIdx++
-			be.activeField = 0
 		}
 	case "b":
 		be.countBuf = ""
