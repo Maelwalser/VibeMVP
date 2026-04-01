@@ -709,6 +709,18 @@ type TelemetryPillar struct {
 	Alerting    string      `json:"alerting,omitempty"`
 }
 
+// ── Realize options ───────────────────────────────────────────────────────────
+
+// RealizeOptions holds configuration for the code-generation agent run.
+type RealizeOptions struct {
+	AppName     string `json:"app_name"`
+	OutputDir   string `json:"output_dir"`
+	Model       string `json:"model"`
+	Concurrency int    `json:"concurrency"`
+	Verify      bool   `json:"verify"`
+	DryRun      bool   `json:"dry_run"`
+}
+
 // ── Root manifest ─────────────────────────────────────────────────────────────
 
 // Manifest is the root document holding all configuration.
@@ -722,6 +734,7 @@ type Manifest struct {
 	Frontend  FrontendPillar  `json:"frontend"`
 	Infra     InfraPillar     `json:"infrastructure"`
 	CrossCut  CrossCutPillar  `json:"cross_cutting"`
+	Realize   RealizeOptions  `json:"realize,omitempty"`
 
 	// Legacy fields kept for backward compatibility during transition.
 	Databases []DBSourceDef `json:"databases,omitempty"`
