@@ -172,6 +172,14 @@ func defaultAttrFields() []Field {
 			Options: []string{"false", "true"}, Value: "false",
 		},
 		{Key: "validation", Label: "validation    ", Kind: KindText},
+		{
+			Key: "indexed", Label: "indexed       ", Kind: KindSelect,
+			Options: []string{"false", "true"}, Value: "false",
+		},
+		{
+			Key: "unique", Label: "unique        ", Kind: KindSelect,
+			Options: []string{"false", "true"}, Value: "false",
+		},
 	}
 }
 
@@ -220,7 +228,9 @@ func defaultCachingFields() []Field {
 			Value:   "TTL-based",
 		},
 		{
-			Key: "ttl", Label: "ttl           ", Kind: KindText,
+			Key: "ttl", Label: "ttl           ", Kind: KindSelect,
+			Options: []string{"30s", "1m", "5m", "15m", "1h", "24h", "Custom"},
+			Value:   "5m", SelIdx: 2,
 		},
 		{
 			Key: "entities", Label: "entities      ", Kind: KindMultiSelect,
@@ -231,6 +241,21 @@ func defaultCachingFields() []Field {
 
 func defaultGovernanceFields() []Field {
 	return []Field{
+		{
+			Key: "migration_tool", Label: "Migration     ", Kind: KindSelect,
+			Options: []string{"golang-migrate", "Atlas", "Flyway", "Liquibase", "Prisma Migrate", "Alembic", "None"},
+			Value:   "None", SelIdx: 6,
+		},
+		{
+			Key: "backup_strategy", Label: "Backup Strat. ", Kind: KindSelect,
+			Options: []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"},
+			Value:   "None", SelIdx: 4,
+		},
+		{
+			Key: "search_tech", Label: "Search Tech   ", Kind: KindSelect,
+			Options: []string{"Elasticsearch", "Meilisearch", "Algolia", "PostgreSQL FTS", "Typesense", "None"},
+			Value:   "None", SelIdx: 5,
+		},
 		{
 			Key: "retention_policy", Label: "retention     ", Kind: KindSelect,
 			Options: []string{"30 days", "90 days", "1 year", "3 years", "7 years", "Indefinite", "Custom"},
@@ -316,8 +341,15 @@ func defaultFSFormFields(domainOptions []string) []Field {
 			Key: "domains", Label: "domains       ", Kind: KindMultiSelect,
 			Options: domainOptions,
 		},
-		{Key: "ttl_minutes", Label: "ttl_minutes   ", Kind: KindText},
-		{Key: "allowed_types", Label: "allowed_types ", Kind: KindText},
+		{
+			Key: "ttl_minutes", Label: "ttl_minutes   ", Kind: KindSelect,
+			Options: []string{"30", "60", "1440", "10080", "Custom"},
+			Value:   "1440", SelIdx: 2,
+		},
+		{
+			Key: "allowed_types", Label: "allowed_types ", Kind: KindMultiSelect,
+			Options: []string{"image/*", "application/pdf", "video/*", "audio/*", "text/*", "application/json"},
+		},
 	}
 }
 
@@ -357,7 +389,7 @@ func fsDefFromForm(fields []Field) manifest.FileStorageDef {
 		MaxSize:      fieldGet(fields, "max_size"),
 		Domains:      fieldGetMulti(fields, "domains"),
 		TTLMinutes:   fieldGet(fields, "ttl_minutes"),
-		AllowedTypes: fieldGet(fields, "allowed_types"),
+		AllowedTypes: fieldGetMulti(fields, "allowed_types"),
 	}
 }
 
@@ -384,6 +416,9 @@ func (dt DataTabEditor) ToManifestDataPillar() manifest.DataPillar {
 			DataResidency:        fieldGet(dt.governanceFields, "data_residency"),
 			ArchivalStorage:      fieldGet(dt.governanceFields, "archival_storage"),
 		},
+		MigrationTool:  fieldGet(dt.governanceFields, "migration_tool"),
+		BackupStrategy: fieldGet(dt.governanceFields, "backup_strategy"),
+		SearchTech:     fieldGet(dt.governanceFields, "search_tech"),
 	}
 }
 
@@ -937,6 +972,8 @@ func (dt *DataTabEditor) saveDomainForm() {
 			Default:     fieldGet(item, "default"),
 			Sensitive:   fieldGet(item, "sensitive") == "true",
 			Validation:  fieldGet(item, "validation"),
+			Indexed:     fieldGet(item, "indexed") == "true",
+			Unique:      fieldGet(item, "unique") == "true",
 		}
 	}
 
@@ -982,6 +1019,8 @@ func (dt *DataTabEditor) saveDomainAttrItemsOnly() {
 			Default:     fieldGet(item, "default"),
 			Sensitive:   fieldGet(item, "sensitive") == "true",
 			Validation:  fieldGet(item, "validation"),
+			Indexed:     fieldGet(item, "indexed") == "true",
+			Unique:      fieldGet(item, "unique") == "true",
 		}
 	}
 }

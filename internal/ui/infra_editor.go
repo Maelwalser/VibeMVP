@@ -52,6 +52,22 @@ func defaultNetworkingFields() []Field {
 			Options: []string{"Cloudflare", "CloudFront", "Fastly", "Vercel Edge", "None"},
 			Value:   "None", SelIdx: 4,
 		},
+		{Key: "primary_domain", Label: "Primary Domain", Kind: KindText},
+		{
+			Key: "domain_strategy", Label: "Domain Strat. ", Kind: KindSelect,
+			Options: []string{"Subdomain per service", "Path-based routing", "Single domain", "Custom"},
+			Value:   "Single domain", SelIdx: 2,
+		},
+		{
+			Key: "cors_infra", Label: "CORS Enforced ", Kind: KindSelect,
+			Options: []string{"Reverse proxy (Nginx/Caddy)", "Application-level", "CDN/WAF", "Both"},
+			Value:   "Application-level", SelIdx: 1,
+		},
+		{
+			Key: "ssl_cert", Label: "SSL Cert Mgmt ", Kind: KindSelect,
+			Options: []string{"Auto-renew (certbot/ACME)", "Managed (cloud provider)", "Manual", "Cloudflare proxy"},
+			Value:   "Auto-renew (certbot/ACME)",
+		},
 	}
 }
 
@@ -87,6 +103,16 @@ func defaultInfraCICDFields() []Field {
 				"GCP Secret Manager", "None",
 			},
 			Value: "GitHub Secrets",
+		},
+		{
+			Key: "container_runtime", Label: "Container     ", Kind: KindSelect,
+			Options: []string{"Node Alpine", "Go scratch", "Python slim", "Distroless", "Ubuntu", "Custom"},
+			Value:   "Go scratch", SelIdx: 1,
+		},
+		{
+			Key: "backup_dr", Label: "Backup/DR     ", Kind: KindSelect,
+			Options: []string{"Cross-region replication", "Daily snapshots", "Managed provider DR", "None"},
+			Value:   "None", SelIdx: 3,
 		},
 	}
 }
@@ -175,6 +201,11 @@ func defaultObservabilityFields() []Field {
 			},
 			Value: "Grafana Alerting",
 		},
+		{
+			Key: "log_retention", Label: "Log Retention ", Kind: KindSelect,
+			Options: []string{"7 days", "30 days", "90 days", "1 year", "Indefinite"},
+			Value:   "30 days", SelIdx: 1,
+		},
 	}
 }
 
@@ -220,10 +251,14 @@ func newInfraEditor() InfraEditor {
 func (ie InfraEditor) ToManifestInfraPillar() manifest.InfraPillar {
 	return manifest.InfraPillar{
 		Networking: manifest.NetworkingConfig{
-			DNSProvider:  fieldGet(ie.networkingFields, "dns_provider"),
-			TLSSSL:       fieldGet(ie.networkingFields, "tls_ssl"),
-			ReverseProxy: fieldGet(ie.networkingFields, "reverse_proxy"),
-			CDN:          fieldGet(ie.networkingFields, "cdn"),
+			DNSProvider:     fieldGet(ie.networkingFields, "dns_provider"),
+			TLSSSL:          fieldGet(ie.networkingFields, "tls_ssl"),
+			ReverseProxy:    fieldGet(ie.networkingFields, "reverse_proxy"),
+			CDN:             fieldGet(ie.networkingFields, "cdn"),
+			PrimaryDomain:   fieldGet(ie.networkingFields, "primary_domain"),
+			DomainStrategy:  fieldGet(ie.networkingFields, "domain_strategy"),
+			CORSEnforcement: fieldGet(ie.networkingFields, "cors_infra"),
+			SSLCertMgmt:     fieldGet(ie.networkingFields, "ssl_cert"),
 		},
 		CICD: manifest.CICDConfig{
 			Platform:          fieldGet(ie.cicdFields, "platform"),
@@ -231,6 +266,8 @@ func (ie InfraEditor) ToManifestInfraPillar() manifest.InfraPillar {
 			DeployStrategy:    fieldGet(ie.cicdFields, "deploy_strategy"),
 			IaCTool:           fieldGet(ie.cicdFields, "iac_tool"),
 			SecretsMgmt:       fieldGet(ie.cicdFields, "secrets_mgmt"),
+			ContainerRuntime:  fieldGet(ie.cicdFields, "container_runtime"),
+			BackupDR:          fieldGet(ie.cicdFields, "backup_dr"),
 		},
 		Observability: manifest.ObservabilityConfig{
 			Logging:       fieldGet(ie.obsFields, "logging"),
@@ -239,6 +276,7 @@ func (ie InfraEditor) ToManifestInfraPillar() manifest.InfraPillar {
 			ErrorTracking: fieldGet(ie.obsFields, "error_tracking"),
 			HealthChecks:  fieldGet(ie.obsFields, "health_checks") == "true",
 			Alerting:      fieldGet(ie.obsFields, "alerting"),
+			LogRetention:  fieldGet(ie.obsFields, "log_retention"),
 		},
 		EnvTopology: manifest.EnvTopologyConfig{
 			Stages:            fieldGet(ie.envTopoFields, "stages"),

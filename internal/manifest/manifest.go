@@ -242,12 +242,16 @@ type GlobalNFRPillar struct {
 
 // ServiceDef represents one backend module or microservice.
 type ServiceDef struct {
-	Name           string              `json:"name"`
-	Responsibility string              `json:"responsibility"`
-	Language       string              `json:"language"`
-	Framework      string              `json:"framework"`
-	PatternTag     string              `json:"pattern_tag,omitempty"` // hybrid only
-	Interfaces     []ExposedInterface  `json:"interfaces,omitempty"`
+	Name             string             `json:"name"`
+	Responsibility   string             `json:"responsibility"`
+	Language         string             `json:"language"`
+	Framework        string             `json:"framework"`
+	PatternTag       string             `json:"pattern_tag,omitempty"` // hybrid only
+	Technologies     []string           `json:"technologies,omitempty"`
+	HealthcheckPath  string             `json:"healthcheck_path,omitempty"`
+	ErrorFormat      string             `json:"error_format,omitempty"`
+	ServiceDiscovery string             `json:"service_discovery,omitempty"`
+	Interfaces       []ExposedInterface `json:"interfaces,omitempty"`
 }
 
 // ExposedInterface describes one interface a service unit exposes.
@@ -259,12 +263,13 @@ type ExposedInterface struct {
 
 // CommLink describes a directed communication link between two service units.
 type CommLink struct {
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Direction string `json:"direction"`
-	Protocol  string `json:"protocol"`
-	Trigger   string `json:"trigger,omitempty"`
-	SyncAsync string `json:"sync_async"`
+	From               string   `json:"from"`
+	To                 string   `json:"to"`
+	Direction          string   `json:"direction"`
+	Protocol           string   `json:"protocol"`
+	Trigger            string   `json:"trigger,omitempty"`
+	SyncAsync          string   `json:"sync_async"`
+	ResiliencePatterns []string `json:"resilience_patterns,omitempty"`
 }
 
 // MessagingConfig describes the message broker configuration.
@@ -341,15 +346,19 @@ type EnvConfig struct {
 
 // BackendPillar covers the full backend configuration.
 type BackendPillar struct {
-	ArchPattern ArchPattern      `json:"arch_pattern"`
-	Env         EnvConfig        `json:"env"`
-	Services    []ServiceDef     `json:"services,omitempty"`
-	CommLinks   []CommLink       `json:"comm_links,omitempty"`
-	Messaging   *MessagingConfig `json:"messaging,omitempty"`
-	APIGateway  *APIGatewayConfig `json:"api_gateway,omitempty"`
-	Auth        AuthConfig       `json:"auth"`
-	JobQueues   []JobQueueDef    `json:"job_queues,omitempty"`
-	WAF         WAFConfig        `json:"waf,omitempty"`
+	ArchPattern  ArchPattern       `json:"arch_pattern"`
+	Env          EnvConfig         `json:"env"`
+	Services     []ServiceDef      `json:"services,omitempty"`
+	CommLinks    []CommLink        `json:"comm_links,omitempty"`
+	Messaging    *MessagingConfig  `json:"messaging,omitempty"`
+	APIGateway   *APIGatewayConfig `json:"api_gateway,omitempty"`
+	Auth         AuthConfig        `json:"auth"`
+	JobQueues    []JobQueueDef     `json:"job_queues,omitempty"`
+	WAF          WAFConfig         `json:"waf,omitempty"`
+	CORSStrategy  string            `json:"cors_strategy,omitempty"`
+	CORSOrigins   string            `json:"cors_origins,omitempty"`
+	SessionMgmt   string            `json:"session_mgmt,omitempty"`
+	BackendLinter string            `json:"backend_linter,omitempty"`
 
 	// Legacy monolith fields kept for backward compatibility.
 	ComputeEnv    ComputeEnv `json:"compute_env,omitempty"`
@@ -376,6 +385,8 @@ type DomainAttribute struct {
 	Default     string `json:"default,omitempty"`
 	Sensitive   bool   `json:"sensitive"`
 	Validation  string `json:"validation,omitempty"`
+	Indexed     bool   `json:"indexed,omitempty"`
+	Unique      bool   `json:"unique,omitempty"`
 }
 
 type DomainRelationship struct {
@@ -417,12 +428,16 @@ type DataGovernanceConfig struct {
 
 // DataPillar groups all data-related configuration.
 type DataPillar struct {
-	Databases    []DBSourceDef       `json:"databases,omitempty"`
-	Domains      []DomainDef         `json:"domains,omitempty"`
-	Entities     []EntityDef         `json:"entities,omitempty"` // legacy
-	Caching      CachingConfig       `json:"caching"`
-	FileStorages []FileStorageDef    `json:"file_storages,omitempty"`
-	Governance   DataGovernanceConfig `json:"governance,omitempty"`
+	Databases        []DBSourceDef        `json:"databases,omitempty"`
+	Domains          []DomainDef          `json:"domains,omitempty"`
+	Entities         []EntityDef          `json:"entities,omitempty"` // legacy
+	Caching          CachingConfig        `json:"caching"`
+	FileStorages     []FileStorageDef     `json:"file_storages,omitempty"`
+	Governance       DataGovernanceConfig `json:"governance,omitempty"`
+	MigrationTool    string               `json:"migration_tool,omitempty"`
+	BackupStrategy   string               `json:"backup_strategy,omitempty"`
+	SearchTech       string               `json:"search_tech,omitempty"`
+	SearchableDomains []string            `json:"searchable_domains,omitempty"`
 }
 
 // ── Contracts tab types ───────────────────────────────────────────────────────
@@ -448,21 +463,27 @@ type DTODef struct {
 
 // EndpointDef describes an API endpoint or operation.
 type EndpointDef struct {
-	ServiceUnit string `json:"service_unit"`
-	NamePath    string `json:"name_path"`
-	Protocol    string `json:"protocol"`
-	AuthRequired string `json:"auth_required"`
-	RequestDTO  string `json:"request_dto,omitempty"`
-	ResponseDTO string `json:"response_dto,omitempty"`
-	HTTPMethod  string `json:"http_method,omitempty"`
-	Description string `json:"description,omitempty"`
+	ServiceUnit        string `json:"service_unit"`
+	NamePath           string `json:"name_path"`
+	Protocol           string `json:"protocol"`
+	AuthRequired       string `json:"auth_required"`
+	RequestDTO         string `json:"request_dto,omitempty"`
+	ResponseDTO        string `json:"response_dto,omitempty"`
+	HTTPMethod         string `json:"http_method,omitempty"`
+	Description        string `json:"description,omitempty"`
+	GraphQLOpType      string `json:"graphql_op_type,omitempty"`
+	GRPCStreamType     string `json:"grpc_stream_type,omitempty"`
+	WSDirection        string `json:"ws_direction,omitempty"`
+	PaginationStrategy string `json:"pagination_strategy,omitempty"`
+	RateLimit          string `json:"rate_limit,omitempty"`
 }
 
 // APIVersioning describes how the API handles versioning.
 type APIVersioning struct {
-	Strategy          string `json:"strategy"`
-	CurrentVersion    string `json:"current_version,omitempty"`
-	DeprecationPolicy string `json:"deprecation_policy,omitempty"`
+	Strategy           string `json:"strategy"`
+	CurrentVersion     string `json:"current_version,omitempty"`
+	DeprecationPolicy  string `json:"deprecation_policy,omitempty"`
+	PaginationStrategy string `json:"pagination_strategy,omitempty"`
 }
 
 // ExternalAPIDef describes a third-party API that the system consumes.
@@ -487,17 +508,25 @@ type ContractsPillar struct {
 
 // FrontendTechConfig describes the technology stack choices for the frontend.
 type FrontendTechConfig struct {
-	Language        string `json:"language"`
-	Platform        string `json:"platform"`
-	Framework       string `json:"framework"`
-	MetaFramework   string `json:"meta_framework,omitempty"`
-	PackageManager  string `json:"package_manager"`
-	Styling         string `json:"styling"`
-	ComponentLib    string `json:"component_lib,omitempty"`
-	StateManagement string `json:"state_management,omitempty"`
-	DataFetching    string `json:"data_fetching,omitempty"`
-	FormHandling    string `json:"form_handling,omitempty"`
-	Validation      string `json:"validation,omitempty"`
+	Language           string `json:"language"`
+	Platform           string `json:"platform"`
+	Framework          string `json:"framework"`
+	MetaFramework      string `json:"meta_framework,omitempty"`
+	PackageManager     string `json:"package_manager"`
+	Styling            string `json:"styling"`
+	ComponentLib       string `json:"component_lib,omitempty"`
+	StateManagement    string `json:"state_management,omitempty"`
+	DataFetching       string `json:"data_fetching,omitempty"`
+	FormHandling       string `json:"form_handling,omitempty"`
+	Validation         string `json:"validation,omitempty"`
+	PWASupport         string `json:"pwa_support,omitempty"`
+	RealtimeStrategy   string `json:"realtime_strategy,omitempty"`
+	ImageOptimization  string `json:"image_optimization,omitempty"`
+	AuthFlowType       string `json:"auth_flow_type,omitempty"`
+	ErrorBoundary      string `json:"error_boundary,omitempty"`
+	BundleOptimization string `json:"bundle_optimization,omitempty"`
+	FrontendTesting    string `json:"frontend_testing,omitempty"`
+	FrontendLinter     string `json:"frontend_linter,omitempty"`
 }
 
 // FrontendTheme describes the visual theme settings.
@@ -574,10 +603,14 @@ type FrontendPillar struct {
 
 // NetworkingConfig describes networking and connectivity settings.
 type NetworkingConfig struct {
-	DNSProvider  string `json:"dns_provider"`
-	TLSSSL       string `json:"tls_ssl"`
-	ReverseProxy string `json:"reverse_proxy"`
-	CDN          string `json:"cdn"`
+	DNSProvider    string `json:"dns_provider"`
+	TLSSSL         string `json:"tls_ssl"`
+	ReverseProxy   string `json:"reverse_proxy"`
+	CDN            string `json:"cdn"`
+	PrimaryDomain  string `json:"primary_domain,omitempty"`
+	DomainStrategy string `json:"domain_strategy,omitempty"`
+	CORSEnforcement string `json:"cors_enforcement,omitempty"`
+	SSLCertMgmt    string `json:"ssl_cert_mgmt,omitempty"`
 }
 
 // CICDConfig describes CI/CD pipeline settings.
@@ -587,6 +620,8 @@ type CICDConfig struct {
 	DeployStrategy    string `json:"deploy_strategy"`
 	IaCTool           string `json:"iac_tool"`
 	SecretsMgmt       string `json:"secrets_mgmt,omitempty"`
+	ContainerRuntime  string `json:"container_runtime,omitempty"`
+	BackupDR          string `json:"backup_dr,omitempty"`
 }
 
 // ObservabilityConfig describes logging, metrics, tracing, and alerting settings.
@@ -597,6 +632,7 @@ type ObservabilityConfig struct {
 	ErrorTracking string `json:"error_tracking"`
 	HealthChecks  bool   `json:"health_checks"`
 	Alerting      string `json:"alerting"`
+	LogRetention  string `json:"log_retention,omitempty"`
 }
 
 // EnvTopologyConfig describes environment staging, promotion, and secret topology.
@@ -638,8 +674,14 @@ type DocsConfig struct {
 
 // CrossCutPillar groups cross-cutting concerns.
 type CrossCutPillar struct {
-	Testing TestingConfig `json:"testing"`
-	Docs    DocsConfig    `json:"docs"`
+	Testing           TestingConfig `json:"testing"`
+	Docs              DocsConfig    `json:"docs"`
+	BranchStrategy    string        `json:"branch_strategy,omitempty"`
+	DependencyUpdates string        `json:"dependency_updates,omitempty"`
+	CodeReview        string        `json:"code_review,omitempty"`
+	FeatureFlags      string        `json:"feature_flags,omitempty"`
+	UptimeSLO         string        `json:"uptime_slo,omitempty"`
+	LatencyP99        string        `json:"latency_p99,omitempty"`
 }
 
 // ── Legacy pillars (preserved for existing code compatibility) ────────────────

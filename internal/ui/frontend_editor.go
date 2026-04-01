@@ -121,6 +121,46 @@ func defaultFETechFields() []Field {
 			Options: []string{"Zod", "Yup", "Valibot", "Joi", "Class-validator", "None"},
 			Value:   "Zod",
 		},
+		{
+			Key: "pwa_support", Label: "PWA Support   ", Kind: KindSelect,
+			Options: []string{"None", "Basic (manifest + service worker)", "Full offline", "Push notifications"},
+			Value:   "None",
+		},
+		{
+			Key: "realtime", Label: "Real-time     ", Kind: KindSelect,
+			Options: []string{"WebSocket", "SSE", "Polling", "None"},
+			Value:   "None", SelIdx: 3,
+		},
+		{
+			Key: "image_opt", Label: "Image Optim.  ", Kind: KindSelect,
+			Options: []string{"Next/Image (built-in)", "Cloudinary", "Imgix", "Sharp (self-hosted)", "CDN transform", "None"},
+			Value:   "None", SelIdx: 5,
+		},
+		{
+			Key: "auth_flow", Label: "Auth Flow     ", Kind: KindSelect,
+			Options: []string{"Redirect (OAuth/OIDC)", "Modal login", "Magic link", "Passwordless", "Social only"},
+			Value:   "Redirect (OAuth/OIDC)",
+		},
+		{
+			Key: "error_boundary", Label: "Error Boundary", Kind: KindSelect,
+			Options: []string{"React Error Boundary", "Global try-catch", "Framework default", "Custom"},
+			Value:   "Framework default", SelIdx: 2,
+		},
+		{
+			Key: "bundle_opt", Label: "Bundle Optim. ", Kind: KindSelect,
+			Options: []string{"Code splitting (route-based)", "Dynamic imports", "Tree shaking only", "None"},
+			Value:   "None", SelIdx: 3,
+		},
+		{
+			Key: "fe_testing", Label: "FE Testing    ", Kind: KindSelect,
+			Options: []string{"Vitest", "Jest", "Testing Library", "Storybook", "None"},
+			Value:   "None", SelIdx: 4,
+		},
+		{
+			Key: "fe_linter", Label: "Linter        ", Kind: KindSelect,
+			Options: []string{"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
+			Value:   "None", SelIdx: 5,
+		},
 	}
 }
 
@@ -354,17 +394,25 @@ func (fe FrontendEditor) pageRoutes() []string {
 func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 	return manifest.FrontendPillar{
 		Tech: manifest.FrontendTechConfig{
-			Language:        fieldGet(fe.techFields, "language"),
-			Platform:        fieldGet(fe.techFields, "platform"),
-			Framework:       fieldGet(fe.techFields, "framework"),
-			MetaFramework:   fieldGet(fe.techFields, "meta_framework"),
-			PackageManager:  fieldGet(fe.techFields, "pkg_manager"),
-			Styling:         fieldGet(fe.techFields, "styling"),
-			ComponentLib:    fieldGet(fe.techFields, "component_lib"),
-			StateManagement: fieldGet(fe.techFields, "state_mgmt"),
-			DataFetching:    fieldGet(fe.techFields, "data_fetching"),
-			FormHandling:    fieldGet(fe.techFields, "form_handling"),
-			Validation:      fieldGet(fe.techFields, "validation"),
+			Language:           fieldGet(fe.techFields, "language"),
+			Platform:           fieldGet(fe.techFields, "platform"),
+			Framework:          fieldGet(fe.techFields, "framework"),
+			MetaFramework:      fieldGet(fe.techFields, "meta_framework"),
+			PackageManager:     fieldGet(fe.techFields, "pkg_manager"),
+			Styling:            fieldGet(fe.techFields, "styling"),
+			ComponentLib:       fieldGet(fe.techFields, "component_lib"),
+			StateManagement:    fieldGet(fe.techFields, "state_mgmt"),
+			DataFetching:       fieldGet(fe.techFields, "data_fetching"),
+			FormHandling:       fieldGet(fe.techFields, "form_handling"),
+			Validation:         fieldGet(fe.techFields, "validation"),
+			PWASupport:         fieldGet(fe.techFields, "pwa_support"),
+			RealtimeStrategy:   fieldGet(fe.techFields, "realtime"),
+			ImageOptimization:  fieldGet(fe.techFields, "image_opt"),
+			AuthFlowType:       fieldGet(fe.techFields, "auth_flow"),
+			ErrorBoundary:      fieldGet(fe.techFields, "error_boundary"),
+			BundleOptimization: fieldGet(fe.techFields, "bundle_opt"),
+			FrontendTesting:    fieldGet(fe.techFields, "fe_testing"),
+			FrontendLinter:     fieldGet(fe.techFields, "fe_linter"),
 		},
 		Theme: manifest.FrontendTheme{
 			DarkMode:     fieldGet(fe.themeFields, "dark_mode"),

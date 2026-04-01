@@ -168,6 +168,22 @@ func defaultEnvFields() []Field {
 			Options: backendFrameworksByLang["Go"],
 			Value:   "Fiber",
 		},
+		{
+			Key: "cors_strategy", Label: "CORS Strategy ", Kind: KindSelect,
+			Options: []string{"Permissive", "Strict allowlist", "Same-origin"},
+			Value:   "Permissive",
+		},
+		{Key: "cors_origins", Label: "CORS Origins  ", Kind: KindText},
+		{
+			Key: "session_mgmt", Label: "Session Mgmt  ", Kind: KindSelect,
+			Options: []string{"Stateless (JWT only)", "Server-side sessions (Redis)", "Database sessions", "None"},
+			Value:   "None", SelIdx: 3,
+		},
+		{
+			Key: "be_linter", Label: "Linter        ", Kind: KindSelect,
+			Options: []string{"golangci-lint", "Ruff", "ESLint", "Checkstyle", "ktlint", "Clippy", "RuboCop", "PHP-CS-Fixer", "Custom", "None"},
+			Value:   "None", SelIdx: 9,
+		},
 	}
 }
 
@@ -196,6 +212,17 @@ func defaultServiceFields() []Field {
 				"Event processor", "Serverless function",
 			},
 			Value: "Microservice",
+		},
+		{Key: "healthcheck_path", Label: "Healthcheck   ", Kind: KindText, Value: "/healthz"},
+		{
+			Key: "error_format", Label: "Error Format  ", Kind: KindSelect,
+			Options: []string{"RFC 7807 (Problem Details)", "Custom JSON envelope", "Platform default"},
+			Value:   "Platform default", SelIdx: 2,
+		},
+		{
+			Key: "service_discovery", Label: "Svc Discovery ", Kind: KindSelect,
+			Options: []string{"DNS-based", "Consul", "Kubernetes DNS", "Eureka", "Static config", "None"},
+			Value:   "None", SelIdx: 5,
 		},
 	}
 }
@@ -228,12 +255,28 @@ func serviceFieldsFromDef(s manifest.ServiceDef) []Field {
 }
 
 func serviceDefFromFields(fields []Field) manifest.ServiceDef {
+	// Read technologies multiselect
+	var techs []string
+	for _, f := range fields {
+		if f.Key == "technologies" {
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					techs = append(techs, f.Options[idx])
+				}
+			}
+			break
+		}
+	}
 	return manifest.ServiceDef{
-		Name:           fieldGet(fields, "name"),
-		Responsibility: fieldGet(fields, "responsibility"),
-		Language:       fieldGet(fields, "language"),
-		Framework:      fieldGet(fields, "framework"),
-		PatternTag:     fieldGet(fields, "pattern_tag"),
+		Name:             fieldGet(fields, "name"),
+		Responsibility:   fieldGet(fields, "responsibility"),
+		Language:         fieldGet(fields, "language"),
+		Framework:        fieldGet(fields, "framework"),
+		PatternTag:       fieldGet(fields, "pattern_tag"),
+		Technologies:     techs,
+		HealthcheckPath:  fieldGet(fields, "healthcheck_path"),
+		ErrorFormat:      fieldGet(fields, "error_format"),
+		ServiceDiscovery: fieldGet(fields, "service_discovery"),
 	}
 }
 
@@ -262,17 +305,34 @@ func defaultCommFields() []Field {
 			Options: []string{"Synchronous", "Asynchronous", "Fire-and-forget"},
 			Value:   "Synchronous",
 		},
+		{
+			Key: "resilience", Label: "resilience    ", Kind: KindMultiSelect,
+			Options: []string{"Circuit breaker", "Retry with backoff", "Timeout", "Bulkhead", "None"},
+		},
 	}
 }
 
 func commLinkFromFields(fields []Field) manifest.CommLink {
+	// Read resilience multiselect
+	var resilience []string
+	for _, f := range fields {
+		if f.Key == "resilience" {
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					resilience = append(resilience, f.Options[idx])
+				}
+			}
+			break
+		}
+	}
 	return manifest.CommLink{
-		From:      fieldGet(fields, "from"),
-		To:        fieldGet(fields, "to"),
-		Direction: fieldGet(fields, "direction"),
-		Protocol:  fieldGet(fields, "protocol"),
-		Trigger:   fieldGet(fields, "trigger"),
-		SyncAsync: fieldGet(fields, "sync_async"),
+		From:               fieldGet(fields, "from"),
+		To:                 fieldGet(fields, "to"),
+		Direction:          fieldGet(fields, "direction"),
+		Protocol:           fieldGet(fields, "protocol"),
+		Trigger:            fieldGet(fields, "trigger"),
+		SyncAsync:          fieldGet(fields, "sync_async"),
+		ResiliencePatterns: resilience,
 	}
 }
 
@@ -688,12 +748,16 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 	}
 
 	bp := manifest.BackendPillar{
-		ArchPattern: manifest.ArchPattern(arch),
-		Env:         env,
-		Services:    be.Services,
-		CommLinks:   be.CommLinks,
-		Auth:        auth,
-		JobQueues:   be.jobQueues,
+		ArchPattern:  manifest.ArchPattern(arch),
+		Env:          env,
+		Services:     be.Services,
+		CommLinks:    be.CommLinks,
+		Auth:         auth,
+		JobQueues:    be.jobQueues,
+		CORSStrategy:  fieldGet(be.EnvFields, "cors_strategy"),
+		CORSOrigins:   fieldGet(be.EnvFields, "cors_origins"),
+		SessionMgmt:   fieldGet(be.EnvFields, "session_mgmt"),
+		BackendLinter: fieldGet(be.EnvFields, "be_linter"),
 		WAF: manifest.WAFConfig{
 			Provider:          fieldGet(be.securityFields, "waf_provider"),
 			Ruleset:           fieldGet(be.securityFields, "waf_ruleset"),
@@ -1146,7 +1210,14 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 		count := parseVimCount(be.countBuf)
 		be.countBuf = ""
 		be.gBuf = false
-		if fields := be.currentEditableFields(); fields != nil {
+		if be.activeTab() == beTabEnv {
+			visible := be.visibleEnvFields()
+			for i := 0; i < count; i++ {
+				if be.activeField < len(visible)-1 {
+					be.activeField++
+				}
+			}
+		} else if fields := be.currentEditableFields(); fields != nil {
 			for i := 0; i < count; i++ {
 				if be.activeField < len(*fields)-1 {
 					be.activeField++
@@ -1174,7 +1245,12 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 	case "G":
 		be.countBuf = ""
 		be.gBuf = false
-		if fields := be.currentEditableFields(); fields != nil {
+		if be.activeTab() == beTabEnv {
+			visible := be.visibleEnvFields()
+			if len(visible) > 0 {
+				be.activeField = len(visible) - 1
+			}
+		} else if fields := be.currentEditableFields(); fields != nil {
 			be.activeField = len(*fields) - 1
 		}
 	case "enter", " ":
@@ -1623,11 +1699,16 @@ func (be *BackendEditor) saveEventForm() {
 // visibleEnvFields returns the ENV fields filtered by the current arch.
 // For monolith, monolith_lang and monolith_fw are shown.
 // For other archs, they are hidden.
+// cors_origins is only shown when cors_strategy is "Strict allowlist".
 func (be BackendEditor) visibleEnvFields() []Field {
 	arch := be.currentArch()
+	corsStrategy := fieldGet(be.EnvFields, "cors_strategy")
 	var out []Field
 	for _, f := range be.EnvFields {
 		if (f.Key == "monolith_lang" || f.Key == "monolith_fw") && arch != "monolith" {
+			continue
+		}
+		if f.Key == "cors_origins" && corsStrategy != "Strict allowlist" {
 			continue
 		}
 		out = append(out, f)
@@ -1655,7 +1736,22 @@ func (be *BackendEditor) currentEditableFields() *[]Field {
 }
 
 // mutableFieldPtr returns a pointer to the active field for the current tab.
+// For the ENV tab, it resolves through the visible fields to find the correct
+// pointer in the underlying EnvFields slice.
 func (be *BackendEditor) mutableFieldPtr() *Field {
+	if be.activeTab() == beTabEnv {
+		visible := be.visibleEnvFields()
+		if be.activeField < 0 || be.activeField >= len(visible) {
+			return nil
+		}
+		key := visible[be.activeField].Key
+		for i := range be.EnvFields {
+			if be.EnvFields[i].Key == key {
+				return &be.EnvFields[i]
+			}
+		}
+		return nil
+	}
 	fields := be.currentEditableFields()
 	if fields == nil {
 		return nil
@@ -2297,6 +2393,15 @@ func (be BackendEditor) ServiceNames() []string {
 		}
 	}
 	return names
+}
+
+// ServiceDefs returns full service definitions for technology-based protocol filtering.
+func (be BackendEditor) ServiceDefs() []manifest.ServiceDef {
+	defs := make([]manifest.ServiceDef, 0, len(be.serviceEditor.items))
+	for _, item := range be.serviceEditor.items {
+		defs = append(defs, serviceDefFromFields(item))
+	}
+	return defs
 }
 
 // copyFields makes a deep copy of a field slice.

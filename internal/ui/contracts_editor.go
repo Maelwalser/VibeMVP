@@ -119,6 +119,31 @@ func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
 			Options: []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
 			Value:   "GET",
 		},
+		{
+			Key: "graphql_op_type", Label: "Operation     ", Kind: KindSelect,
+			Options: []string{"Query", "Mutation", "Subscription"},
+			Value:   "Query",
+		},
+		{
+			Key: "grpc_stream_type", Label: "Stream Type   ", Kind: KindSelect,
+			Options: []string{"Unary", "Server stream", "Client stream", "Bidirectional"},
+			Value:   "Unary",
+		},
+		{
+			Key: "ws_direction", Label: "WS Direction  ", Kind: KindSelect,
+			Options: []string{"Client→Server", "Server→Client", "Bidirectional"},
+			Value:   "Bidirectional", SelIdx: 2,
+		},
+		{
+			Key: "pagination", Label: "Pagination    ", Kind: KindSelect,
+			Options: []string{"Cursor-based", "Offset/limit", "Keyset", "Page number", "None"},
+			Value:   "None", SelIdx: 4,
+		},
+		{
+			Key: "rate_limit", Label: "Rate Limit    ", Kind: KindSelect,
+			Options: []string{"Default (global)", "Strict", "Relaxed", "None"},
+			Value:   "Default (global)",
+		},
 		{Key: "description", Label: "description   ", Kind: KindText},
 	}
 	return fields
@@ -203,6 +228,7 @@ type ContractsEditor struct {
 	availableDomains    []string               // from DataTabEditor.domainNames()
 	availableDomainDefs []manifest.DomainDef   // from DataTabEditor.domains
 	availableServices   []string               // from BackendEditor.ServiceNames()
+	availableServiceDefs []manifest.ServiceDef // from BackendEditor.ServiceDefs()
 
 	// Dropdown state for KindSelect/KindMultiSelect fields
 	ddOpen   bool
@@ -229,6 +255,127 @@ func (ce *ContractsEditor) SetDomains(domains []string) {
 // SetServices updates the list of available service names for cross-referencing.
 func (ce *ContractsEditor) SetServices(services []string) {
 	ce.availableServices = services
+}
+
+// SetServiceDefs updates full service definitions for technology-based protocol filtering.
+func (ce *ContractsEditor) SetServiceDefs(defs []manifest.ServiceDef) {
+	ce.availableServiceDefs = defs
+}
+
+// protocolsForService returns the protocol options valid for the named service
+// based on its registered technologies. Returns nil when no filter applies.
+func (ce ContractsEditor) protocolsForService(serviceName string) []string {
+	techToProto := map[string]string{
+		"REST":           "REST",
+		"GraphQL":        "GraphQL",
+		"gRPC":           "gRPC",
+		"WebSocket":      "WebSocket message",
+		"SSE":            "REST",
+		"tRPC":           "REST",
+		"MQTT":           "Event",
+		"Kafka consumer": "Event",
+	}
+	for _, svc := range ce.availableServiceDefs {
+		if svc.Name != serviceName {
+			continue
+		}
+		if len(svc.Technologies) == 0 {
+			return nil
+		}
+		seen := make(map[string]bool)
+		var protos []string
+		for _, tech := range svc.Technologies {
+			if proto, ok := techToProto[tech]; ok && !seen[proto] {
+				seen[proto] = true
+				protos = append(protos, proto)
+			}
+		}
+		if len(protos) == 0 {
+			return nil
+		}
+		return protos
+	}
+	return nil
+}
+
+// updateEPDependentFields refreshes the protocol options based on the selected
+// service unit and clamps epFormIdx to the visible field range.
+func (ce *ContractsEditor) updateEPDependentFields() {
+	if ce.activeTab != contractsTabEndpoints || ce.epSubView != ceViewForm {
+		return
+	}
+	svcName := fieldGet(ce.epForm, "service_unit")
+	protos := ce.protocolsForService(svcName)
+	if protos == nil {
+		protos = []string{"REST", "GraphQL", "gRPC", "WebSocket message", "Event"}
+	}
+	for i := range ce.epForm {
+		if ce.epForm[i].Key != "protocol" {
+			continue
+		}
+		current := ce.epForm[i].Value
+		ce.epForm[i].Options = protos
+		found := false
+		for j, opt := range protos {
+			if opt == current {
+				ce.epForm[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			ce.epForm[i].SelIdx = 0
+			ce.epForm[i].Value = protos[0]
+		}
+		break
+	}
+	// Clamp cursor to visible range
+	visible := ce.visibleEPFields()
+	if len(visible) > 0 && ce.epFormIdx >= len(visible) {
+		ce.epFormIdx = len(visible) - 1
+	}
+}
+
+// visibleEPFields returns only the endpoint form fields relevant to the
+// currently selected protocol, hiding the other protocol-specific fields.
+func (ce ContractsEditor) visibleEPFields() []Field {
+	if len(ce.epForm) == 0 {
+		return nil
+	}
+	proto := fieldGet(ce.epForm, "protocol")
+	var visible []Field
+	for _, f := range ce.epForm {
+		switch f.Key {
+		case "http_method":
+			if proto != "REST" {
+				continue
+			}
+		case "graphql_op_type":
+			if proto != "GraphQL" {
+				continue
+			}
+		case "grpc_stream_type":
+			if proto != "gRPC" {
+				continue
+			}
+		case "ws_direction":
+			if proto != "WebSocket message" {
+				continue
+			}
+		}
+		visible = append(visible, f)
+	}
+	return visible
+}
+
+// epFieldByKey returns a pointer to the endpoint form field with the given key.
+func (ce *ContractsEditor) epFieldByKey(key string) *Field {
+	for i := range ce.epForm {
+		if ce.epForm[i].Key == key {
+			return &ce.epForm[i]
+		}
+	}
+	return nil
 }
 
 // SetDomainDefs updates the full domain definitions for attribute injection.
@@ -323,8 +470,11 @@ func (ce *ContractsEditor) activeCEFieldPtr() *Field {
 			}
 		}
 	case contractsTabEndpoints:
-		if ce.epSubView == ceViewForm && ce.epFormIdx < len(ce.epForm) {
-			return &ce.epForm[ce.epFormIdx]
+		if ce.epSubView == ceViewForm {
+			visible := ce.visibleEPFields()
+			if ce.epFormIdx < len(visible) {
+				return ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			}
 		}
 	case contractsTabVersioning:
 		if ce.verFormIdx < len(ce.versioningFields) {
@@ -386,6 +536,8 @@ func (ce ContractsEditor) updateDropdown(key tea.KeyMsg) (ContractsEditor, tea.C
 		}
 		ce.ddOpen = false
 	}
+	// After any dropdown interaction, refresh EP dependent fields (protocol options, visibility)
+	ce.updateEPDependentFields()
 	return ce, nil
 }
 
@@ -481,7 +633,7 @@ func (ce *ContractsEditor) advanceField(delta int) {
 		}
 	case contractsTabEndpoints:
 		if ce.epSubView == ceViewForm {
-			n := len(ce.epForm)
+			n := len(ce.visibleEPFields())
 			if n > 0 {
 				ce.epFormIdx = (ce.epFormIdx + delta + n) % n
 			}
@@ -516,8 +668,12 @@ func (ce *ContractsEditor) saveInput() {
 			}
 		}
 	case contractsTabEndpoints:
-		if ce.epSubView == ceViewForm && ce.epFormIdx < len(ce.epForm) && ce.epForm[ce.epFormIdx].Kind == KindText {
-			ce.epForm[ce.epFormIdx].Value = val
+		visible := ce.visibleEPFields()
+		if ce.epSubView == ceViewForm && ce.epFormIdx < len(visible) {
+			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			if f != nil && f.Kind == KindText {
+				f.Value = val
+			}
 		}
 	case contractsTabVersioning:
 		if ce.verFormIdx < len(ce.versioningFields) && ce.versioningFields[ce.verFormIdx].Kind == KindText {
@@ -545,8 +701,9 @@ func (ce ContractsEditor) tryEnterInsert() (ContractsEditor, tea.Cmd) {
 			}
 		}
 	case contractsTabEndpoints:
-		if ce.epSubView == ceViewForm && ce.epFormIdx < len(ce.epForm) {
-			f = &ce.epForm[ce.epFormIdx]
+		visible := ce.visibleEPFields()
+		if ce.epSubView == ceViewForm && ce.epFormIdx < len(visible) {
+			f = ce.epFieldByKey(visible[ce.epFormIdx].Key)
 		}
 	case contractsTabVersioning:
 		if ce.verFormIdx < len(ce.versioningFields) {
@@ -932,6 +1089,21 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 			if ep.HTTPMethod != "" {
 				ce.epForm = setFieldValue(ce.epForm, "http_method", ep.HTTPMethod)
 			}
+			if ep.GraphQLOpType != "" {
+				ce.epForm = setFieldValue(ce.epForm, "graphql_op_type", ep.GraphQLOpType)
+			}
+			if ep.GRPCStreamType != "" {
+				ce.epForm = setFieldValue(ce.epForm, "grpc_stream_type", ep.GRPCStreamType)
+			}
+			if ep.WSDirection != "" {
+				ce.epForm = setFieldValue(ce.epForm, "ws_direction", ep.WSDirection)
+			}
+			if ep.PaginationStrategy != "" {
+				ce.epForm = setFieldValue(ce.epForm, "pagination", ep.PaginationStrategy)
+			}
+			if ep.RateLimit != "" {
+				ce.epForm = setFieldValue(ce.epForm, "rate_limit", ep.RateLimit)
+			}
 			ce.epForm = setFieldValue(ce.epForm, "description", ep.Description)
 			ce.epFormIdx = 0
 			ce.epSubView = ceViewForm
@@ -941,9 +1113,11 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 }
 
 func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd) {
+	visible := ce.visibleEPFields()
+	n := len(visible)
 	switch key.String() {
 	case "j", "down":
-		if ce.epFormIdx < len(ce.epForm)-1 {
+		if ce.epFormIdx < n-1 {
 			ce.epFormIdx++
 		}
 	case "k", "up":
@@ -951,21 +1125,29 @@ func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 			ce.epFormIdx--
 		}
 	case "enter", " ":
-		f := &ce.epForm[ce.epFormIdx]
-		if f.Kind == KindSelect {
-			ce.ddOpen = true
-			ce.ddOptIdx = f.SelIdx
-		} else {
-			return ce.tryEnterInsert()
+		if ce.epFormIdx < n {
+			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			if f != nil && f.Kind == KindSelect {
+				ce.ddOpen = true
+				ce.ddOptIdx = f.SelIdx
+			} else {
+				return ce.tryEnterInsert()
+			}
 		}
 	case "H", "shift+left":
-		f := &ce.epForm[ce.epFormIdx]
-		if f.Kind == KindSelect {
-			f.CyclePrev()
+		if ce.epFormIdx < n {
+			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			if f != nil && f.Kind == KindSelect {
+				f.CyclePrev()
+				ce.updateEPDependentFields()
+			}
 		}
 	case "i", "a":
-		if ce.epForm[ce.epFormIdx].Kind == KindText {
-			return ce.tryEnterInsert()
+		if ce.epFormIdx < n {
+			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			if f != nil && f.Kind == KindText {
+				return ce.tryEnterInsert()
+			}
 		}
 	case "b", "esc":
 		ce.saveEPForm()
@@ -986,6 +1168,11 @@ func (ce *ContractsEditor) saveEPForm() {
 	ep.RequestDTO = fieldGet(ce.epForm, "request_dto")
 	ep.ResponseDTO = fieldGet(ce.epForm, "response_dto")
 	ep.HTTPMethod = fieldGet(ce.epForm, "http_method")
+	ep.GraphQLOpType = fieldGet(ce.epForm, "graphql_op_type")
+	ep.GRPCStreamType = fieldGet(ce.epForm, "grpc_stream_type")
+	ep.WSDirection = fieldGet(ce.epForm, "ws_direction")
+	ep.PaginationStrategy = fieldGet(ce.epForm, "pagination")
+	ep.RateLimit = fieldGet(ce.epForm, "rate_limit")
 	ep.Description = fieldGet(ce.epForm, "description")
 }
 
@@ -1265,38 +1452,14 @@ func (ce ContractsEditor) viewEndpoints(w int) []string {
 		return lines
 
 	case ceViewForm:
-		// Show http_method only when protocol is REST
-		proto := fieldGet(ce.epForm, "protocol")
-		showHTTP := proto == "REST"
-
-		var filteredForm []Field
-		for _, f := range ce.epForm {
-			if f.Key == "http_method" && !showHTTP {
-				continue
-			}
-			filteredForm = append(filteredForm, f)
-		}
-
-		// Remap formIdx if http_method was skipped
-		formIdx := ce.epFormIdx
-		if !showHTTP {
-			// count how many fields before epFormIdx are http_method
-			skipped := 0
-			for i := 0; i < ce.epFormIdx && i < len(ce.epForm); i++ {
-				if ce.epForm[i].Key == "http_method" {
-					skipped++
-				}
-			}
-			formIdx -= skipped
-		}
-
+		visible := ce.visibleEPFields()
 		title := fieldGet(ce.epForm, "name_path")
 		if title == "" {
 			title = "(new endpoint)"
 		}
 		var lines []string
 		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(title), "")
-		lines = append(lines, renderFormFieldsWithDropdown(w, filteredForm, formIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
+		lines = append(lines, renderFormFieldsWithDropdown(w, visible, ce.epFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
 		return lines
 	}
 	return nil

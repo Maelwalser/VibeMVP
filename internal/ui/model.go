@@ -214,6 +214,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.contractsEditor.SetDomains(m.dataTabEditor.domainNames())
 		m.contractsEditor.SetDomainDefs(m.dataTabEditor.domains)
 		m.contractsEditor.SetServices(m.backendEditor.ServiceNames())
+		m.contractsEditor.SetServiceDefs(m.backendEditor.ServiceDefs())
 		m.contractsEditor, cmd = m.contractsEditor.Update(msg)
 		m.modified = true
 	case m.isFrontendSection():
