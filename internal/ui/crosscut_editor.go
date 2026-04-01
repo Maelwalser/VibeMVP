@@ -132,14 +132,17 @@ func defaultDocsFields() []Field {
 type CrossCutEditor struct {
 	activeTab ccTabIdx
 
-	testingFields []Field
-	testFormIdx   int
+	testingFields  []Field
+	testFormIdx    int
+	testingEnabled bool
 
 	docsFields  []Field
 	docsFormIdx int
+	docsEnabled bool
 
 	standardsFields  []Field
 	standardsFormIdx int
+	standardsEnabled bool
 
 	internalMode ccMode
 	formInput    textinput.Model
@@ -154,6 +157,32 @@ type CrossCutEditor struct {
 	gBuf     bool
 }
 
+func (cc CrossCutEditor) activeTabEnabled() bool {
+	switch cc.activeTab {
+	case ccTabTesting:
+		return cc.testingEnabled
+	case ccTabDocs:
+		return cc.docsEnabled
+	case ccTabStandards:
+		return cc.standardsEnabled
+	}
+	return false
+}
+
+func (cc *CrossCutEditor) enableActiveTab() {
+	switch cc.activeTab {
+	case ccTabTesting:
+		cc.testingEnabled = true
+		cc.testFormIdx = 0
+	case ccTabDocs:
+		cc.docsEnabled = true
+		cc.docsFormIdx = 0
+	case ccTabStandards:
+		cc.standardsEnabled = true
+		cc.standardsFormIdx = 0
+	}
+}
+
 func newCrossCutEditor() CrossCutEditor {
 	return CrossCutEditor{
 		testingFields:   defaultTestingFields(),
@@ -166,27 +195,33 @@ func newCrossCutEditor() CrossCutEditor {
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
-	return manifest.CrossCutPillar{
-		Testing: manifest.TestingConfig{
+	var p manifest.CrossCutPillar
+	if cc.testingEnabled {
+		p.Testing = manifest.TestingConfig{
 			Unit:        fieldGet(cc.testingFields, "unit"),
 			Integration: fieldGet(cc.testingFields, "integration"),
 			E2E:         fieldGet(cc.testingFields, "e2e"),
 			API:         fieldGet(cc.testingFields, "api"),
 			Load:        fieldGet(cc.testingFields, "load"),
 			Contract:    fieldGet(cc.testingFields, "contract"),
-		},
-		Docs: manifest.DocsConfig{
+		}
+	}
+	if cc.docsEnabled {
+		p.Docs = manifest.DocsConfig{
 			APIDocs:      fieldGet(cc.docsFields, "api_docs"),
 			AutoGenerate: fieldGet(cc.docsFields, "auto_generate") == "true",
 			Changelog:    fieldGet(cc.docsFields, "changelog"),
-		},
-		BranchStrategy:    fieldGet(cc.standardsFields, "branch_strategy"),
-		DependencyUpdates: fieldGet(cc.standardsFields, "dep_updates"),
-		CodeReview:        fieldGet(cc.standardsFields, "code_review"),
-		FeatureFlags:      fieldGet(cc.standardsFields, "feature_flags"),
-		UptimeSLO:         fieldGet(cc.standardsFields, "uptime_slo"),
-		LatencyP99:        fieldGet(cc.standardsFields, "latency_p99"),
+		}
 	}
+	if cc.standardsEnabled {
+		p.BranchStrategy = fieldGet(cc.standardsFields, "branch_strategy")
+		p.DependencyUpdates = fieldGet(cc.standardsFields, "dep_updates")
+		p.CodeReview = fieldGet(cc.standardsFields, "code_review")
+		p.FeatureFlags = fieldGet(cc.standardsFields, "feature_flags")
+		p.UptimeSLO = fieldGet(cc.standardsFields, "uptime_slo")
+		p.LatencyP99 = fieldGet(cc.standardsFields, "latency_p99")
+	}
+	return p
 }
 
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
@@ -203,7 +238,10 @@ func (cc CrossCutEditor) HintLine() string {
 		return StyleInsertMode.Render(" -- INSERT -- ") +
 			StyleHelpDesc.Render("  Esc: normal  Tab: next field")
 	}
-	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Space/Enter", "cycle", "H", "cycle back", "i", "edit text", "h/l", "sub-tab")
+	if !cc.activeTabEnabled() {
+		return hintBar("a", "configure", "h/l", "sub-tab")
+	}
+	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit text", "h/l", "sub-tab")
 }
 
 // activeCCFieldPtr returns a pointer to the currently focused field.
@@ -299,6 +337,12 @@ func (cc CrossCutEditor) Update(msg tea.Msg) (CrossCutEditor, tea.Cmd) {
 }
 
 func (cc CrossCutEditor) updateFields(key tea.KeyMsg) (CrossCutEditor, tea.Cmd) {
+	if !cc.activeTabEnabled() {
+		if key.String() == "a" {
+			cc.enableActiveTab()
+		}
+		return cc, nil
+	}
 	var fields []Field
 	var idx int
 	switch cc.activeTab {
@@ -381,7 +425,7 @@ func (cc CrossCutEditor) updateFields(key tea.KeyMsg) (CrossCutEditor, tea.Cmd) 
 				f.CyclePrev()
 			}
 		}
-	case "i":
+	case "i", "a":
 		cc.countBuf = ""
 		cc.gBuf = false
 		wantsInsert = true
@@ -509,11 +553,23 @@ func (cc CrossCutEditor) View(w, h int) string {
 
 	switch cc.activeTab {
 	case ccTabTesting:
-		lines = append(lines, renderFormFieldsWithDropdown(w, cc.testingFields, cc.testFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		if cc.testingEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, cc.testingFields, cc.testFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	case ccTabDocs:
-		lines = append(lines, renderFormFieldsWithDropdown(w, cc.docsFields, cc.docsFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		if cc.docsEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, cc.docsFields, cc.docsFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	case ccTabStandards:
-		lines = append(lines, renderFormFieldsWithDropdown(w, cc.standardsFields, cc.standardsFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		if cc.standardsEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, cc.standardsFields, cc.standardsFormIdx, cc.internalMode == ccInsert, cc.formInput, cc.ddOpen, cc.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	}
 
 	return fillTildes(lines, h)

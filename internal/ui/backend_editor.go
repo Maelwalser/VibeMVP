@@ -564,14 +564,18 @@ type BackendEditor struct {
 	activeField  int
 
 	// Field stores
-	EnvFields      []Field
+	EnvFields       []Field
+	envEnabled      bool
 	MessagingFields []Field
-	APIGWFields    []Field
-	AuthFields     []Field
+	APIGWFields     []Field
+	apiGWEnabled    bool
+	AuthFields      []Field
+	authEnabled     bool
 
 	// Security/WAF tab
 	securityFields []Field
 	secFormIdx     int
+	secEnabled     bool
 
 	// Jobs tab
 	jobQueues   []manifest.JobQueueDef
@@ -730,36 +734,40 @@ func (be BackendEditor) tabLabels() []string {
 func (be BackendEditor) ToManifest() manifest.BackendPillar {
 	arch := be.currentArch()
 
-	env := manifest.EnvConfig{
-		ComputeEnv:    fieldGet(be.EnvFields, "compute_env"),
-		CloudProvider: fieldGet(be.EnvFields, "cloud_provider"),
-		Orchestrator:  fieldGet(be.EnvFields, "orchestrator"),
-		Regions:       fieldGetMulti(be.EnvFields, "regions"),
-		Stages:        fieldGet(be.EnvFields, "stages"),
+	var env manifest.EnvConfig
+	if be.envEnabled {
+		env = manifest.EnvConfig{
+			ComputeEnv:    fieldGet(be.EnvFields, "compute_env"),
+			CloudProvider: fieldGet(be.EnvFields, "cloud_provider"),
+			Orchestrator:  fieldGet(be.EnvFields, "orchestrator"),
+			Regions:       fieldGetMulti(be.EnvFields, "regions"),
+			Stages:        fieldGet(be.EnvFields, "stages"),
+		}
 	}
 
-	auth := manifest.AuthConfig{
-		Strategy:     fieldGetMulti(be.AuthFields, "strategy"),
-		Provider:     fieldGet(be.AuthFields, "provider"),
-		AuthzModel:   fieldGet(be.AuthFields, "authz_model"),
-		Roles:        fieldGetMulti(be.AuthFields, "roles"),
-		TokenStorage: fieldGetMulti(be.AuthFields, "token_storage"),
-		RefreshToken: fieldGet(be.AuthFields, "refresh_token"),
-		MFA:          fieldGet(be.AuthFields, "mfa"),
+	var auth manifest.AuthConfig
+	if be.authEnabled {
+		auth = manifest.AuthConfig{
+			Strategy:     fieldGetMulti(be.AuthFields, "strategy"),
+			Provider:     fieldGet(be.AuthFields, "provider"),
+			AuthzModel:   fieldGet(be.AuthFields, "authz_model"),
+			Roles:        fieldGetMulti(be.AuthFields, "roles"),
+			TokenStorage: fieldGetMulti(be.AuthFields, "token_storage"),
+			RefreshToken: fieldGet(be.AuthFields, "refresh_token"),
+			MFA:          fieldGet(be.AuthFields, "mfa"),
+		}
 	}
 
 	bp := manifest.BackendPillar{
-		ArchPattern:  manifest.ArchPattern(arch),
-		Env:          env,
-		Services:     be.Services,
-		CommLinks:    be.CommLinks,
-		Auth:         auth,
-		JobQueues:    be.jobQueues,
-		CORSStrategy:  fieldGet(be.EnvFields, "cors_strategy"),
-		CORSOrigins:   fieldGet(be.EnvFields, "cors_origins"),
-		SessionMgmt:   fieldGet(be.EnvFields, "session_mgmt"),
-		BackendLinter: fieldGet(be.EnvFields, "be_linter"),
-		WAF: manifest.WAFConfig{
+		ArchPattern: manifest.ArchPattern(arch),
+		Env:         env,
+		Services:    be.Services,
+		CommLinks:   be.CommLinks,
+		Auth:        auth,
+		JobQueues:   be.jobQueues,
+	}
+	if be.secEnabled {
+		bp.WAF = manifest.WAFConfig{
 			Provider:          fieldGet(be.securityFields, "waf_provider"),
 			Ruleset:           fieldGet(be.securityFields, "waf_ruleset"),
 			CAPTCHA:           fieldGet(be.securityFields, "captcha"),
@@ -767,7 +775,13 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 			RateLimitStrategy: fieldGet(be.securityFields, "rate_limit_strategy"),
 			RateLimitBackend:  fieldGet(be.securityFields, "rate_limit_backend"),
 			DDoSProtection:    fieldGet(be.securityFields, "ddos_protection"),
-		},
+		}
+	}
+	if be.envEnabled {
+		bp.CORSStrategy = fieldGet(be.EnvFields, "cors_strategy")
+		bp.CORSOrigins = fieldGet(be.EnvFields, "cors_origins")
+		bp.SessionMgmt = fieldGet(be.EnvFields, "session_mgmt")
+		bp.BackendLinter = fieldGet(be.EnvFields, "be_linter")
 	}
 
 	tabs := subTabsForArch(arch)
@@ -781,7 +795,7 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 			}
 			bp.Messaging = &mc
 		}
-		if t == beTabAPIGW {
+		if t == beTabAPIGW && be.apiGWEnabled {
 			gw := manifest.APIGatewayConfig{
 				Technology: fieldGet(be.APIGWFields, "technology"),
 				Routing:    fieldGet(be.APIGWFields, "routing"),
@@ -853,9 +867,25 @@ func (be BackendEditor) HintLine() string {
 		}
 		return hintBar("j/k", "navigate", "a", "add job queue", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
 	case beTabSecurity:
-		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		if !be.secEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
+		}
+		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "a/Space/Enter", "cycle", "H", "cycle back", "h/l", "sub-tab")
 	default:
-		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump", "i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab", "b", "change arch")
+		t := be.activeTab()
+		configEnabled := true
+		switch t {
+		case beTabEnv:
+			configEnabled = be.envEnabled
+		case beTabAPIGW:
+			configEnabled = be.apiGWEnabled
+		case beTabAuth:
+			configEnabled = be.authEnabled
+		}
+		if !configEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
+		}
+		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab", "b", "change arch")
 	}
 }
 
@@ -1170,8 +1200,53 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 		return be.updateSecurity(key)
 	}
 
-	// Vim count prefix (digits 1-9, or 0 when count already started)
+	// Enabled guard for config-only tabs (ENV, API GW, AUTH)
 	k := key.String()
+	activeConfigEnabled := true
+	switch tab {
+	case beTabEnv:
+		activeConfigEnabled = be.envEnabled
+	case beTabAPIGW:
+		activeConfigEnabled = be.apiGWEnabled
+	case beTabAuth:
+		activeConfigEnabled = be.authEnabled
+	}
+	if !activeConfigEnabled {
+		if k == "a" {
+			switch tab {
+			case beTabEnv:
+				be.envEnabled = true
+			case beTabAPIGW:
+				be.apiGWEnabled = true
+			case beTabAuth:
+				be.authEnabled = true
+			}
+			be.activeField = 0
+		} else if k == "h" || k == "left" {
+			be.countBuf = ""
+			be.gBuf = false
+			if be.activeTabIdx > 0 {
+				be.activeTabIdx--
+			}
+		} else if k == "l" || k == "right" {
+			be.countBuf = ""
+			be.gBuf = false
+			if be.activeTabIdx < len(be.activeTabs())-1 {
+				be.activeTabIdx++
+			}
+		} else if k == "b" {
+			be.countBuf = ""
+			be.gBuf = false
+			be.ArchConfirmed = false
+			be.dropdownOpen = false
+			be.dropdownIdx = be.ArchIdx
+			be.activeTabIdx = 0
+			be.activeField = 0
+		}
+		return be, nil
+	}
+
+	// Vim count prefix (digits 1-9, or 0 when count already started)
 	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' {
 		be.countBuf += k
 		be.gBuf = false
@@ -1271,7 +1346,7 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 		if f := be.mutableFieldPtr(); f != nil && f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "i":
+	case "i", "a":
 		be.countBuf = ""
 		be.gBuf = false
 		return be.tryEnterInsert()
@@ -1891,8 +1966,12 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 	tab := be.activeTab()
 	switch tab {
 	case beTabEnv:
-		envFields := be.visibleEnvFields()
-		lines = append(lines, renderFormFieldsWithDropdown(w, envFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		if be.envEnabled {
+			envFields := be.visibleEnvFields()
+			lines = append(lines, renderFormFieldsWithDropdown(w, envFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	case beTabServices:
 		lines = append(lines, be.viewServiceEditor(w)...)
 	case beTabComm:
@@ -1900,13 +1979,25 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 	case beTabMessaging:
 		lines = append(lines, be.viewMessaging(w)...)
 	case beTabAPIGW:
-		lines = append(lines, renderFormFieldsWithDropdown(w, be.APIGWFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		if be.apiGWEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, be.APIGWFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	case beTabJobs:
 		lines = append(lines, be.viewJobs(w)...)
 	case beTabSecurity:
-		lines = append(lines, renderFormFieldsWithDropdown(w, be.securityFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		if be.secEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, be.securityFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	case beTabAuth:
-		lines = append(lines, renderFormFieldsWithDropdown(w, be.AuthFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		if be.authEnabled {
+			lines = append(lines, renderFormFieldsWithDropdown(w, be.AuthFields, be.activeField, be.internalMode == beInsert, be.formInput, be.ddOpen, be.ddOptIdx)...)
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
+		}
 	}
 
 	return fillTildes(lines, h)
@@ -2234,10 +2325,32 @@ func (be *BackendEditor) saveJobsForm() {
 // ── Security updates ──────────────────────────────────────────────────────────
 
 func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) {
+	k := key.String()
+	if !be.secEnabled {
+		switch k {
+		case "a":
+			be.secEnabled = true
+			be.activeField = 0
+		case "h", "left":
+			if be.activeTabIdx > 0 {
+				be.activeTabIdx--
+			}
+		case "l", "right":
+			if be.activeTabIdx < len(be.activeTabs())-1 {
+				be.activeTabIdx++
+			}
+		case "b":
+			be.ArchConfirmed = false
+			be.dropdownOpen = false
+			be.dropdownIdx = be.ArchIdx
+			be.activeTabIdx = 0
+			be.activeField = 0
+		}
+		return be, nil
+	}
 	// Security uses generic field navigation via currentEditableFields / mutableFieldPtr
 	// which already handles beTabSecurity. Just fall through to normal key handling.
 	n := len(be.securityFields)
-	k := key.String()
 
 	// Vim count prefix
 	if len(k) == 1 && k[0] >= '1' && k[0] <= '9' {
