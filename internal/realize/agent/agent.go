@@ -32,9 +32,14 @@ type ClaudeAgent struct {
 	verbose   bool
 }
 
-// NewClaudeAgent returns a ClaudeAgent. ANTHROPIC_API_KEY must be set in the environment.
-func NewClaudeAgent(model string, maxTokens int64, verbose bool) *ClaudeAgent {
-	c := anthropic.NewClient(option.WithMaxRetries(0))
+// NewClaudeAgent returns a ClaudeAgent. If authToken is non-empty it is used as a
+// Bearer token (Claude Pro/Max session key); otherwise ANTHROPIC_API_KEY is used.
+func NewClaudeAgent(model string, maxTokens int64, verbose bool, authToken string) *ClaudeAgent {
+	opts := []option.RequestOption{option.WithMaxRetries(0)}
+	if authToken != "" {
+		opts = append(opts, option.WithAuthToken(authToken))
+	}
+	c := anthropic.NewClient(opts...)
 	return &ClaudeAgent{
 		client:    &c,
 		model:     model,

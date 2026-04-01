@@ -18,11 +18,23 @@ func main() {
 	parallelism  := flag.Int("parallel", 0, "max concurrent tasks (0 = num CPUs)")
 	dryRun       := flag.Bool("dry-run", false, "print task plan without running agents")
 	verbose      := flag.Bool("verbose", false, "print token usage and thinking logs")
+	sessionToken := flag.String("session-token", "", "Claude Pro/Max session token (overrides ANTHROPIC_API_KEY; env: CLAUDE_SESSION_KEY)")
 	flag.Parse()
 
 	p := *parallelism
 	if p <= 0 {
 		p = runtime.NumCPU()
+	}
+
+	// Resolve auth: -session-token flag > CLAUDE_SESSION_KEY env var > ANTHROPIC_API_KEY (implicit)
+	resolvedToken := *sessionToken
+	if resolvedToken == "" {
+		resolvedToken = os.Getenv("CLAUDE_SESSION_KEY")
+	}
+	if resolvedToken != "" {
+		fmt.Fprintln(os.Stderr, "realize: using Claude Pro/Max session token")
+	} else {
+		fmt.Fprintln(os.Stderr, "realize: using ANTHROPIC_API_KEY")
 	}
 
 	cfg := orchestrator.Config{
@@ -33,6 +45,7 @@ func main() {
 		Parallelism:  p,
 		DryRun:       *dryRun,
 		Verbose:      *verbose,
+		AuthToken:    resolvedToken,
 	}
 
 	if err := orchestrator.New(cfg).Run(context.Background()); err != nil {

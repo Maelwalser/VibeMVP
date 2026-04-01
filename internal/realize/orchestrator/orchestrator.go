@@ -30,6 +30,7 @@ type Config struct {
 	Parallelism  int
 	DryRun       bool
 	Verbose      bool
+	AuthToken    string // Claude Pro/Max session token; empty = use ANTHROPIC_API_KEY
 }
 
 // Orchestrator drives the full DAG-based code generation pipeline.
@@ -74,7 +75,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	}
 
 	// Set up agent and verifier registry.
-	a := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose)
+	a := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose, o.cfg.AuthToken)
 	verifiers := verify.NewRegistry()
 
 	fmt.Fprintf(os.Stderr, "realize: starting %d tasks across %d wave(s)\n",
