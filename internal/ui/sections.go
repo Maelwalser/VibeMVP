@@ -116,7 +116,7 @@ func initSections() []Section {
 	return []Section{
 		{
 			ID:    "backend",
-			Abbr:  "BACKEND",
+			Abbr:  "⚡ BACKEND",
 			Title: "Backend",
 			Desc:  "Architecture pattern, environment, service units, communication, and auth.",
 			Fields: []Field{
@@ -125,7 +125,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "data",
-			Abbr:  "DATA",
+			Abbr:  "◈ DATA",
 			Title: "Data",
 			Desc:  "Databases, domains, caching, and file storage.",
 			Fields: []Field{
@@ -134,7 +134,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "contracts",
-			Abbr:  "CONTRACTS",
+			Abbr:  "≋ CONTRACTS",
 			Title: "Contracts",
 			Desc:  "DTOs, API endpoints, and versioning strategy.",
 			Fields: []Field{
@@ -143,7 +143,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "frontend",
-			Abbr:  "FRONTEND",
+			Abbr:  "◉ FRONTEND",
 			Title: "Frontend",
 			Desc:  "Technologies, theming, pages, and navigation.",
 			Fields: []Field{
@@ -152,7 +152,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "infrastructure",
-			Abbr:  "INFRA",
+			Abbr:  "⊞ INFRA",
 			Title: "Infrastructure",
 			Desc:  "Networking, CI/CD, and observability.",
 			Fields: []Field{
@@ -161,7 +161,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "crosscut",
-			Abbr:  "CROSSCUT",
+			Abbr:  "⊕ CROSSCUT",
 			Title: "Cross-Cutting",
 			Desc:  "Testing strategy and documentation tooling.",
 			Fields: []Field{
@@ -170,7 +170,7 @@ func initSections() []Section {
 		},
 		{
 			ID:    "realize",
-			Abbr:  "REALIZE",
+			Abbr:  "▶ REALIZE",
 			Title: "Realize",
 			Desc:  "Output directory, app name, model, and realization options.",
 			Fields: []Field{

@@ -1915,7 +1915,7 @@ func (be BackendEditor) viewArchSelect(w, h int) string {
 	if raw < w {
 		row += strings.Repeat(" ", w-raw)
 	}
-	lines = append(lines, StyleCurLine.Render(row))
+	lines = append(lines, activeCurLineStyle().Render(row))
 
 	if be.dropdownOpen {
 		lines = append(lines, "")
@@ -1937,7 +1937,7 @@ func (be BackendEditor) viewArchSelect(w, h int) string {
 				if rw < w {
 					optRow += strings.Repeat(" ", w-rw)
 				}
-				optRow = StyleCurLine.Render(optRow)
+				optRow = activeCurLineStyle().Render(optRow)
 			} else {
 				optRow = cursor +
 					StyleFieldKey.Render(labelPart) +
@@ -2153,7 +2153,7 @@ func (be BackendEditor) viewMessaging(w int) []string {
 			if rw < w {
 				row += strings.Repeat(" ", w-rw)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 		// Inline dropdown for active broker field
@@ -2168,7 +2168,7 @@ func (be BackendEditor) viewMessaging(w int) []string {
 					if rw < w {
 						optRow += strings.Repeat(" ", w-rw)
 					}
-					optRow = StyleCurLine.Render(optRow)
+					optRow = activeCurLineStyle().Render(optRow)
 				} else {
 					optRow = indent + StyleFieldVal.Render("  "+opt)
 				}

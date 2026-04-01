@@ -443,7 +443,7 @@ func (db DBEditor) viewList(w, h int) string {
 				if raw < w {
 					row += strings.Repeat(" ", w-raw)
 				}
-				row = StyleCurLine.Render(row)
+				row = activeCurLineStyle().Render(row)
 			}
 			lines = append(lines, row)
 		}
@@ -524,7 +524,7 @@ func (db DBEditor) viewForm(w, h int) string {
 			if raw < w {
 				row += strings.Repeat(" ", w-raw)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 	}

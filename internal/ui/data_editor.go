@@ -891,7 +891,7 @@ func (de DataEditor) viewEntities(w, h int) string {
 				if raw < w {
 					row += strings.Repeat(" ", w-raw)
 				}
-				row = StyleCurLine.Render(row)
+				row = activeCurLineStyle().Render(row)
 			}
 			lines = append(lines, row)
 		}
@@ -978,7 +978,7 @@ func (de DataEditor) viewEntitySettings(w, h int) string {
 			if raw < w {
 				row += strings.Repeat(" ", w-raw)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 	}
@@ -1065,7 +1065,7 @@ func (de DataEditor) viewColumns(w, h int) string {
 				if raw < w {
 					row += strings.Repeat(" ", w-raw)
 				}
-				row = StyleCurLine.Render(row)
+				row = activeCurLineStyle().Render(row)
 			}
 			lines = append(lines, row)
 		}
@@ -1159,7 +1159,7 @@ func (de DataEditor) viewColForm(w, h int) string {
 			if raw < w {
 				row += strings.Repeat(" ", w-raw)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 	}
@@ -1170,7 +1170,7 @@ func (de DataEditor) viewColForm(w, h int) string {
 // fillTildes pads lines with vim-style tilde lines to height h.
 func fillTildes(lines []string, h int) string {
 	for len(lines) < h {
-		lines = append(lines, StyleTilde.Render("~"))
+		lines = append(lines, StyleTilde.Render("·"))
 	}
 	if len(lines) > h {
 		lines = lines[:h]

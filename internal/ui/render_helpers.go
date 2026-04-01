@@ -99,7 +99,7 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 			if raw < w {
 				row += strings.Repeat(" ", w-raw)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 
@@ -112,26 +112,26 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 				if f.Kind == KindMultiSelect {
 					check := "  "
 					if f.IsMultiSelected(j) {
-						check = "✓ "
+						check = StyleNeonGreen.Render("✓") + " "
 					}
 					if isHL {
-						optRow = indent + StyleFieldValActive.Render("▶ "+check+opt)
+						optRow = indent + StyleFieldValActive.Render("► "+check+opt)
 						rw := lipgloss.Width(optRow)
 						if rw < w {
 							optRow += strings.Repeat(" ", w-rw)
 						}
-						optRow = StyleCurLine.Render(optRow)
+						optRow = activeCurLineStyle().Render(optRow)
 					} else {
 						optRow = indent + StyleFieldVal.Render("  "+check+opt)
 					}
 				} else {
 					if isHL {
-						optRow = indent + StyleFieldValActive.Render("▶ "+opt)
+						optRow = indent + StyleFieldValActive.Render("► "+opt)
 						rw := lipgloss.Width(optRow)
 						if rw < w {
 							optRow += strings.Repeat(" ", w-rw)
 						}
-						optRow = StyleCurLine.Render(optRow)
+						optRow = activeCurLineStyle().Render(optRow)
 					} else {
 						optRow = indent + StyleFieldVal.Render("  "+opt)
 					}
@@ -145,6 +145,7 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 
 // renderSubTabBar renders a horizontal sub-tab bar and returns the string.
 func renderSubTabBar(labels []string, active int) string {
+	sep := StyleTabSep.Render("│")
 	var parts []string
 	for i, lbl := range labels {
 		if i == active {
@@ -153,7 +154,7 @@ func renderSubTabBar(labels []string, active int) string {
 			parts = append(parts, StyleTabInactive.Render(" "+lbl+" "))
 		}
 	}
-	return "  " + strings.Join(parts, "")
+	return "  " + strings.Join(parts, sep)
 }
 
 // renderListItem renders one row in a list view.
@@ -163,7 +164,7 @@ func renderListItem(w int, isCur bool, arrow, name, extra string) string {
 		arrowStr = StyleCurLineNum.Render(arrow)
 		nameStr = StyleFieldKeyActive.Render(name)
 	} else {
-		arrowStr = "  ▸ "
+		arrowStr = StyleFgDimStyle.Render("  ► ")
 		nameStr = StyleFieldKey.Render(name)
 	}
 	row := arrowStr + nameStr
@@ -175,10 +176,13 @@ func renderListItem(w int, isCur bool, arrow, name, extra string) string {
 		if raw < w {
 			row += strings.Repeat(" ", w-raw)
 		}
-		row = StyleCurLine.Render(row)
+		row = activeCurLineStyle().Render(row)
 	}
 	return row
 }
+
+// StyleFgDimStyle is an inline style for dim inactive list arrows.
+var StyleFgDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim))
 
 // hintBar builds a hint line from key-description pairs.
 func hintBar(pairs ...string) string {
@@ -189,7 +193,8 @@ func hintBar(pairs ...string) string {
 	for i := 0; i < len(pairs); i += 2 {
 		hints = append(hints, StyleHelpKey.Render(pairs[i])+StyleHelpDesc.Render(" "+pairs[i+1]))
 	}
-	return "  " + strings.Join(hints, StyleHelpDesc.Render("  ·  "))
+	sep := StyleHelpDesc.Render("  │  ")
+	return "  " + strings.Join(hints, sep)
 }
 
 // fieldGet returns the DisplayValue for the field with the given key in a slice.

@@ -121,9 +121,9 @@ func NewModel(onSave SaveFunc) Model {
 	}
 }
 
-// Init satisfies tea.Model.
+// Init satisfies tea.Model — starts the animation ticker.
 func (m Model) Init() tea.Cmd {
-	return nil
+	return uiTick()
 }
 
 // ── Section routing helpers ───────────────────────────────────────────────────
@@ -176,6 +176,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textArea.SetHeight(m.contentHeight() - 4)
 		return m, nil
 	}
+	if _, ok := msg.(uiTickMsg); ok {
+		AnimFrame = (AnimFrame + 1) % 2
+		return m, uiTick()
+	}
+
 	if _, ok := msg.(RealizeMsg); ok {
 		m.realize.triggered = true
 		m2, saveCmd := m.execSave()
@@ -544,13 +549,20 @@ func (m Model) renderHeader(w int) string {
 	if m.modified {
 		modMark = StyleHeaderMod.Render(" [+]")
 	}
-	title := StyleSectionTitle.Render(sec.ID+".manifest") + modMark
-	counter := StyleHeaderTitle.Render(fmt.Sprintf("[%d/%d]", m.activeSection+1, len(m.sections)))
-	gap := w - lipgloss.Width(title) - lipgloss.Width(counter) - 2
+
+	deco := StyleHeaderDeco.Render(headerDecoFrames[AnimFrame])
+	title := deco + " " + StyleSectionTitle.Render(sec.ID+".manifest") + modMark
+
+	counter := StyleHeaderDeco.Render(headerDecoFrames[1-AnimFrame]) + " " +
+		StyleHeaderTitle.Render(fmt.Sprintf("[%02d/%02d]", m.activeSection+1, len(m.sections)))
+
+	titleW := lipgloss.Width(title)
+	counterW := lipgloss.Width(counter)
+	gap := w - titleW - counterW - 2
 	if gap < 1 {
 		gap = 1
 	}
-	line := " " + title + strings.Repeat(" ", gap) + counter
+	line := " " + title + strings.Repeat(" ", gap) + counter + " "
 	return StyleHeaderBar.Width(w).Render(line)
 }
 
@@ -632,7 +644,7 @@ func (m Model) renderFieldList(w, h int, sec Section) string {
 			if rawW < w {
 				row += strings.Repeat(" ", w-rawW)
 			}
-			row = StyleCurLine.Render(row)
+			row = activeCurLineStyle().Render(row)
 		}
 		lines = append(lines, row)
 	}
@@ -641,6 +653,7 @@ func (m Model) renderFieldList(w, h int, sec Section) string {
 }
 
 func (m Model) renderTabBar(w int) string {
+	sep := StyleTabSep.Render("│")
 	var parts []string
 	for i, s := range m.sections {
 		badge := m.providerBadge(s.ID)
@@ -649,12 +662,12 @@ func (m Model) renderTabBar(w int) string {
 			label = s.Abbr + " " + badge
 		}
 		if i == m.activeSection {
-			parts = append(parts, StyleTabActive.Render(label))
+			parts = append(parts, StyleTabActive.Render(" "+label+" "))
 		} else {
-			parts = append(parts, StyleTabInactive.Render(label))
+			parts = append(parts, StyleTabInactive.Render(" "+label+" "))
 		}
 	}
-	tabs := strings.Join(parts, "")
+	tabs := strings.Join(parts, sep)
 	rawW := lipgloss.Width(tabs)
 	if rawW < w {
 		tabs += StyleTabBar.Render(strings.Repeat(" ", w-rawW))
@@ -682,32 +695,31 @@ func (m Model) providerBadge(sectionID string) string {
 	if !ok {
 		letter = sel.Provider[:1]
 	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrGreen)).
-		Render("[" + letter + "]")
+	return StyleNeonGreen.Render("◆" + letter + "◆")
 }
 
 func (m Model) renderStatusLine(w int) string {
+	spin := modeSpinFrames[AnimFrame]
 	var modeLabel string
 	switch m.activeMode() {
 	case ModeNormal:
-		modeLabel = StyleNormalMode.Render("NORMAL")
+		modeLabel = StyleNormalMode.Render(spin[0] + " NRM " + spin[1])
 	case ModeInsert:
-		modeLabel = StyleInsertMode.Render("INSERT")
+		modeLabel = StyleInsertMode.Render(spin[0] + " INS " + spin[1])
 	case ModeCommand:
-		modeLabel = StyleCommandMode.Render("COMMAND")
+		modeLabel = StyleCommandMode.Render(spin[0] + " CMD " + spin[1])
 	}
 
 	sec := m.sections[m.activeSection]
-	pos := fmt.Sprintf("%d/%d", m.activeSection+1, len(m.sections))
-	right := StyleStatusRight.Render(fmt.Sprintf(" %s.manifest  %s  All ", sec.ID, pos))
+	pos := fmt.Sprintf("%02d/%02d", m.activeSection+1, len(m.sections))
+	right := StyleStatusRight.Render(fmt.Sprintf("  %s.manifest  %s  ▪ ", sec.ID, pos))
 
 	msg := ""
 	if m.cmd.status != "" {
 		if m.cmd.isErr {
-			msg = StyleMsgErr.Render(m.cmd.status)
+			msg = StyleMsgErr.Render("✗ " + m.cmd.status)
 		} else {
-			msg = StyleMsgOK.Render(m.cmd.status)
+			msg = StyleMsgOK.Render("✓ " + m.cmd.status)
 		}
 	}
 
@@ -745,9 +757,10 @@ func (m Model) renderCmdLine(w int) string {
 				StyleHelpKey.Render(":w") + StyleHelpDesc.Render(" save"),
 				StyleHelpKey.Render(":q") + StyleHelpDesc.Render(" quit"),
 			}
-			line = "  " + strings.Join(hints, StyleHelpDesc.Render("  ·  "))
+			sep := StyleHelpDesc.Render("  │  ")
+			line = "  " + strings.Join(hints, sep)
 		case ModeInsert:
-			line = StyleInsertMode.Render(" -- INSERT -- ") + StyleHelpDesc.Render("  Esc: normal mode  Tab: next field")
+			line = StyleInsertMode.Render(" ▷ INSERT ◁ ") + StyleHelpDesc.Render("  Esc: normal  │  Tab: next field")
 		}
 	}
 

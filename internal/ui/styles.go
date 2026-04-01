@@ -2,27 +2,30 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Tokyo Night color palette
+// Cyberpunk / neon palette — dark void with electric accents
 const (
-	clrBg       = "#1a1b26"
-	clrBg2      = "#16161e"
-	clrBgHL     = "#1e2030"
-	clrFg       = "#c0caf5"
-	clrFgDim    = "#545c7e"
-	clrBlue     = "#7aa2f7"
-	clrCyan     = "#7dcfff"
-	clrGreen    = "#9ece6a"
-	clrYellow   = "#e0af68"
-	clrRed      = "#f7768e"
-	clrMagenta  = "#bb9af7"
-	clrComment  = "#565f89"
-	clrSel      = "#283457"
-	clrTabBg    = "#24283b"
+	clrBg      = "#0a0a0f" // void black
+	clrBg2     = "#05050a" // deeper void
+	clrBgHL    = "#12102a" // active selection — deep violet
+	clrBgHL2   = "#1a0f35" // pulse-frame active selection
+	clrFg      = "#e2f0f1" // near-white with slight cyan tint
+	clrFgDim   = "#3a3f5a" // dim purple-gray
+	clrBlue    = "#00b4ff" // electric blue
+	clrCyan    = "#05d9e8" // neon cyan
+	clrGreen   = "#05ffa1" // acid green
+	clrYellow  = "#f5c542" // neon yellow
+	clrRed     = "#ff2055" // hot red
+	clrMagenta = "#ff2a6d" // neon magenta/pink
+	clrComment = "#363b54" // dim purple-gray
+	clrSel     = "#1a0a2e" // deep violet selection bg
+	clrTabBg   = "#0d0d1a" // tab background
+	clrViolet  = "#9b59ff" // electric violet
+	clrOrange  = "#ff6e27" // neon orange
 )
 
 var (
 	StyleNormalMode = lipgloss.NewStyle().
-		Background(lipgloss.Color(clrBlue)).
+		Background(lipgloss.Color(clrCyan)).
 		Foreground(lipgloss.Color(clrBg)).
 		Bold(true).
 		Padding(0, 1)
@@ -34,7 +37,7 @@ var (
 		Padding(0, 1)
 
 	StyleCommandMode = lipgloss.NewStyle().
-		Background(lipgloss.Color(clrYellow)).
+		Background(lipgloss.Color(clrMagenta)).
 		Foreground(lipgloss.Color(clrBg)).
 		Bold(true).
 		Padding(0, 1)
@@ -48,15 +51,19 @@ var (
 		Foreground(lipgloss.Color(clrComment))
 
 	StyleTabActive = lipgloss.NewStyle().
-		Background(lipgloss.Color(clrBg)).
-		Foreground(lipgloss.Color(clrFg)).
+		Background(lipgloss.Color(clrViolet)).
+		Foreground(lipgloss.Color(clrBg)).
 		Bold(true).
 		Padding(0, 1)
 
 	StyleTabInactive = lipgloss.NewStyle().
 		Background(lipgloss.Color(clrTabBg)).
-		Foreground(lipgloss.Color(clrComment)).
+		Foreground(lipgloss.Color(clrFgDim)).
 		Padding(0, 1)
+
+	StyleTabSep = lipgloss.NewStyle().
+		Background(lipgloss.Color(clrTabBg)).
+		Foreground(lipgloss.Color(clrComment))
 
 	StyleTabBar = lipgloss.NewStyle().
 		Background(lipgloss.Color(clrTabBg))
@@ -65,21 +72,23 @@ var (
 		Foreground(lipgloss.Color(clrComment))
 
 	StyleCurLineNum = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrYellow)).
+		Foreground(lipgloss.Color(clrCyan)).
 		Bold(true)
 
 	StyleCurLine = lipgloss.NewStyle().
 		Background(lipgloss.Color(clrBgHL))
 
+	StyleCurLinePulse = lipgloss.NewStyle().
+		Background(lipgloss.Color(clrBgHL2))
+
 	StyleTilde = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrComment)).
-		Bold(true)
+		Foreground(lipgloss.Color(clrComment))
 
 	StyleFieldKey = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrCyan))
+		Foreground(lipgloss.Color(clrBlue))
 
 	StyleFieldKeyActive = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrBlue)).
+		Foreground(lipgloss.Color(clrCyan)).
 		Bold(true)
 
 	StyleEquals = lipgloss.NewStyle().
@@ -93,10 +102,10 @@ var (
 		Bold(true)
 
 	StyleSelectArrow = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrYellow))
+		Foreground(lipgloss.Color(clrViolet))
 
 	StyleSectionTitle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrBlue)).
+		Foreground(lipgloss.Color(clrCyan)).
 		Bold(true)
 
 	StyleSectionDesc = lipgloss.NewStyle().
@@ -108,44 +117,80 @@ var (
 		Foreground(lipgloss.Color(clrFg))
 
 	StyleHeaderTitle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrBlue)).
+		Foreground(lipgloss.Color(clrCyan)).
 		Bold(true)
 
 	StyleHeaderMod = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrRed)).
+		Foreground(lipgloss.Color(clrMagenta)).
 		Bold(true)
 
 	StyleCmdLine = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(clrFg))
 
 	StyleMsgOK = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrGreen))
+		Foreground(lipgloss.Color(clrGreen)).
+		Bold(true)
 
 	StyleMsgErr = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrRed))
+		Foreground(lipgloss.Color(clrRed)).
+		Bold(true)
 
 	StyleHelpKey = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrYellow)).
+		Foreground(lipgloss.Color(clrCyan)).
 		Bold(true)
 
 	StyleHelpDesc = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(clrComment))
 
 	StyleTextAreaLabel = lipgloss.NewStyle().
-		Foreground(lipgloss.Color(clrMagenta)).
+		Foreground(lipgloss.Color(clrViolet)).
 		Bold(true)
 
 	StyleTextAreaBorder = lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(clrBlue))
+		BorderForeground(lipgloss.Color(clrViolet))
 
 	StyleCursor = lipgloss.NewStyle().
-		Background(lipgloss.Color(clrFg)).
+		Background(lipgloss.Color(clrCyan)).
 		Foreground(lipgloss.Color(clrBg))
 
 	StyleModalBorder = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(clrBlue)).
+		BorderForeground(lipgloss.Color(clrViolet)).
 		Background(lipgloss.Color(clrBg2)).
 		Padding(0, 1)
+
+	// Cyberpunk accent styles used in headers and decorations
+	StyleNeonMagenta = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrMagenta)).
+		Bold(true)
+
+	StyleNeonCyan = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrCyan)).
+		Bold(true)
+
+	StyleNeonGreen = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrGreen)).
+		Bold(true)
+
+	StyleNeonViolet = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrViolet)).
+		Bold(true)
+
+	StyleNeonOrange = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrOrange)).
+		Bold(true)
+
+	StyleHeaderDeco = lipgloss.NewStyle().
+		Background(lipgloss.Color(clrBg2)).
+		Foreground(lipgloss.Color(clrFgDim))
 )
+
+// activeCurLineStyle returns the appropriate highlighted-row style based on the
+// current animation frame, producing a subtle breathing/pulse effect.
+func activeCurLineStyle() lipgloss.Style {
+	if AnimFrame == 1 {
+		return StyleCurLinePulse
+	}
+	return StyleCurLine
+}
