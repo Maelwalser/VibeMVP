@@ -1,0 +1,172 @@
+{
+  "created_at": "2026-04-01T00:00:00Z",
+  "data": {
+    "databases": [
+      {"alias": "primary", "type": "PostgreSQL", "is_cache": false}
+    ],
+    "domains": [
+      {
+        "name": "User",
+        "description": "User account and profile",
+        "databases": "primary",
+        "attributes": [
+          {"name": "id", "type": "UUID", "constraints": "Primary Key, Auto-generated"},
+          {"name": "email", "type": "String", "constraints": "Required, Unique"},
+          {"name": "name", "type": "String", "constraints": "Required"},
+          {"name": "created_at", "type": "DateTime", "constraints": "Auto-generated"}
+        ]
+      }
+    ],
+    "caching": {}
+  },
+  "backend": {
+    "arch_pattern": "microservices",
+    "env": {
+      "compute_env": "containerized",
+      "cloud_provider": "AWS",
+      "orchestrator": "Docker Compose"
+    },
+    "services": [
+      {
+        "name": "user-api",
+        "responsibility": "User registration, authentication, and profile management",
+        "language": "Go",
+        "framework": "Fiber",
+        "interfaces": [{"name": "REST API", "type": "REST"}]
+      }
+    ],
+    "auth": {
+      "strategy": "JWT",
+      "provider": "self-managed",
+      "authz_model": "RBAC",
+      "token_storage": "HttpOnly cookie",
+      "mfa": "None"
+    }
+  },
+  "contracts": {
+    "dtos": [
+      {
+        "name": "RegisterRequest",
+        "category": "Request",
+        "source_domains": "User",
+        "fields": [
+          {"name": "email", "type": "string", "required": true, "nullable": false},
+          {"name": "name", "type": "string", "required": true, "nullable": false},
+          {"name": "password", "type": "string", "required": true, "nullable": false}
+        ]
+      },
+      {
+        "name": "UserResponse",
+        "category": "Response",
+        "source_domains": "User",
+        "fields": [
+          {"name": "id", "type": "string", "required": true, "nullable": false},
+          {"name": "email", "type": "string", "required": true, "nullable": false},
+          {"name": "name", "type": "string", "required": true, "nullable": false}
+        ]
+      }
+    ],
+    "endpoints": [
+      {
+        "service_unit": "user-api",
+        "name_path": "/api/v1/users/register",
+        "protocol": "REST",
+        "auth_required": "No",
+        "request_dto": "RegisterRequest",
+        "response_dto": "UserResponse",
+        "http_method": "POST"
+      },
+      {
+        "service_unit": "user-api",
+        "name_path": "/api/v1/users/me",
+        "protocol": "REST",
+        "auth_required": "Yes",
+        "response_dto": "UserResponse",
+        "http_method": "GET"
+      }
+    ],
+    "versioning": {
+      "strategy": "URL path (/v1/)",
+      "current_version": "v1"
+    }
+  },
+  "frontend": {
+    "tech": {
+      "language": "TypeScript",
+      "platform": "Web",
+      "framework": "React",
+      "meta_framework": "Next.js",
+      "package_manager": "npm",
+      "styling": "Tailwind CSS"
+    },
+    "theme": {
+      "dark_mode": "Toggle",
+      "border_radius": "Rounded (8px)",
+      "spacing": "Default (8px base)",
+      "elevation": "Shadows",
+      "motion": "Subtle transitions"
+    },
+    "pages": [
+      {
+        "name": "Register",
+        "route": "/register",
+        "auth_required": "No",
+        "layout": "Default",
+        "core_actions": "Submit registration form",
+        "loading": "Skeleton",
+        "error_handling": "Inline"
+      },
+      {
+        "name": "Dashboard",
+        "route": "/dashboard",
+        "auth_required": "Yes",
+        "layout": "Sidebar",
+        "core_actions": "View profile, Edit settings",
+        "loading": "Skeleton",
+        "error_handling": "Toast"
+      }
+    ],
+    "navigation": {
+      "nav_type": "Sidebar",
+      "breadcrumbs": true,
+      "auth_aware": true
+    }
+  },
+  "infrastructure": {
+    "networking": {
+      "dns_provider": "Cloudflare",
+      "tls_ssl": "Let's Encrypt",
+      "reverse_proxy": "Nginx",
+      "cdn": "Cloudflare"
+    },
+    "cicd": {
+      "platform": "GitHub Actions",
+      "container_registry": "GHCR",
+      "deploy_strategy": "Rolling",
+      "iac_tool": "None"
+    },
+    "observability": {
+      "logging": "stdout/file",
+      "metrics": "None",
+      "tracing": "None",
+      "error_tracking": "None",
+      "health_checks": true,
+      "alerting": "None"
+    }
+  },
+  "cross_cutting": {
+    "testing": {
+      "unit": "Go testing",
+      "integration": "testcontainers",
+      "e2e": "Playwright",
+      "api": "Bruno",
+      "load": "None",
+      "contract": "None"
+    },
+    "docs": {
+      "api_docs": "OpenAPI/Swagger",
+      "auto_generate": true,
+      "changelog": "Conventional Commits"
+    }
+  }
+}
