@@ -3319,31 +3319,15 @@ func (be BackendEditor) viewJobs(w int) []string {
 }
 
 // AuthRoleOptions returns role names for use in frontend page forms.
-// Returns names from the structured roles list when defined; falls back to
-// authz_model-based defaults otherwise.
+// Returns only explicitly configured roles; empty slice means none configured.
 func (be BackendEditor) AuthRoleOptions() []string {
-	if len(be.authRoles) > 0 {
-		names := make([]string, 0, len(be.authRoles))
-		for _, r := range be.authRoles {
-			if r.Name != "" {
-				names = append(names, r.Name)
-			}
-		}
-		if len(names) > 0 {
-			return names
+	names := make([]string, 0, len(be.authRoles))
+	for _, r := range be.authRoles {
+		if r.Name != "" {
+			names = append(names, r.Name)
 		}
 	}
-	model := fieldGet(be.AuthFields, "authz_model")
-	switch model {
-	case "RBAC":
-		return []string{"admin", "user", "moderator", "editor", "viewer", "superadmin"}
-	case "ABAC":
-		return []string{"admin", "user", "owner", "manager", "auditor"}
-	case "ACL":
-		return []string{"admin", "read", "write", "execute", "owner"}
-	default:
-		return []string{"admin", "user", "moderator", "editor", "viewer"}
-	}
+	return names
 }
 
 // ServiceNames returns the names of all created service units for cross-reference.
