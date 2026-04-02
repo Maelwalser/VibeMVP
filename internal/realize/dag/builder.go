@@ -53,7 +53,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 		EnvConfig:    m.Backend.Env,
 		Domains:      m.Data.Domains,
 		Databases:    m.Data.Databases,
-		Caching:      m.Data.Caching,
+		Cachings:     m.Data.Cachings,
 		FileStorages: m.Data.FileStorages,
 		AllServices:  m.Backend.Services,
 	}

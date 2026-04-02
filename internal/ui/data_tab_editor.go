@@ -45,6 +45,15 @@ const (
 	fsViewForm
 )
 
+// ── caching list+form types ───────────────────────────────────────────────────
+
+type cachingView int
+
+const (
+	cachingViewList cachingView = iota
+	cachingViewForm
+)
+
 // ── mode ─────────────────────────────────────────────────────────────────────
 
 type dtMode int
@@ -82,9 +91,11 @@ type DataTabEditor struct {
 	relFormIdx     int
 
 	// CACHING sub-tab
-	cachingFields  []Field
+	cachings       []manifest.CachingConfig
+	cachingSubView cachingView
+	cachingIdx     int
+	cachingForm    []Field
 	cachingFormIdx int
-	cachingEnabled bool
 
 	// FILE STORAGE sub-tab
 	fileStorages []manifest.FileStorageDef
@@ -112,7 +123,6 @@ func newDataTabEditor() DataTabEditor {
 	return DataTabEditor{
 		dbEditor:         newDBEditor(),
 		dataEditor:       newDataEditor(),
-		cachingFields:    defaultCachingFields(),
 		governanceFields: defaultGovernanceFields(),
 		formInput:        newFormInput(),
 	}
@@ -149,6 +159,7 @@ func defaultDomainFormFields(dbOptions []string) []Field {
 		{
 			Key: "databases", Label: "databases     ", Kind: KindMultiSelect,
 			Options: dbOptions,
+			Value:   placeholderFor(dbOptions, "(no databases configured)"),
 		},
 		{Key: "attr_names", Label: "attr_names    ", Kind: KindText,
 			// Hint: type comma-separated attribute names to batch-create attributes
@@ -203,12 +214,7 @@ func defaultRelFields(domainOptions []string) []Field {
 		{
 			Key: "related_domain", Label: "related_domain", Kind: KindSelect,
 			Options: domainOptions,
-			Value:   func() string {
-				if len(domainOptions) > 0 {
-					return domainOptions[0]
-				}
-				return ""
-			}(),
+			Value:   placeholderFor(domainOptions, "(no domains configured)"),
 		},
 		{
 			Key: "rel_type", Label: "rel_type      ", Kind: KindSelect,
@@ -225,13 +231,18 @@ func defaultRelFields(domainOptions []string) []Field {
 
 func defaultCachingFields() []Field {
 	return []Field{
+		{Key: "name", Label: "name          ", Kind: KindText},
 		{
 			Key: "layer", Label: "layer         ", Kind: KindSelect,
 			Options: []string{
-				"Application-level", "Dedicated cache (Redis/Valkey)",
+				"Application-level", "Dedicated cache",
 				"CDN", "None",
 			},
 			Value: "None", SelIdx: 3,
+		},
+		{
+			Key: "cache_db", Label: "cache db      ", Kind: KindSelect,
+			Options: []string{},
 		},
 		{
 			Key: "strategy", Label: "strategy      ", Kind: KindMultiSelect,
@@ -251,6 +262,42 @@ func defaultCachingFields() []Field {
 			Key: "entities", Label: "entities      ", Kind: KindMultiSelect,
 			Options: []string{}, // populated dynamically from domain names
 		},
+	}
+}
+
+func cachingFormFromDef(def manifest.CachingConfig) []Field {
+	f := defaultCachingFields()
+	f = setFieldValue(f, "name", def.Name)
+	if def.Layer != "" {
+		f = setFieldValue(f, "layer", def.Layer)
+	}
+	if def.CacheDB != "" {
+		f = setFieldValue(f, "cache_db", def.CacheDB)
+	}
+	if def.Strategy != "" {
+		f = setFieldValue(f, "strategy", def.Strategy)
+	}
+	if def.Invalidation != "" {
+		f = setFieldValue(f, "invalidation", def.Invalidation)
+	}
+	if def.TTL != "" {
+		f = setFieldValue(f, "ttl", def.TTL)
+	}
+	if def.Entities != "" {
+		f = restoreMultiSelectValue(f, "entities", def.Entities)
+	}
+	return f
+}
+
+func cachingDefFromForm(fields []Field) manifest.CachingConfig {
+	return manifest.CachingConfig{
+		Name:         fieldGet(fields, "name"),
+		Layer:        fieldGet(fields, "layer"),
+		CacheDB:      fieldGet(fields, "cache_db"),
+		Strategy:     fieldGet(fields, "strategy"),
+		Invalidation: fieldGet(fields, "invalidation"),
+		TTL:          fieldGet(fields, "ttl"),
+		Entities:     fieldGetMulti(fields, "entities"),
 	}
 }
 
@@ -304,16 +351,17 @@ func defaultGovernanceFields() []Field {
 }
 
 // withRefreshedCachingEntities returns a copy of the DataTabEditor with the
-// entities multiselect options updated to reflect current domain names.
+// entities multiselect options in cachingForm updated to reflect current domain names.
 func (dt DataTabEditor) withRefreshedCachingEntities() DataTabEditor {
 	domOpts := dt.domainNames()
-	newFields := make([]Field, len(dt.cachingFields))
-	copy(newFields, dt.cachingFields)
+	newFields := make([]Field, len(dt.cachingForm))
+	copy(newFields, dt.cachingForm)
 	for i := range newFields {
 		if newFields[i].Key == "entities" {
 			// Preserve existing selections by re-mapping
 			oldOpts := newFields[i].Options
 			newFields[i].Options = domOpts
+			newFields[i].Value = placeholderFor(domOpts, "(no domains configured)")
 			newSelected := make([]int, 0)
 			for _, oldIdx := range newFields[i].SelectedIdxs {
 				if oldIdx < len(oldOpts) {
@@ -330,7 +378,95 @@ func (dt DataTabEditor) withRefreshedCachingEntities() DataTabEditor {
 			break
 		}
 	}
-	dt.cachingFields = newFields
+	dt.cachingForm = newFields
+	return dt
+}
+
+// isCachingFieldDisabled returns true when cache_db should be hidden because
+// the selected layer is not "Dedicated cache".
+func isCachingFieldDisabled(fields []Field, idx int) bool {
+	if fields[idx].Key != "cache_db" {
+		return false
+	}
+	for _, f := range fields {
+		if f.Key == "layer" {
+			return f.DisplayValue() != "Dedicated cache"
+		}
+	}
+	return true
+}
+
+func nextCachingFormIdx(fields []Field, cur int) int {
+	n := len(fields)
+	next := (cur + 1) % n
+	for next != cur && isCachingFieldDisabled(fields, next) {
+		next = (next + 1) % n
+	}
+	return next
+}
+
+func prevCachingFormIdx(fields []Field, cur int) int {
+	n := len(fields)
+	prev := (cur - 1 + n) % n
+	for prev != cur && isCachingFieldDisabled(fields, prev) {
+		prev = (prev - 1 + n) % n
+	}
+	return prev
+}
+
+// cachingVisibleFields returns only the fields that should be rendered.
+func cachingVisibleFields(fields []Field) []Field {
+	out := make([]Field, 0, len(fields))
+	for i, f := range fields {
+		if !isCachingFieldDisabled(fields, i) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// cachingVisibleIdx maps a full-list index to its position in the visible list.
+func cachingVisibleIdx(fields []Field, fullIdx int) int {
+	vis := 0
+	for i := range fullIdx {
+		if !isCachingFieldDisabled(fields, i) {
+			vis++
+		}
+	}
+	return vis
+}
+
+// withRefreshedCachingDBs returns a copy of the DataTabEditor with the cache_db
+// select options in cachingForm populated from database sources that have IsCache == true.
+func (dt DataTabEditor) withRefreshedCachingDBs() DataTabEditor {
+	var aliases []string
+	for _, src := range dt.dbEditor.Sources {
+		if src.IsCache {
+			aliases = append(aliases, src.Alias)
+		}
+	}
+	newFields := make([]Field, len(dt.cachingForm))
+	copy(newFields, dt.cachingForm)
+	for i := range newFields {
+		if newFields[i].Key == "cache_db" {
+			cur := newFields[i].Value
+			newFields[i].Options = aliases
+			newFields[i].Value = placeholderFor(aliases, "(no cache DBs configured)")
+			newFields[i].SelIdx = 0
+			for j, a := range aliases {
+				if a == cur {
+					newFields[i].SelIdx = j
+					newFields[i].Value = a
+					break
+				}
+			}
+			if len(aliases) > 0 && newFields[i].Value == "" {
+				newFields[i].Value = aliases[0]
+			}
+			break
+		}
+	}
+	dt.cachingForm = newFields
 	return dt
 }
 
@@ -355,6 +491,7 @@ func defaultFSFormFields(domainOptions []string) []Field {
 		{
 			Key: "domains", Label: "domains       ", Kind: KindMultiSelect,
 			Options: domainOptions,
+			Value:   placeholderFor(domainOptions, "(no domains configured)"),
 		},
 		{
 			Key: "ttl_minutes", Label: "ttl_minutes   ", Kind: KindSelect,
@@ -417,15 +554,7 @@ func (dt DataTabEditor) ToManifestDataPillar() manifest.DataPillar {
 		Entities:     dt.dataEditor.Entities,
 		FileStorages: dt.fileStorages,
 	}
-	if dt.cachingEnabled {
-		p.Caching = manifest.CachingConfig{
-			Layer:        fieldGet(dt.cachingFields, "layer"),
-			Strategy:     fieldGet(dt.cachingFields, "strategy"),
-			Invalidation: fieldGet(dt.cachingFields, "invalidation"),
-			TTL:          fieldGet(dt.cachingFields, "ttl"),
-			Entities:     fieldGetMulti(dt.cachingFields, "entities"),
-		}
-	}
+	p.Cachings = dt.cachings
 	if dt.govEnabled {
 		p.Governance = manifest.DataGovernanceConfig{
 			RetentionPolicy:      fieldGet(dt.governanceFields, "retention_policy"),
@@ -457,15 +586,8 @@ func (dt DataTabEditor) FromDataPillar(dp manifest.DataPillar) DataTabEditor {
 	// File storages — stored directly.
 	dt.fileStorages = dp.FileStorages
 
-	// Caching fields.
-	if dp.Caching.Layer != "" || dp.Caching.Strategy != "" {
-		dt.cachingEnabled = true
-		dt.cachingFields = setFieldValue(dt.cachingFields, "layer", dp.Caching.Layer)
-		dt.cachingFields = setFieldValue(dt.cachingFields, "strategy", dp.Caching.Strategy)
-		dt.cachingFields = setFieldValue(dt.cachingFields, "invalidation", dp.Caching.Invalidation)
-		dt.cachingFields = setFieldValue(dt.cachingFields, "ttl", dp.Caching.TTL)
-		dt.cachingFields = restoreMultiSelectValue(dt.cachingFields, "entities", dp.Caching.Entities)
-	}
+	// Caching strategies.
+	dt.cachings = dp.Cachings
 
 	// Governance fields.
 	if dp.Governance.RetentionPolicy != "" || dp.Governance.DeleteStrategy != "" || dp.MigrationTool != "" {
@@ -515,10 +637,12 @@ func (dt DataTabEditor) HintLine() string {
 			return StyleInsertMode.Render(" -- INSERT -- ") +
 				StyleHelpDesc.Render("  Esc: normal  Tab: next field")
 		}
-		if !dt.cachingEnabled {
-			return hintBar("a", "configure", "h/l", "sub-tab")
+		switch dt.cachingSubView {
+		case cachingViewList:
+			return hintBar("j/k", "navigate", "a", "add strategy", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
+		case cachingViewForm:
+			return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "i/a", "edit", "b/Esc", "back")
 		}
-		return hintBar("j/k", "navigate", "Space", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case dataTabFileStorage:
 		return dt.fsHintLine()
 	case dataTabGovernance:
@@ -591,8 +715,8 @@ func (dt *DataTabEditor) activeDTFieldPtr() *Field {
 			}
 		}
 	case dataTabCaching:
-		if dt.cachingFormIdx < len(dt.cachingFields) {
-			return &dt.cachingFields[dt.cachingFormIdx]
+		if dt.cachingSubView == cachingViewForm && dt.cachingFormIdx < len(dt.cachingForm) {
+			return &dt.cachingForm[dt.cachingFormIdx]
 		}
 	case dataTabFileStorage:
 		if dt.fsSubView == fsViewForm && dt.fsFormIdx < len(dt.fsForm) {
@@ -765,7 +889,7 @@ func (dt *DataTabEditor) advanceFormField(delta int) {
 			}
 		}
 	case dataTabCaching:
-		n := len(dt.cachingFields)
+		n := len(dt.cachingForm)
 		if n > 0 {
 			dt.cachingFormIdx = (dt.cachingFormIdx + delta + n) % n
 		}
@@ -801,8 +925,8 @@ func (dt *DataTabEditor) saveInput() {
 			}
 		}
 	case dataTabCaching:
-		if dt.cachingFormIdx < len(dt.cachingFields) && dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
-			dt.cachingFields[dt.cachingFormIdx].Value = val
+		if dt.cachingFormIdx < len(dt.cachingForm) && dt.cachingForm[dt.cachingFormIdx].Kind == KindText {
+			dt.cachingForm[dt.cachingFormIdx].Value = val
 		}
 	case dataTabFileStorage:
 		if dt.fsFormIdx < len(dt.fsForm) && dt.fsForm[dt.fsFormIdx].Kind == KindText {
@@ -828,7 +952,7 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 			n = len(dt.relForm)
 		}
 	case dataTabCaching:
-		n = len(dt.cachingFields)
+		n = len(dt.cachingForm)
 	case dataTabFileStorage:
 		n = len(dt.fsForm)
 	case dataTabGovernance:
@@ -853,8 +977,8 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 				}
 			}
 		case dataTabCaching:
-			if dt.cachingFormIdx < len(dt.cachingFields) {
-				f = &dt.cachingFields[dt.cachingFormIdx]
+			if dt.cachingFormIdx < len(dt.cachingForm) {
+				f = &dt.cachingForm[dt.cachingFormIdx]
 			}
 		case dataTabFileStorage:
 			if dt.fsFormIdx < len(dt.fsForm) {
@@ -1300,26 +1424,60 @@ func (dt DataTabEditor) updateRelForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 // ── Caching update ────────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
-	if !dt.cachingEnabled {
-		if key.String() == "a" {
-			dt.cachingEnabled = true
-			dt.cachingFormIdx = 0
-		}
-		return dt, nil
+	switch dt.cachingSubView {
+	case cachingViewList:
+		return dt.updateCachingList(key)
+	case cachingViewForm:
+		return dt.updateCachingForm(key)
 	}
-	// Refresh entities options with current domain names
-	dt = dt.withRefreshedCachingEntities()
+	return dt, nil
+}
+
+func (dt DataTabEditor) updateCachingList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	n := len(dt.cachings)
 	switch key.String() {
 	case "j", "down":
-		if dt.cachingFormIdx < len(dt.cachingFields)-1 {
-			dt.cachingFormIdx++
+		if n > 0 && dt.cachingIdx < n-1 {
+			dt.cachingIdx++
 		}
 	case "k", "up":
-		if dt.cachingFormIdx > 0 {
-			dt.cachingFormIdx--
+		if dt.cachingIdx > 0 {
+			dt.cachingIdx--
 		}
+	case "a":
+		dt.cachings = append(dt.cachings, manifest.CachingConfig{})
+		dt.cachingIdx = len(dt.cachings) - 1
+		dt.cachingForm = defaultCachingFields()
+		dt.cachingFormIdx = 0
+		dt.cachingSubView = cachingViewForm
+	case "d":
+		if n > 0 {
+			dt.cachings = append(dt.cachings[:dt.cachingIdx], dt.cachings[dt.cachingIdx+1:]...)
+			if dt.cachingIdx > 0 && dt.cachingIdx >= len(dt.cachings) {
+				dt.cachingIdx = len(dt.cachings) - 1
+			}
+		}
+	case "enter":
+		if n > 0 {
+			dt.cachingForm = cachingFormFromDef(dt.cachings[dt.cachingIdx])
+			dt.cachingFormIdx = 0
+			dt.cachingSubView = cachingViewForm
+		}
+	}
+	return dt, nil
+}
+
+func (dt DataTabEditor) updateCachingForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	// Refresh dynamic options
+	dt = dt.withRefreshedCachingEntities()
+	dt = dt.withRefreshedCachingDBs()
+	switch key.String() {
+	case "j", "down":
+		dt.cachingFormIdx = nextCachingFormIdx(dt.cachingForm, dt.cachingFormIdx)
+	case "k", "up":
+		dt.cachingFormIdx = prevCachingFormIdx(dt.cachingForm, dt.cachingFormIdx)
 	case "enter", " ":
-		f := &dt.cachingFields[dt.cachingFormIdx]
+		f := &dt.cachingForm[dt.cachingFormIdx]
 		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			dt.ddOpen = true
 			if f.Kind == KindSelect {
@@ -1331,18 +1489,19 @@ func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 			return dt.tryEnterInsert()
 		}
 	case "H", "shift+left":
-		f := &dt.cachingFields[dt.cachingFormIdx]
+		f := &dt.cachingForm[dt.cachingFormIdx]
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "D":
-		dt.cachingEnabled = false
-		dt.cachingFields = defaultCachingFields()
-		dt.cachingFormIdx = 0
 	case "i", "a":
-		if dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
+		if dt.cachingForm[dt.cachingFormIdx].Kind == KindText {
 			return dt.tryEnterInsert()
 		}
+	case "b", "esc":
+		if dt.cachingIdx < len(dt.cachings) {
+			dt.cachings[dt.cachingIdx] = cachingDefFromForm(dt.cachingForm)
+		}
+		dt.cachingSubView = cachingViewList
 	}
 	return dt, nil
 }
@@ -1515,6 +1674,9 @@ func (dt DataTabEditor) View(w, h int) string {
 		}
 	case dataTabCaching:
 		contentLines = dt.viewCaching(w)
+		if dt.cachingSubView == cachingViewList {
+			contentLines = appendViewport(contentLines, 2, dt.cachingIdx, contentH)
+		}
 	case dataTabFileStorage:
 		contentLines = dt.viewFileStorage(w)
 	case dataTabGovernance:
@@ -1620,13 +1782,36 @@ func (dt DataTabEditor) viewDomains(w int) []string {
 
 func (dt DataTabEditor) viewCaching(w int) []string {
 	var lines []string
-	lines = append(lines, StyleSectionDesc.Render("  # Caching Strategy"), "")
-	if !dt.cachingEnabled {
-		lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
-		return lines
+	switch dt.cachingSubView {
+	case cachingViewList:
+		lines = append(lines, StyleSectionDesc.Render("  # Caching Strategies — a: add  d: delete  Enter: edit"), "")
+		if len(dt.cachings) == 0 {
+			lines = append(lines, StyleSectionDesc.Render("  (no caching strategies yet — press 'a' to add)"))
+		} else {
+			for i, c := range dt.cachings {
+				name := c.Name
+				if name == "" {
+					name = fmt.Sprintf("(strategy #%d)", i+1)
+				}
+				detail := c.Layer
+				if c.Strategy != "" {
+					detail += " / " + c.Strategy
+				}
+				lines = append(lines, renderListItem(w, i == dt.cachingIdx, "  ▶ ", name, detail))
+			}
+		}
+	case cachingViewForm:
+		dt = dt.withRefreshedCachingEntities()
+		dt = dt.withRefreshedCachingDBs()
+		name := fieldGet(dt.cachingForm, "name")
+		if name == "" {
+			name = "(new strategy)"
+		}
+		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(name), "")
+		visible := cachingVisibleFields(dt.cachingForm)
+		visIdx := cachingVisibleIdx(dt.cachingForm, dt.cachingFormIdx)
+		lines = append(lines, renderFormFields(w, visible, visIdx, dt.internalMode == dtInsert, dt.formInput, dt.ddOpen, dt.ddOptIdx)...)
 	}
-	dt = dt.withRefreshedCachingEntities()
-	lines = append(lines, renderFormFields(w, dt.cachingFields, dt.cachingFormIdx, dt.internalMode == dtInsert, dt.formInput, dt.ddOpen, dt.ddOptIdx)...)
 	return lines
 }
 

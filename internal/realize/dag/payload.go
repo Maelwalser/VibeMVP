@@ -12,7 +12,7 @@ type TaskPayload struct {
 	// Data pillar
 	Domains      []manifest.DomainDef
 	Databases    []manifest.DBSourceDef
-	Caching      manifest.CachingConfig
+	Cachings     []manifest.CachingConfig
 	FileStorages []manifest.FileStorageDef
 
 	// Backend pillar — per-service tasks set Service; others see AllServices.

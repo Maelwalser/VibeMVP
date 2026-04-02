@@ -233,10 +233,12 @@ func defaultPageFormFields(authRoleOptions, pageRouteOptions []string) []Field {
 		{
 			Key: "auth_roles", Label: "auth_roles    ", Kind: KindMultiSelect,
 			Options: authRoleOptions,
+			Value:   placeholderFor(authRoleOptions, "(no auth roles configured)"),
 		},
 		{
 			Key: "linked_pages", Label: "linked_pages  ", Kind: KindMultiSelect,
 			Options: pageRouteOptions,
+			Value:   placeholderFor(pageRouteOptions, "(no pages configured)"),
 		},
 	}
 }
