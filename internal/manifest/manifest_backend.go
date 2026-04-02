@@ -56,15 +56,38 @@ type APIGatewayConfig struct {
 	Features   string `json:"features,omitempty"`
 }
 
+// PermissionDef defines a named permission (e.g. "users:read").
+type PermissionDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// RoleDef defines an authorization role with its permissions.
+type RoleDef struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+	Inherits    []string `json:"inherits,omitempty"`
+}
+
+// PolicyRule maps a role to a resource and the set of allowed actions.
+type PolicyRule struct {
+	Role     string   `json:"role"`
+	Resource string   `json:"resource"`
+	Actions  []string `json:"actions"`
+}
+
 // AuthConfig describes authentication and identity settings.
 type AuthConfig struct {
-	Strategy     string `json:"strategy"`
-	Provider     string `json:"provider"`
-	AuthzModel   string `json:"authz_model"`
-	TokenStorage string `json:"token_storage"`
-	MFA          string `json:"mfa"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	Roles        string `json:"roles,omitempty"`
+	Strategy     string       `json:"strategy"`
+	Provider     string       `json:"provider"`
+	AuthzModel   string       `json:"authz_model"`
+	TokenStorage string       `json:"token_storage"`
+	MFA          string       `json:"mfa"`
+	RefreshToken string       `json:"refresh_token,omitempty"`
+	Permissions  []PermissionDef `json:"permissions,omitempty"`
+	Roles        []RoleDef       `json:"roles,omitempty"`
+	PolicyRules  []PolicyRule    `json:"policy_rules,omitempty"`
 }
 
 // WAFConfig describes Web Application Firewall and rate limiting settings.
