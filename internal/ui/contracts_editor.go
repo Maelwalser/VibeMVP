@@ -963,14 +963,6 @@ func (ce *ContractsEditor) populateDTOFieldsFromDomains() {
 			break
 		}
 	}
-	// Fallback placeholder if no domain attrs found
-	if len(ce.dtoFieldItems) == 0 {
-		placeholder := defaultDTOFieldForm()
-		placeholder = setFieldValue(placeholder, "name", "id")
-		placeholder = setFieldValue(placeholder, "type", "uuid")
-		placeholder = setFieldValue(placeholder, "required", "true")
-		ce.dtoFieldItems = append(ce.dtoFieldItems, placeholder)
-	}
 }
 
 func domainTypeToDTOType(t string) string {
