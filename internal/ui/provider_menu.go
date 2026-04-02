@@ -520,7 +520,8 @@ const (
 	// pmBoxW is the Width() argument for StyleModalBorder.
 	// StyleModalBorder has Padding(0,1) + RoundedBorder, so actual rendered
 	// width = pmBoxW + 2 (padding) + 2 (border) = pmBoxW + 4.
-	pmBoxW = pmCol1W + pmCol2W + pmCol3W // 40 → total box ≈ 44 chars
+	// +2 for the two │ column separators inserted by pmRow.
+	pmBoxW = pmCol1W + 1 + pmCol2W + 1 + pmCol3W // 42 → total box ≈ 46 chars
 )
 
 // ── View ──────────────────────────────────────────────────────────────────────
@@ -530,13 +531,16 @@ func (p ProviderMenu) View() string {
 	var rows []string
 
 	// ── Cyberpunk title bar ───────────────────────────────────────────────────
-	deco := StyleHeaderDeco.Render(headerDecoFrames[AnimFrame])
+	// Opposing frames on left/right produce the same scanning animation as the
+	// main header bar: light appears to sweep across the title.
+	decoL := StyleHeaderDeco.Render(headerDecoFrames[AnimFrame])
+	decoR := StyleHeaderDeco.Render(headerDecoFrames[1-AnimFrame])
 	titleText := StyleNeonMagenta.Render("◈ AI PROVIDERS ◈")
 	titleLine := lipgloss.NewStyle().
 		Background(lipgloss.Color(clrBg2)).
 		Width(pmBoxW).
 		Align(lipgloss.Center).
-		Render(deco + " " + titleText + " " + deco)
+		Render(decoL + " " + titleText + " " + decoR)
 	rows = append(rows, titleLine)
 	rows = append(rows, "") // padding below title
 	rows = append(rows, p.renderHeaders())
@@ -679,12 +683,13 @@ func (p ProviderMenu) renderHeaders() string {
 }
 
 // renderDividers returns the ─── separator row under the headers.
+// Each segment fills its full column width so the grid lines are flush.
 func (p ProviderMenu) renderDividers() string {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(clrViolet)).Background(lipgloss.Color(clrBg2))
 	return pmRow(
-		s.Render(strings.Repeat("─", 8)),
-		s.Render(strings.Repeat("─", 9)),
-		s.Render(strings.Repeat("─", 8)),
+		s.Render(strings.Repeat("─", pmCol1W)),
+		s.Render(strings.Repeat("─", pmCol2W)),
+		s.Render(strings.Repeat("─", pmCol3W)),
 	)
 }
 
@@ -862,9 +867,14 @@ func (p ProviderMenu) buildAuthCol() []string {
 
 // ── Layout helpers ────────────────────────────────────────────────────────────
 
-// pmRow assembles three column cells into one display line.
+// pmRow assembles three column cells into one display line, with │ separators
+// between each column for a clean grid layout.
 func pmRow(col1, col2, col3 string) string {
-	return pmPad(col1, pmCol1W) + pmPad(col2, pmCol2W) + col3
+	sep := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrViolet)).
+		Background(lipgloss.Color(clrBg2)).
+		Render("│")
+	return pmPad(col1, pmCol1W) + sep + pmPad(col2, pmCol2W) + sep + col3
 }
 
 // pmPad pads s with background-colored spaces until its visible width equals toW.
