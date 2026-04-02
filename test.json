@@ -1,0 +1,121 @@
+{
+  "created_at": "2026-04-02T22:08:14.684280606+02:00",
+  "data": {
+    "caching": {
+      "layer": "",
+      "strategy": "",
+      "invalidation": ""
+    },
+    "governance": {}
+  },
+  "backend": {
+    "arch_pattern": "monolith",
+    "env": {
+      "compute_env": "",
+      "cloud_provider": "",
+      "orchestrator": ""
+    },
+    "auth": {
+      "strategy": "",
+      "provider": "",
+      "authz_model": "",
+      "token_storage": "",
+      "mfa": ""
+    },
+    "waf": {},
+    "language": "Go",
+    "framework": "Fiber"
+  },
+  "contracts": {
+    "versioning": {
+      "strategy": ""
+    }
+  },
+  "frontend": {
+    "tech": {
+      "language": "",
+      "platform": "",
+      "framework": "",
+      "package_manager": "",
+      "styling": ""
+    },
+    "theme": {
+      "dark_mode": "",
+      "border_radius": "",
+      "spacing": "",
+      "elevation": "",
+      "motion": ""
+    },
+    "navigation": {
+      "nav_type": "",
+      "breadcrumbs": false,
+      "auth_aware": false
+    },
+    "i18n": {},
+    "a11y_seo": {}
+  },
+  "infrastructure": {
+    "networking": {
+      "dns_provider": "",
+      "tls_ssl": "",
+      "reverse_proxy": "",
+      "cdn": ""
+    },
+    "cicd": {
+      "platform": "",
+      "container_registry": "",
+      "deploy_strategy": "",
+      "iac_tool": ""
+    },
+    "observability": {
+      "logging": "",
+      "metrics": "",
+      "tracing": "",
+      "error_tracking": "",
+      "health_checks": false,
+      "alerting": ""
+    },
+    "env_topology": {}
+  },
+  "cross_cutting": {
+    "testing": {
+      "unit": "",
+      "integration": "",
+      "e2e": "",
+      "api": "",
+      "load": "",
+      "contract": ""
+    },
+    "docs": {
+      "api_docs": "",
+      "auto_generate": false,
+      "changelog": ""
+    }
+  },
+  "realize": {
+    "app_name": "my-app",
+    "output_dir": ".",
+    "model": "claude-sonnet-4-6",
+    "concurrency": 4,
+    "verify": true,
+    "dry_run": false
+  },
+  "testing": {
+    "unit_coverage": "",
+    "integ_coverage": "",
+    "e2e_framework": "",
+    "e2e_coverage": ""
+  },
+  "cicd": {
+    "ci_platform": "",
+    "pipeline_gates": "",
+    "env_strategy": "",
+    "secrets_mgmt": ""
+  },
+  "telemetry": {
+    "log_solution": "",
+    "log_format": "",
+    "metrics": "",
+    "tracing": ""
+  }
+}

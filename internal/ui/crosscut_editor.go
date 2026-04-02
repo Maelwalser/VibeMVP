@@ -182,6 +182,23 @@ func (cc *CrossCutEditor) enableActiveTab() {
 	}
 }
 
+func (cc *CrossCutEditor) disableActiveTab() {
+	switch cc.activeTab {
+	case ccTabTesting:
+		cc.testingEnabled = false
+		cc.testingFields = defaultTestingFields()
+		cc.testFormIdx = 0
+	case ccTabDocs:
+		cc.docsEnabled = false
+		cc.docsFields = defaultDocsFields()
+		cc.docsFormIdx = 0
+	case ccTabStandards:
+		cc.standardsEnabled = false
+		cc.standardsFields = defaultStandardsFields()
+		cc.standardsFormIdx = 0
+	}
+}
+
 func newCrossCutEditor() CrossCutEditor {
 	return CrossCutEditor{
 		testingFields:   defaultTestingFields(),
@@ -281,7 +298,7 @@ func (cc CrossCutEditor) HintLine() string {
 	if !cc.activeTabEnabled() {
 		return hintBar("a", "configure", "h/l", "sub-tab")
 	}
-	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit text", "h/l", "sub-tab")
+	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit text", "h/l", "sub-tab")
 }
 
 // activeCCFieldPtr returns a pointer to the currently focused field.
@@ -419,6 +436,9 @@ func (cc CrossCutEditor) updateFields(key tea.KeyMsg) (CrossCutEditor, tea.Cmd) 
 					f.CyclePrev()
 				}
 			}
+		case "D":
+			cc.disableActiveTab()
+			return cc, nil
 		case "i", "a":
 			wantsInsert = true
 		}
