@@ -77,11 +77,31 @@ type A11ySEOConfig struct {
 	Telemetry         string `json:"telemetry,omitempty"`
 }
 
+// AssetUsage classifies whether an asset is used directly in the project or
+// only serves as design inspiration.
+type AssetUsage string
+
+const (
+	AssetUsageProject     AssetUsage = "project"
+	AssetUsageInspiration AssetUsage = "inspiration"
+)
+
+// AssetDef describes a single frontend asset entry.
+type AssetDef struct {
+	Name        string     `json:"name"`
+	Path        string     `json:"path"`
+	AssetType   string     `json:"asset_type"`          // image, icon, font, video, mockup, moodboard
+	Format      string     `json:"format"`              // png, jpg, svg, gif, mp4, pdf, figma, sketch, other
+	Usage       AssetUsage `json:"usage"`               // project | inspiration
+	Description string     `json:"description,omitempty"`
+}
+
 // FrontendPillar covers the full frontend configuration.
 type FrontendPillar struct {
 	Tech       FrontendTechConfig `json:"tech"`
 	Theme      FrontendTheme      `json:"theme"`
 	Pages      []PageDef          `json:"pages,omitempty"`
+	Assets     []AssetDef         `json:"assets,omitempty"`
 	Navigation NavigationConfig   `json:"navigation"`
 	I18n       I18nConfig         `json:"i18n,omitempty"`
 	A11ySEO    A11ySEOConfig      `json:"a11y_seo,omitempty"`

@@ -20,9 +20,10 @@ const (
 	feTabNav
 	feTabI18n
 	feTabA11ySEO
+	feTabAssets
 )
 
-var feTabLabels = []string{"TECHNOLOGIES", "THEMING", "PAGES", "NAVIGATION", "I18N", "A11Y/SEO"}
+var feTabLabels = []string{"TECHNOLOGIES", "THEMING", "PAGES", "NAVIGATION", "I18N", "A11Y/SEO", "ASSETS"}
 
 // ── mode ──────────────────────────────────────────────────────────────────────
 
@@ -354,6 +355,13 @@ type FrontendEditor struct {
 	a11yFormIdx int
 	a11yEnabled bool
 
+	// ASSETS
+	assets       []manifest.AssetDef
+	assetSubView ceSubView // ceViewList | ceViewForm
+	assetIdx     int
+	assetForm    []Field
+	assetFormIdx int
+
 	// Cross-editor data
 	availableAuthRoles []string // from BackendEditor auth roles
 
@@ -397,8 +405,11 @@ func (fe FrontendEditor) pageRoutes() []string {
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
+	assets := make([]manifest.AssetDef, len(fe.assets))
+	copy(assets, fe.assets)
 	p := manifest.FrontendPillar{
-		Pages: fe.pages,
+		Pages:  fe.pages,
+		Assets: assets,
 	}
 	if fe.techEnabled {
 		p.Tech = manifest.FrontendTechConfig{
@@ -513,6 +524,11 @@ func (fe FrontendEditor) HintLine() string {
 			return hintBar("j/k", "navigate", "a", "add page", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
 		}
 		return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
+	case feTabAssets:
+		if fe.assetSubView == ceViewList {
+			return hintBar("j/k", "navigate", "a", "add asset", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
+		}
+		return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
 	}
 	return ""
 }
@@ -554,6 +570,8 @@ func (fe FrontendEditor) Update(msg tea.Msg) (FrontendEditor, tea.Cmd) {
 		return fe.updateI18n(key)
 	case feTabA11ySEO:
 		return fe.updateA11ySEO(key)
+	case feTabAssets:
+		return fe.updateAssets(key)
 	}
 	return fe, nil
 }
@@ -622,6 +640,13 @@ func (fe *FrontendEditor) advanceField(delta int) {
 		if n > 0 {
 			fe.a11yFormIdx = (fe.a11yFormIdx + delta + n) % n
 		}
+	case feTabAssets:
+		if fe.assetSubView == ceViewForm {
+			n := len(fe.assetForm)
+			if n > 0 {
+				fe.assetFormIdx = (fe.assetFormIdx + delta + n) % n
+			}
+		}
 	}
 }
 
@@ -670,6 +695,13 @@ func (fe *FrontendEditor) saveInput() {
 				fe.a11yFields[fe.a11yFormIdx].Value = val
 			}
 		}
+	case feTabAssets:
+		if fe.assetSubView == ceViewForm && fe.assetFormIdx < len(fe.assetForm) {
+			k := fe.assetForm[fe.assetFormIdx].Kind
+			if k == KindText || k == KindTextArea {
+				fe.assetForm[fe.assetFormIdx].Value = val
+			}
+		}
 	}
 }
 
@@ -690,6 +722,10 @@ func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
 		n = len(fe.i18nFields)
 	case feTabA11ySEO:
 		n = len(fe.a11yFields)
+	case feTabAssets:
+		if fe.assetSubView == ceViewForm {
+			n = len(fe.assetForm)
+		}
 	}
 	for range n {
 		var f *Field
@@ -717,6 +753,10 @@ func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
 		case feTabA11ySEO:
 			if fe.a11yFormIdx < len(fe.a11yFields) {
 				f = &fe.a11yFields[fe.a11yFormIdx]
+			}
+		case feTabAssets:
+			if fe.assetSubView == ceViewForm && fe.assetFormIdx < len(fe.assetForm) {
+				f = &fe.assetForm[fe.assetFormIdx]
 			}
 		}
 		if f == nil {
@@ -1203,6 +1243,12 @@ func (fe FrontendEditor) View(w, h int) string {
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
+	case feTabAssets:
+		assetLines := fe.viewAssets(w)
+		if fe.assetSubView == ceViewList {
+			assetLines = appendViewport(assetLines, 2, fe.assetIdx, h-feHeaderH)
+		}
+		lines = append(lines, assetLines...)
 	}
 
 	return fillTildes(lines, h)
