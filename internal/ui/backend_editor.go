@@ -404,7 +404,15 @@ func defaultAPIGWFields() []Field {
 			Options: []string{"Path-based", "Header-based", "Domain-based"},
 			Value:   "Path-based",
 		},
-		{Key: "features", Label: "features      ", Kind: KindText},
+		{
+			Key: "features", Label: "features      ", Kind: KindMultiSelect,
+			Options: []string{
+				"Rate limiting", "JWT validation", "SSL termination",
+				"Load balancing", "Request caching", "Logging & tracing",
+				"Request transformation", "CORS handling",
+				"IP allowlist/blocklist", "Circuit breaking", "Health checks",
+			},
+		},
 	}
 }
 

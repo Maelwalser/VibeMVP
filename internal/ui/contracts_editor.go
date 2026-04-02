@@ -79,7 +79,13 @@ func defaultDTOFieldForm() []Field {
 			Key: "nullable", Label: "nullable      ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
 		},
-		{Key: "validation", Label: "validation    ", Kind: KindText},
+		{
+			Key: "validation", Label: "validation    ", Kind: KindMultiSelect,
+			Options: []string{
+				"required", "min_length", "max_length", "min_value", "max_value",
+				"email", "url", "regex", "uuid", "enum", "phone", "pattern", "custom",
+			},
+		},
 		{Key: "notes", Label: "notes         ", Kind: KindText},
 	}
 }
@@ -426,7 +432,7 @@ func (ce ContractsEditor) HintLine() string {
 		case ceViewSubList:
 			return hintBar("j/k", "navigate", "a", "add field", "d", "delete", "Enter", "edit", "b", "back")
 		case ceViewSubForm:
-			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
+			return hintBar("j/k", "navigate", "i", "edit text", "Enter/Space", "dropdown", "b/Esc", "back")
 		}
 	case contractsTabEndpoints:
 		switch ce.epSubView {
@@ -799,7 +805,7 @@ func (ce ContractsEditor) updateDTOList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 				if df.Nullable {
 					f = setFieldValue(f, "nullable", "true")
 				}
-				f = setFieldValue(f, "validation", df.Validation)
+				f = restoreMultiSelectValue(f, "validation", df.Validation)
 				f = setFieldValue(f, "notes", df.Notes)
 				ce.dtoFieldItems[i] = f
 			}
@@ -1011,9 +1017,13 @@ func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, t
 		}
 	case "enter", " ":
 		f := &ce.dtoFieldForm[ce.dtoFieldFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			ce.ddOpen = true
-			ce.ddOptIdx = f.SelIdx
+			if f.Kind == KindSelect {
+				ce.ddOptIdx = f.SelIdx
+			} else {
+				ce.ddOptIdx = f.DDCursor
+			}
 		} else {
 			return ce.tryEnterInsert()
 		}

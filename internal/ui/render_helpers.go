@@ -308,6 +308,32 @@ func setFieldValue(fields []Field, key, val string) []Field {
 	return fields
 }
 
+// restoreMultiSelectValue restores SelectedIdxs for a KindMultiSelect field from
+// a comma-separated value string (as produced by DisplayValue). Skips unknown tokens.
+func restoreMultiSelectValue(fields []Field, key, val string) []Field {
+	if val == "" {
+		return fields
+	}
+	for i := range fields {
+		if fields[i].Key != key || fields[i].Kind != KindMultiSelect {
+			continue
+		}
+		fields[i].SelectedIdxs = nil
+		for _, part := range strings.Split(val, ", ") {
+			part = strings.TrimSpace(part)
+			for j, opt := range fields[i].Options {
+				if opt == part {
+					fields[i].SelectedIdxs = append(fields[i].SelectedIdxs, j)
+					break
+				}
+			}
+		}
+		fields[i].Value = val
+		return fields
+	}
+	return fields
+}
+
 // parseVimCount converts a digit buffer (e.g. "3", "12") to an integer count.
 // Returns 1 when the buffer is empty. Caps at 999 for sanity.
 func parseVimCount(buf string) int {

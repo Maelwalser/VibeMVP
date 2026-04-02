@@ -167,13 +167,26 @@ func defaultAttrFields() []Field {
 			},
 			Value: "String",
 		},
-		{Key: "constraints", Label: "constraints   ", Kind: KindText},
+		{
+			Key: "constraints", Label: "constraints   ", Kind: KindMultiSelect,
+			Options: []string{
+				"required", "unique", "not_null", "min", "max",
+				"min_length", "max_length", "email", "url", "regex",
+				"positive", "future", "past", "enum",
+			},
+		},
 		{Key: "default", Label: "default       ", Kind: KindText},
 		{
 			Key: "sensitive", Label: "sensitive     ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
 		},
-		{Key: "validation", Label: "validation    ", Kind: KindText},
+		{
+			Key: "validation", Label: "validation    ", Kind: KindMultiSelect,
+			Options: []string{
+				"email", "url", "regex", "min_length", "max_length",
+				"min_value", "max_value", "phone", "uuid", "date_format", "enum", "custom",
+			},
+		},
 		{
 			Key: "indexed", Label: "indexed       ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
@@ -492,7 +505,7 @@ func (dt DataTabEditor) domainHintLine() string {
 	case domainViewAttrs:
 		return hintBar("j/k", "navigate", "a", "add attr", "d", "delete", "Enter", "edit", "b", "back")
 	case domainViewAttrForm:
-		return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
+		return hintBar("j/k", "navigate", "i", "edit text", "Enter/Space", "dropdown", "b/Esc", "back")
 	case domainViewRels:
 		return hintBar("j/k", "navigate", "a", "add rel", "d", "delete", "Enter", "edit", "b", "back")
 	case domainViewRelForm:
@@ -525,6 +538,10 @@ func (dt *DataTabEditor) activeDTFieldPtr() *Field {
 		case domainViewForm:
 			if dt.domainFormIdx < len(dt.domainForm) {
 				return &dt.domainForm[dt.domainFormIdx]
+			}
+		case domainViewAttrForm:
+			if dt.attrFormIdx < len(dt.attrForm) {
+				return &dt.attrForm[dt.attrFormIdx]
 			}
 		case domainViewRelForm:
 			if dt.relFormIdx < len(dt.relForm) {
@@ -873,12 +890,12 @@ func (dt DataTabEditor) updateDomainList(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 				f := defaultAttrFields()
 				f = setFieldValue(f, "name", attr.Name)
 				f = setFieldValue(f, "type", attr.Type)
-				f = setFieldValue(f, "constraints", attr.Constraints)
+				f = restoreMultiSelectValue(f, "constraints", attr.Constraints)
 				f = setFieldValue(f, "default", attr.Default)
 				if attr.Sensitive {
 					f = setFieldValue(f, "sensitive", "true")
 				}
-				f = setFieldValue(f, "validation", attr.Validation)
+				f = restoreMultiSelectValue(f, "validation", attr.Validation)
 				dt.attrItems[i] = f
 			}
 			// Rebuild rel items
@@ -1109,8 +1126,13 @@ func (dt DataTabEditor) updateAttrForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 		}
 	case "enter", " ":
 		f := &dt.attrForm[dt.attrFormIdx]
-		if f.Kind == KindSelect {
-			f.CycleNext()
+		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+			dt.ddOpen = true
+			if f.Kind == KindSelect {
+				dt.ddOptIdx = f.SelIdx
+			} else {
+				dt.ddOptIdx = f.DDCursor
+			}
 		} else {
 			return dt.tryEnterInsert()
 		}
@@ -1487,7 +1509,7 @@ func (dt DataTabEditor) viewDomains(w int) []string {
 			attrName = "(new attribute)"
 		}
 		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(attrName), "")
-		lines = append(lines, renderFormFields(w, dt.attrForm, dt.attrFormIdx, dt.internalMode == dtInsert, dt.formInput, false, 0)...)
+		lines = append(lines, renderFormFields(w, dt.attrForm, dt.attrFormIdx, dt.internalMode == dtInsert, dt.formInput, dt.ddOpen, dt.ddOptIdx)...)
 		return lines
 
 	case domainViewRels:
