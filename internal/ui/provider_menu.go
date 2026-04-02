@@ -1227,7 +1227,7 @@ func pmRow(col1, col2, col3 string) string {
 		Foreground(lipgloss.Color(clrViolet)).
 		Background(lipgloss.Color(clrBg2)).
 		Render("│")
-	return pmPad(col1, pmCol1W) + sep + pmPad(col2, pmCol2W) + sep + col3
+	return pmPad(col1, pmCol1W) + sep + pmPad(col2, pmCol2W) + sep + pmPad(col3, pmCol3W)
 }
 
 // pmPad pads s with background-colored spaces until its visible width equals toW.
