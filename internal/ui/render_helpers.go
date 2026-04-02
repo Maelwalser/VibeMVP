@@ -54,6 +54,10 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 			valStr = input.View()
 		case f.Kind == KindSelect:
 			val := f.DisplayValue()
+			// Reserve 2 chars for the " ▾/▴" arrow to prevent line wrapping.
+			if valW > 3 && len(val) > valW-2 {
+				val = val[:valW-3] + "…"
+			}
 			if isCur {
 				val = StyleFieldValActive.Render(val)
 			} else {
@@ -68,6 +72,10 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 			val := f.DisplayValue()
 			if val == "" {
 				val = "(none)"
+			}
+			// Reserve 2 chars for the " ▾/▴" arrow to prevent line wrapping.
+			if valW > 3 && len(val) > valW-2 {
+				val = val[:valW-3] + "…"
 			}
 			if isCur {
 				val = StyleFieldValActive.Render(val)
