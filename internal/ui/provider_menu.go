@@ -20,7 +20,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/vibe-mvp/internal/manifest"
+	"github.com/vibe-menu/internal/manifest"
 )
 
 // pmFocus tracks which column owns keyboard input.
@@ -351,7 +351,7 @@ type oauthProviderConfig struct {
 const geminiDefaultClientID = "681255809395-oo8t2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
 
 // resolveOAuthConfig returns the OAuth 2.0 endpoints for provider.
-// clientIDOverride is used first; if empty the VIBEMVP_*_CLIENT_ID env var is
+// clientIDOverride is used first; if empty the VIBEMENU_*_CLIENT_ID env var is
 // tried; for Gemini the bundled default client ID is used as final fallback.
 // Returns an error only if the provider is unknown.
 func resolveOAuthConfig(provider, clientIDOverride string) (oauthProviderConfig, error) {
@@ -359,7 +359,7 @@ func resolveOAuthConfig(provider, clientIDOverride string) (oauthProviderConfig,
 	case "Gemini":
 		clientID := clientIDOverride
 		if clientID == "" {
-			clientID = os.Getenv("VIBEMVP_GOOGLE_CLIENT_ID")
+			clientID = os.Getenv("VIBEMENU_GOOGLE_CLIENT_ID")
 		}
 		if clientID == "" {
 			clientID = geminiDefaultClientID
@@ -373,7 +373,7 @@ func resolveOAuthConfig(provider, clientIDOverride string) (oauthProviderConfig,
 	case "ChatGPT":
 		clientID := clientIDOverride
 		if clientID == "" {
-			clientID = os.Getenv("VIBEMVP_OPENAI_CLIENT_ID")
+			clientID = os.Getenv("VIBEMENU_OPENAI_CLIENT_ID")
 		}
 		return oauthProviderConfig{
 			authURL:  "https://auth.openai.com/authorize",

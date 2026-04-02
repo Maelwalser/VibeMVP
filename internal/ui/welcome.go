@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/vibe-mvp/internal/manifest"
+	"github.com/vibe-menu/internal/manifest"
 )
 
 type welcomePhase int
@@ -158,7 +158,7 @@ func (w WelcomeModel) View() string {
 
 	var b strings.Builder
 
-	logo := StyleNeonCyan.Bold(true).Render("vibeMVP")
+	logo := StyleNeonCyan.Bold(true).Render("VibeMenu")
 	subtitle := StyleHelpDesc.Render("declarative system architecture")
 	b.WriteString(lipgloss.NewStyle().Width(boxWidth - 4).Align(lipgloss.Center).Render(logo))
 	b.WriteString("\n")

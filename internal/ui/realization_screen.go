@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/vibe-mvp/internal/manifest"
-	"github.com/vibe-mvp/internal/realize/orchestrator"
+	"github.com/vibe-menu/internal/manifest"
+	"github.com/vibe-menu/internal/realize/orchestrator"
 )
 
 // spinnerFrames is a braille dot animation.
@@ -139,7 +139,7 @@ func (s RealizationScreen) Start(manifestPath string, mf *manifest.Manifest) (Re
 		cfg := orchestrator.Config{
 			ManifestPath: manifestPath,
 			OutputDir:    opts.OutputDir,
-			SkillsDir:    ".vibemvp/skills",
+			SkillsDir:    ".vibemenu/skills",
 			MaxRetries:   3,
 			Parallelism:  opts.Concurrency,
 			DryRun:       opts.DryRun,

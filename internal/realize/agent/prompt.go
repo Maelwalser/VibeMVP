@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vibe-mvp/internal/realize/dag"
-	"github.com/vibe-mvp/internal/realize/skills"
+	"github.com/vibe-menu/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/skills"
 )
 
 // SystemPrompt builds the stable system prompt for a task kind.

@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/vibe-mvp/internal/realize/dag"
-	"github.com/vibe-mvp/internal/realize/memory"
-	"github.com/vibe-mvp/internal/realize/skills"
+	"github.com/vibe-menu/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/memory"
+	"github.com/vibe-menu/internal/realize/skills"
 )
 
 // Context bundles everything an agent needs for one task invocation.

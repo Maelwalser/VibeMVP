@@ -1,6 +1,6 @@
 package skills
 
-import "github.com/vibe-mvp/internal/realize/dag"
+import "github.com/vibe-menu/internal/realize/dag"
 
 // Doc is a skill markdown document loaded from the skills directory.
 type Doc struct {
