@@ -1,8 +1,8 @@
-# vibeMVP — Project Description & Engineering Standards
+# VibeMenu — Project Description & Engineering Standards
 
 ## 1. Project Overview
 
-**vibeMVP** is an interactive Terminal User Interface (TUI) CLI tool for declaratively specifying a complete software system architecture. It implements a vim-inspired editor that lets developers and architects define comprehensive system manifests across 6 architectural pillars — backend, data, contracts, frontend, infrastructure, and cross-cutting concerns.
+**VibeMenu** is an interactive Terminal User Interface (TUI) CLI tool for declaratively specifying a complete software system architecture. It implements a vim-inspired editor that lets developers and architects define comprehensive system manifests across 6 architectural pillars — backend, data, contracts, frontend, infrastructure, and cross-cutting concerns.
 
 The resulting manifest is serialized to `manifest.json` and intended for downstream consumption by code-generation agents or tooling.
 
@@ -34,7 +34,7 @@ The resulting manifest is serialized to `manifest.json` and intended for downstr
 ## 3. Project Structure
 
 ```
-vibeMVP/
+VibeMenu/
 ├── cmd/
 │   ├── agent/
 │   │   └── main.go              # TUI entry point — sets up save callback, runs Bubble Tea program
@@ -267,7 +267,7 @@ Tasks follow a naming convention derived from manifest entries:
 
 ### 6.3 Skills System
 
-Skills are markdown files in `.vibemvp/skills/` (configurable via `--skills`). Each file defines a named generation skill. The `skills.Loader` reads them at startup; the `skills.Registry` makes them available to the agent prompt builder.
+Skills are markdown files in `.vibemenu/skills/` (configurable via `--skills`). Each file defines a named generation skill. The `skills.Loader` reads them at startup; the `skills.Registry` makes them available to the agent prompt builder.
 
 ### 6.4 Verifiers
 
@@ -286,7 +286,7 @@ After each agent call, a language-appropriate verifier checks the output:
 ```
 --manifest  path to manifest.json      (default: manifest.json)
 --output    output directory            (default: output)
---skills    skills directory            (default: .vibemvp/skills)
+--skills    skills directory            (default: .vibemenu/skills)
 --retries   max retry attempts per task (default: 3)
 --parallel  max concurrent tasks        (default: 1)
 --dry-run   print task plan, no agents

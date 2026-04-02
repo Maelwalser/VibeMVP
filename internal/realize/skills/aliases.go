@@ -1,6 +1,6 @@
 package skills
 
-import "github.com/vibe-mvp/internal/realize/dag"
+import "github.com/vibe-menu/internal/realize/dag"
 
 // aliasMap normalizes manifest technology strings to skill file base names.
 // Add new technology aliases here without touching loader.go.

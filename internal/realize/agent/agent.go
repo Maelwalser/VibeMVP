@@ -8,7 +8,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/dag"
 )
 
 // Result is what a task agent returns after one invocation.

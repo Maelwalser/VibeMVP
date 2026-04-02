@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/dag"
 )
 
 // Result describes the outcome of running verification checks on generated files.

@@ -1,6 +1,6 @@
 package dag
 
-import "github.com/vibe-mvp/internal/manifest"
+import "github.com/vibe-menu/internal/manifest"
 
 // TaskPayload is the scoped manifest slice fed to the agent for one task.
 // Only the fields relevant to the task's Kind are populated — others are nil/zero.

@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibe-mvp/internal/realize/agent"
-	"github.com/vibe-mvp/internal/realize/dag"
-	"github.com/vibe-mvp/internal/realize/memory"
-	"github.com/vibe-mvp/internal/realize/output"
-	"github.com/vibe-mvp/internal/realize/skills"
-	"github.com/vibe-mvp/internal/realize/state"
-	"github.com/vibe-mvp/internal/realize/verify"
+	"github.com/vibe-menu/internal/realize/agent"
+	"github.com/vibe-menu/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/memory"
+	"github.com/vibe-menu/internal/realize/output"
+	"github.com/vibe-menu/internal/realize/skills"
+	"github.com/vibe-menu/internal/realize/state"
+	"github.com/vibe-menu/internal/realize/verify"
 )
 
 // TaskRunner handles one task's agent invocation + verification retry loop.

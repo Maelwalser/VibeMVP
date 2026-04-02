@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-"github.com/vibe-mvp/internal/realize/orchestrator"
+"github.com/vibe-menu/internal/realize/orchestrator"
 )
 
 func main() {
 	manifestPath := flag.String("manifest", "manifest.json", "path to manifest.json")
 	outputDir    := flag.String("output",   "output",        "directory for generated code")
-	skillsDir    := flag.String("skills",   ".vibemvp/skills", "directory for skill markdown files")
+	skillsDir    := flag.String("skills",   ".vibemenu/skills", "directory for skill markdown files")
 	maxRetries   := flag.Int("retries", 3, "max verification retry attempts per task")
 	parallelism  := flag.Int("parallel", 0, "max concurrent tasks (0 = num CPUs)")
 	dryRun       := flag.Bool("dry-run", false, "print task plan without running agents")

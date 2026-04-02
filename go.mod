@@ -1,4 +1,4 @@
-module github.com/vibe-mvp
+module github.com/vibe-menu
 
 go 1.26.1
 
