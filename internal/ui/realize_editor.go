@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -214,6 +215,36 @@ func (r RealizeEditor) ToManifestRealizeOptions() manifest.RealizeOptions {
 		DryRun:        fieldGet(r.fields, "dry_run") == "true",
 		SectionModels: sectionModels,
 	}
+}
+
+// FromRealizeOptions populates the editor from saved manifest RealizeOptions,
+// reversing the ToManifestRealizeOptions() operation.
+func (r RealizeEditor) FromRealizeOptions(ro manifest.RealizeOptions) RealizeEditor {
+	r.fields = setFieldValue(r.fields, "app_name", ro.AppName)
+	r.fields = setFieldValue(r.fields, "output_dir", ro.OutputDir)
+	r.fields = setFieldValue(r.fields, "model", ro.Model)
+	switch ro.Concurrency {
+	case 1, 2, 4, 8:
+		r.fields = setFieldValue(r.fields, "concurrency", fmt.Sprintf("%d", ro.Concurrency))
+	}
+	boolStr := func(b bool) string {
+		if b {
+			return "true"
+		}
+		return "false"
+	}
+	r.fields = setFieldValue(r.fields, "verify", boolStr(ro.Verify))
+	r.fields = setFieldValue(r.fields, "dry_run", boolStr(ro.DryRun))
+
+	sectionKeys := []string{"backend_model", "data_model", "contracts_model", "frontend_model", "infra_model", "crosscut_model"}
+	sectionIDs := []string{"backend", "data", "contracts", "frontend", "infra", "crosscut"}
+	for i, sectionID := range sectionIDs {
+		if val, ok := ro.SectionModels[sectionID]; ok && val != "" {
+			r.fields = setFieldValue(r.fields, sectionKeys[i], val)
+		}
+	}
+
+	return r
 }
 
 // ── Mode / HintLine ───────────────────────────────────────────────────────────

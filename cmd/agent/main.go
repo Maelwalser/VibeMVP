@@ -9,14 +9,30 @@ import (
 	"github.com/vibe-mvp/internal/ui"
 )
 
-const manifestPath = "manifest.json"
-
 func main() {
+	// Determine manifest path: CLI arg > default.
+	manifestPath := "manifest.json"
+	if len(os.Args) > 1 {
+		manifestPath = os.Args[1]
+	}
+
 	saveFunc := func(m *manifest.Manifest) error {
 		return m.Save(manifestPath)
 	}
 
 	model := ui.NewModel(saveFunc)
+
+	// Auto-load if the manifest file already exists on disk.
+	if _, err := os.Stat(manifestPath); err == nil {
+		loaded, loadErr := model.LoadManifestIntoModel(manifestPath)
+		if loadErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load %s: %v\n", manifestPath, loadErr)
+		} else {
+			loaded.SetFilePath(manifestPath)
+			model = loaded
+		}
+	}
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
