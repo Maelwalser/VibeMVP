@@ -774,44 +774,68 @@ func (dt *DataTabEditor) saveInput() {
 }
 
 func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
-	var f *Field
+	n := 0
 	switch dt.activeTab {
 	case dataTabDomains:
 		switch dt.domainSubView {
 		case domainViewForm:
-			if dt.domainFormIdx < len(dt.domainForm) {
-				f = &dt.domainForm[dt.domainFormIdx]
-			}
+			n = len(dt.domainForm)
 		case domainViewAttrForm:
-			if dt.attrFormIdx < len(dt.attrForm) {
-				f = &dt.attrForm[dt.attrFormIdx]
-			}
+			n = len(dt.attrForm)
 		case domainViewRelForm:
-			if dt.relFormIdx < len(dt.relForm) {
-				f = &dt.relForm[dt.relFormIdx]
-			}
+			n = len(dt.relForm)
 		}
 	case dataTabCaching:
-		if dt.cachingFormIdx < len(dt.cachingFields) {
-			f = &dt.cachingFields[dt.cachingFormIdx]
-		}
+		n = len(dt.cachingFields)
 	case dataTabFileStorage:
-		if dt.fsFormIdx < len(dt.fsForm) {
-			f = &dt.fsForm[dt.fsFormIdx]
-		}
+		n = len(dt.fsForm)
 	case dataTabGovernance:
-		if dt.govFormIdx < len(dt.governanceFields) {
-			f = &dt.governanceFields[dt.govFormIdx]
+		n = len(dt.governanceFields)
+	}
+	for range n {
+		var f *Field
+		switch dt.activeTab {
+		case dataTabDomains:
+			switch dt.domainSubView {
+			case domainViewForm:
+				if dt.domainFormIdx < len(dt.domainForm) {
+					f = &dt.domainForm[dt.domainFormIdx]
+				}
+			case domainViewAttrForm:
+				if dt.attrFormIdx < len(dt.attrForm) {
+					f = &dt.attrForm[dt.attrFormIdx]
+				}
+			case domainViewRelForm:
+				if dt.relFormIdx < len(dt.relForm) {
+					f = &dt.relForm[dt.relFormIdx]
+				}
+			}
+		case dataTabCaching:
+			if dt.cachingFormIdx < len(dt.cachingFields) {
+				f = &dt.cachingFields[dt.cachingFormIdx]
+			}
+		case dataTabFileStorage:
+			if dt.fsFormIdx < len(dt.fsForm) {
+				f = &dt.fsForm[dt.fsFormIdx]
+			}
+		case dataTabGovernance:
+			if dt.govFormIdx < len(dt.governanceFields) {
+				f = &dt.governanceFields[dt.govFormIdx]
+			}
 		}
+		if f == nil {
+			break
+		}
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			dt.internalMode = dtInsert
+			dt.formInput.SetValue(f.Value)
+			dt.formInput.Width = dt.width - 22
+			dt.formInput.CursorEnd()
+			return dt, dt.formInput.Focus()
+		}
+		dt.advanceFormField(1)
 	}
-	if f == nil || f.Kind != KindText {
-		return dt, nil
-	}
-	dt.internalMode = dtInsert
-	dt.formInput.SetValue(f.Value)
-	dt.formInput.Width = dt.width - 22
-	dt.formInput.CursorEnd()
-	return dt, dt.formInput.Focus()
+	return dt, nil
 }
 
 // ── Domain update ─────────────────────────────────────────────────────────────

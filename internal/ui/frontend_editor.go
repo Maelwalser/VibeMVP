@@ -674,41 +674,64 @@ func (fe *FrontendEditor) saveInput() {
 }
 
 func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
-	var f *Field
+	n := 0
 	switch fe.activeTab {
 	case feTabTech:
-		if fe.techFormIdx < len(fe.techFields) {
-			f = &fe.techFields[fe.techFormIdx]
-		}
+		n = len(fe.techFields)
 	case feTabTheme:
-		if fe.themeFormIdx < len(fe.themeFields) {
-			f = &fe.themeFields[fe.themeFormIdx]
-		}
+		n = len(fe.themeFields)
 	case feTabPages:
-		if fe.pageSubView == ceViewForm && fe.pageFormIdx < len(fe.pageForm) {
-			f = &fe.pageForm[fe.pageFormIdx]
+		if fe.pageSubView == ceViewForm {
+			n = len(fe.pageForm)
 		}
 	case feTabNav:
-		if fe.navFormIdx < len(fe.navFields) {
-			f = &fe.navFields[fe.navFormIdx]
-		}
+		n = len(fe.navFields)
 	case feTabI18n:
-		if fe.i18nFormIdx < len(fe.i18nFields) {
-			f = &fe.i18nFields[fe.i18nFormIdx]
-		}
+		n = len(fe.i18nFields)
 	case feTabA11ySEO:
-		if fe.a11yFormIdx < len(fe.a11yFields) {
-			f = &fe.a11yFields[fe.a11yFormIdx]
+		n = len(fe.a11yFields)
+	}
+	for range n {
+		var f *Field
+		switch fe.activeTab {
+		case feTabTech:
+			if fe.techFormIdx < len(fe.techFields) {
+				f = &fe.techFields[fe.techFormIdx]
+			}
+		case feTabTheme:
+			if fe.themeFormIdx < len(fe.themeFields) {
+				f = &fe.themeFields[fe.themeFormIdx]
+			}
+		case feTabPages:
+			if fe.pageSubView == ceViewForm && fe.pageFormIdx < len(fe.pageForm) {
+				f = &fe.pageForm[fe.pageFormIdx]
+			}
+		case feTabNav:
+			if fe.navFormIdx < len(fe.navFields) {
+				f = &fe.navFields[fe.navFormIdx]
+			}
+		case feTabI18n:
+			if fe.i18nFormIdx < len(fe.i18nFields) {
+				f = &fe.i18nFields[fe.i18nFormIdx]
+			}
+		case feTabA11ySEO:
+			if fe.a11yFormIdx < len(fe.a11yFields) {
+				f = &fe.a11yFields[fe.a11yFormIdx]
+			}
 		}
+		if f == nil {
+			break
+		}
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			fe.internalMode = feInsert
+			fe.formInput.SetValue(f.Value)
+			fe.formInput.Width = fe.width - 22
+			fe.formInput.CursorEnd()
+			return fe, fe.formInput.Focus()
+		}
+		fe.advanceField(1)
 	}
-	if f == nil || (f.Kind != KindText && f.Kind != KindTextArea) {
-		return fe, nil
-	}
-	fe.internalMode = feInsert
-	fe.formInput.SetValue(f.Value)
-	fe.formInput.Width = fe.width - 22
-	fe.formInput.CursorEnd()
-	return fe, fe.formInput.Focus()
+	return fe, nil
 }
 
 func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {

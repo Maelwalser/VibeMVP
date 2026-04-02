@@ -554,33 +554,50 @@ func (ie *InfraEditor) saveInput() {
 }
 
 func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {
-	var f *Field
+	n := 0
 	switch ie.activeTab {
 	case infraTabNetworking:
-		if ie.netFormIdx < len(ie.networkingFields) {
-			f = &ie.networkingFields[ie.netFormIdx]
-		}
+		n = len(ie.networkingFields)
 	case infraTabCICD:
-		if ie.cicdFormIdx < len(ie.cicdFields) {
-			f = &ie.cicdFields[ie.cicdFormIdx]
-		}
+		n = len(ie.cicdFields)
 	case infraTabObservability:
-		if ie.obsFormIdx < len(ie.obsFields) {
-			f = &ie.obsFields[ie.obsFormIdx]
-		}
+		n = len(ie.obsFields)
 	case infraTabEnvironments:
-		if ie.envTopoFormIdx < len(ie.envTopoFields) {
-			f = &ie.envTopoFields[ie.envTopoFormIdx]
+		n = len(ie.envTopoFields)
+	}
+	for range n {
+		var f *Field
+		switch ie.activeTab {
+		case infraTabNetworking:
+			if ie.netFormIdx < len(ie.networkingFields) {
+				f = &ie.networkingFields[ie.netFormIdx]
+			}
+		case infraTabCICD:
+			if ie.cicdFormIdx < len(ie.cicdFields) {
+				f = &ie.cicdFields[ie.cicdFormIdx]
+			}
+		case infraTabObservability:
+			if ie.obsFormIdx < len(ie.obsFields) {
+				f = &ie.obsFields[ie.obsFormIdx]
+			}
+		case infraTabEnvironments:
+			if ie.envTopoFormIdx < len(ie.envTopoFields) {
+				f = &ie.envTopoFields[ie.envTopoFormIdx]
+			}
 		}
+		if f == nil {
+			break
+		}
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			ie.internalMode = infraInsert
+			ie.formInput.SetValue(f.Value)
+			ie.formInput.Width = ie.width - 22
+			ie.formInput.CursorEnd()
+			return ie, ie.formInput.Focus()
+		}
+		ie.advanceField(1)
 	}
-	if f == nil || f.Kind != KindText {
-		return ie, nil
-	}
-	ie.internalMode = infraInsert
-	ie.formInput.SetValue(f.Value)
-	ie.formInput.Width = ie.width - 22
-	ie.formInput.CursorEnd()
-	return ie, ie.formInput.Focus()
+	return ie, nil
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────

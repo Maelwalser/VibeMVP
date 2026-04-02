@@ -1,5 +1,37 @@
 package ui
 
+// nextEditableIdx returns the index of the next KindText or KindTextArea field
+// after `from` in `fields`, wrapping around. Returns -1 if no such field exists.
+func nextEditableIdx(fields []Field, from int) int {
+	n := len(fields)
+	if n == 0 {
+		return -1
+	}
+	for i := 1; i <= n; i++ {
+		idx := (from + i) % n
+		if fields[idx].Kind == KindText || fields[idx].Kind == KindTextArea {
+			return idx
+		}
+	}
+	return -1
+}
+
+// prevEditableIdx returns the index of the previous KindText or KindTextArea field
+// before `from` in `fields`, wrapping around. Returns -1 if no such field exists.
+func prevEditableIdx(fields []Field, from int) int {
+	n := len(fields)
+	if n == 0 {
+		return -1
+	}
+	for i := 1; i <= n; i++ {
+		idx := (from - i + n) % n
+		if fields[idx].Kind == KindText || fields[idx].Kind == KindTextArea {
+			return idx
+		}
+	}
+	return -1
+}
+
 // NavigateTab advances or retreats the active tab index based on a key string.
 // Returns the new tab index clamped to [0, maxTabs-1].
 // Handles "h", "left" (decrement) and "l", "right" (increment).
