@@ -145,13 +145,18 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 
 // renderSubTabBar renders a horizontal sub-tab bar scaled to fit within w columns.
 // Three levels of fidelity:
-//  1. Full labels — all tabs with their text labels.
-//  2. Compact — active tab keeps its label; others shrink to their 1-based index.
+//  1. Full labels — all tabs with their text labels, expanded to fill w.
+//  2. Compact — active tab keeps its label; others shrink to their 1-based index, expanded to fill w.
 //  3. Minimal — "[N/total] LABEL" single-item indicator.
 func renderSubTabBar(labels []string, active, w int) string {
 	sep := StyleTabSep.Render("│")
+	n := len(labels)
+	const margin = 2 // leading "  " prefix
 
-	build := func(lbls []string) string {
+	// build renders lbls as a tab bar. If the natural width fits within w,
+	// extra space is distributed evenly among tabs so the bar fills the full width.
+	// Returns (rendered, fits).
+	build := func(lbls []string) (string, bool) {
 		var parts []string
 		for i, lbl := range lbls {
 			if i == active {
@@ -160,17 +165,40 @@ func renderSubTabBar(labels []string, active, w int) string {
 				parts = append(parts, StyleTabInactive.Render(" "+lbl+" "))
 			}
 		}
-		return "  " + strings.Join(parts, sep)
+		naturalW := margin + lipgloss.Width(strings.Join(parts, sep))
+		if w > 0 && naturalW > w {
+			return "", false
+		}
+		if w <= 0 || naturalW >= w {
+			return strings.Repeat(" ", margin) + strings.Join(parts, sep), true
+		}
+		// Distribute extra space inside each tab's right padding.
+		extra := w - naturalW
+		perTab := extra / n
+		rem := extra % n
+		var expanded []string
+		for i, lbl := range lbls {
+			pad := perTab
+			if i < rem {
+				pad++
+			}
+			padded := " " + lbl + strings.Repeat(" ", 1+pad)
+			if i == active {
+				expanded = append(expanded, StyleTabActive.Render(padded))
+			} else {
+				expanded = append(expanded, StyleTabInactive.Render(padded))
+			}
+		}
+		return strings.Repeat(" ", margin) + strings.Join(expanded, sep), true
 	}
 
 	// Level 1: full labels.
-	result := build(labels)
-	if w <= 0 || lipgloss.Width(result) <= w {
+	if result, ok := build(labels); ok {
 		return result
 	}
 
 	// Level 2: active tab shows label, others collapse to index number.
-	compact := make([]string, len(labels))
+	compact := make([]string, n)
 	for i := range labels {
 		if i == active {
 			compact[i] = labels[i]
@@ -178,13 +206,12 @@ func renderSubTabBar(labels []string, active, w int) string {
 			compact[i] = fmt.Sprintf("%d", i+1)
 		}
 	}
-	result = build(compact)
-	if lipgloss.Width(result) <= w {
+	if result, ok := build(compact); ok {
 		return result
 	}
 
 	// Level 3: single "[N/total] LABEL" indicator — always fits.
-	pos := fmt.Sprintf("[%d/%d]", active+1, len(labels))
+	pos := fmt.Sprintf("[%d/%d]", active+1, n)
 	lbl := labels[active]
 	maxLblW := w - lipgloss.Width("  "+pos+" ") - 4
 	if maxLblW > 0 && len([]rune(lbl)) > maxLblW {

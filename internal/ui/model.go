@@ -674,8 +674,13 @@ func (m Model) renderFieldList(w, h int, sec Section) string {
 
 func (m Model) renderTabBar(w int) string {
 	sep := StyleTabSep.Render("│")
+	sepW := lipgloss.Width(sep)
+	n := len(m.sections)
 
-	buildTabs := func(labels []string) string {
+	// buildTabs renders labels as tabs. If the natural width fits within w,
+	// it distributes any extra space evenly among the tabs so the bar fills
+	// the full terminal width. Returns (rendered, fits).
+	buildTabs := func(labels []string) (string, bool) {
 		var parts []string
 		for i, lbl := range labels {
 			if i == m.activeSection {
@@ -684,24 +689,45 @@ func (m Model) renderTabBar(w int) string {
 				parts = append(parts, StyleTabInactive.Render(" "+lbl+" "))
 			}
 		}
-		tabs := strings.Join(parts, sep)
-		if rw := lipgloss.Width(tabs); rw < w {
-			tabs += StyleTabBar.Render(strings.Repeat(" ", w-rw))
+		naturalW := lipgloss.Width(strings.Join(parts, sep))
+		if naturalW > w {
+			return "", false
 		}
-		return tabs
+		extra := w - naturalW
+		if extra == 0 {
+			return strings.Join(parts, sep), true
+		}
+		// Distribute extra space: add padding inside each tab's right side.
+		perTab := extra / n
+		rem := extra % n
+		_ = sepW
+		var expanded []string
+		for i, lbl := range labels {
+			pad := perTab
+			if i < rem {
+				pad++
+			}
+			padded := " " + lbl + strings.Repeat(" ", 1+pad)
+			if i == m.activeSection {
+				expanded = append(expanded, StyleTabActive.Render(padded))
+			} else {
+				expanded = append(expanded, StyleTabInactive.Render(padded))
+			}
+		}
+		return strings.Join(expanded, sep), true
 	}
 
-	// Level 1: full Abbr.
-	fullLabels := make([]string, len(m.sections))
+	// Level 1: full Abbr labels.
+	fullLabels := make([]string, n)
 	for i, s := range m.sections {
 		fullLabels[i] = s.Abbr
 	}
-	if tabs := buildTabs(fullLabels); lipgloss.Width(tabs) <= w {
+	if tabs, ok := buildTabs(fullLabels); ok {
 		return tabs
 	}
 
-	// Level 2: icon only (first field of Abbr, e.g. "⚡").
-	iconLabels := make([]string, len(m.sections))
+	// Level 2: icon only (first word of Abbr, e.g. "⚡").
+	iconLabels := make([]string, n)
 	for i, s := range m.sections {
 		parts := strings.Fields(s.Abbr)
 		if len(parts) > 0 {
@@ -710,16 +736,17 @@ func (m Model) renderTabBar(w int) string {
 			iconLabels[i] = fmt.Sprintf("%d", i+1)
 		}
 	}
-	if tabs := buildTabs(iconLabels); lipgloss.Width(tabs) <= w {
+	if tabs, ok := buildTabs(iconLabels); ok {
 		return tabs
 	}
 
 	// Level 3: bare index numbers.
-	numLabels := make([]string, len(m.sections))
+	numLabels := make([]string, n)
 	for i := range m.sections {
 		numLabels[i] = fmt.Sprintf("%d", i+1)
 	}
-	return buildTabs(numLabels)
+	tabs, _ := buildTabs(numLabels)
+	return tabs
 }
 
 
