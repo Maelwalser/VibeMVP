@@ -347,6 +347,9 @@ func (cc CrossCutEditor) updateCCDropdown(key tea.KeyMsg) (CrossCutEditor, tea.C
 			f.Value = f.Options[cc.ddOptIdx]
 		}
 		cc.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return cc.tryEnterInsert()
+		}
 	case "esc", "b":
 		cc.ddOpen = false
 	}
@@ -509,16 +512,16 @@ func (cc *CrossCutEditor) saveInput() {
 	val := cc.formInput.Value()
 	switch cc.activeTab {
 	case ccTabTesting:
-		if cc.testFormIdx < len(cc.testingFields) && cc.testingFields[cc.testFormIdx].Kind == KindText {
-			cc.testingFields[cc.testFormIdx].Value = val
+		if cc.testFormIdx < len(cc.testingFields) && cc.testingFields[cc.testFormIdx].CanEditAsText() {
+			cc.testingFields[cc.testFormIdx].SaveTextInput(val)
 		}
 	case ccTabDocs:
-		if cc.docsFormIdx < len(cc.docsFields) && cc.docsFields[cc.docsFormIdx].Kind == KindText {
-			cc.docsFields[cc.docsFormIdx].Value = val
+		if cc.docsFormIdx < len(cc.docsFields) && cc.docsFields[cc.docsFormIdx].CanEditAsText() {
+			cc.docsFields[cc.docsFormIdx].SaveTextInput(val)
 		}
 	case ccTabStandards:
-		if cc.standardsFormIdx < len(cc.standardsFields) && cc.standardsFields[cc.standardsFormIdx].Kind == KindText {
-			cc.standardsFields[cc.standardsFormIdx].Value = val
+		if cc.standardsFormIdx < len(cc.standardsFields) && cc.standardsFields[cc.standardsFormIdx].CanEditAsText() {
+			cc.standardsFields[cc.standardsFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -552,9 +555,9 @@ func (cc CrossCutEditor) tryEnterInsert() (CrossCutEditor, tea.Cmd) {
 		if f == nil {
 			break
 		}
-		if f.Kind == KindText || f.Kind == KindTextArea {
+		if f.CanEditAsText() {
 			cc.internalMode = ccInsert
-			cc.formInput.SetValue(f.Value)
+			cc.formInput.SetValue(f.TextInputValue())
 			cc.formInput.Width = cc.width - 22
 			cc.formInput.CursorEnd()
 			return cc, cc.formInput.Focus()

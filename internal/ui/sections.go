@@ -23,6 +23,54 @@ type Field struct {
 	SelIdx       int      // KindSelect: currently selected index
 	SelectedIdxs []int    // KindMultiSelect: indices of selected options
 	DDCursor     int      // KindMultiSelect: dropdown cursor position
+	CustomText   string   // KindSelect: free-text value when "Custom"/"Other" is selected
+}
+
+// isCustomOption returns true for sentinel options that allow free-text entry.
+func isCustomOption(opt string) bool {
+	lower := strings.ToLower(opt)
+	return lower == "custom" || lower == "other"
+}
+
+// CanEditAsText returns true when the field supports free-text entry in its current state.
+// This is true for KindText, KindTextArea, and KindSelect when the active option is
+// "Custom" or "Other".
+func (f Field) CanEditAsText() bool {
+	if f.Kind == KindText || f.Kind == KindTextArea {
+		return true
+	}
+	if f.Kind == KindSelect && len(f.Options) > 0 {
+		return isCustomOption(f.Options[f.SelIdx])
+	}
+	return false
+}
+
+// TextInputValue returns the value to pre-populate a text input with when editing this field.
+func (f Field) TextInputValue() string {
+	if f.Kind == KindSelect && len(f.Options) > 0 && isCustomOption(f.Options[f.SelIdx]) {
+		return f.CustomText
+	}
+	return f.Value
+}
+
+// SaveTextInput saves the typed text back into the appropriate storage slot.
+func (f *Field) SaveTextInput(val string) {
+	if f.Kind == KindSelect && len(f.Options) > 0 && isCustomOption(f.Options[f.SelIdx]) {
+		f.CustomText = val
+		return
+	}
+	f.Value = val
+}
+
+// PrepareCustomEntry clears CustomText so the text input starts blank when the
+// user selects a "Custom"/"Other" option from a dropdown.
+// Returns true when the field is now in custom-entry state (caller should enter insert mode).
+func (f *Field) PrepareCustomEntry() bool {
+	if f.Kind == KindSelect && len(f.Options) > 0 && isCustomOption(f.Options[f.SelIdx]) {
+		f.CustomText = ""
+		return true
+	}
+	return false
 }
 
 // DisplayValue returns the rendered value string for NORMAL mode.
@@ -31,7 +79,11 @@ func (f Field) DisplayValue() string {
 		if len(f.Options) == 0 {
 			return ""
 		}
-		return f.Options[f.SelIdx]
+		opt := f.Options[f.SelIdx]
+		if isCustomOption(opt) && f.CustomText != "" {
+			return f.CustomText
+		}
+		return opt
 	}
 	if f.Kind == KindMultiSelect {
 		if len(f.SelectedIdxs) == 0 {

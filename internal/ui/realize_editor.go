@@ -341,6 +341,9 @@ func (r RealizeEditor) updateDropdown(key tea.KeyMsg) (RealizeEditor, tea.Cmd) {
 			f.Value = f.Options[r.ddOptIdx]
 		}
 		r.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return r.tryEnterInsert()
+		}
 	case "esc", "b":
 		r.ddOpen = false
 	}
@@ -376,15 +379,15 @@ func (r RealizeEditor) updateInsert(msg tea.Msg) (RealizeEditor, tea.Cmd) {
 }
 
 func (r *RealizeEditor) saveInput() {
-	if r.activeIdx < len(r.fields) && r.fields[r.activeIdx].Kind == KindText {
-		r.fields[r.activeIdx].Value = r.formInput.Value()
+	if r.activeIdx < len(r.fields) && r.fields[r.activeIdx].CanEditAsText() {
+		r.fields[r.activeIdx].SaveTextInput(r.formInput.Value())
 	}
 }
 
 func (r RealizeEditor) tryEnterInsert() (RealizeEditor, tea.Cmd) {
-	if r.activeIdx < len(r.fields) && r.fields[r.activeIdx].Kind == KindText {
+	if r.activeIdx < len(r.fields) && r.fields[r.activeIdx].CanEditAsText() {
 		r.mode = realizeInsert
-		r.formInput.SetValue(r.fields[r.activeIdx].Value)
+		r.formInput.SetValue(r.fields[r.activeIdx].TextInputValue())
 		r.formInput.Width = r.width - 22
 		r.formInput.CursorEnd()
 		return r, r.formInput.Focus()

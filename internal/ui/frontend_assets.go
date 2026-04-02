@@ -129,7 +129,7 @@ func (fe FrontendEditor) updateAssetForm(key tea.KeyMsg) (FrontendEditor, tea.Cm
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if fe.assetForm[fe.assetFormIdx].Kind == KindText {
+		if fe.assetForm[fe.assetFormIdx].CanEditAsText() {
 			return fe.tryEnterInsert()
 		}
 	case "b", "esc":
@@ -160,6 +160,9 @@ func (fe FrontendEditor) updateAssetFormDropdown(key tea.KeyMsg) (FrontendEditor
 			f.Value = f.Options[fe.ddOptIdx]
 		}
 		fe.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return fe.tryEnterInsert()
+		}
 	case "esc", "b":
 		fe.ddOpen = false
 	}

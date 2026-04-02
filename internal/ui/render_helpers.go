@@ -50,7 +50,7 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 
 		var valStr string
 		switch {
-		case insertMode && isCur && f.Kind == KindText:
+		case insertMode && isCur && f.CanEditAsText():
 			valStr = input.View()
 		case f.Kind == KindSelect:
 			val := f.DisplayValue()
@@ -111,8 +111,9 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 		}
 		lines = append(lines, row)
 
-		// Inject scrollable dropdown options below the active select/multiselect field
-		if isCur && ddOpen && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+		// Inject scrollable dropdown options below the active select/multiselect field.
+		// Skip dropdown when in insert mode for a custom-option field (text input is active).
+		if isCur && ddOpen && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && !(insertMode && f.CanEditAsText()) {
 			indent := strings.Repeat(" ", ddIndent)
 			for j, opt := range f.Options {
 				isHL := j == ddOptIdx
@@ -297,6 +298,8 @@ func fieldGetMulti(fields []Field, key string) string {
 
 // setFieldValue sets the value (and SelIdx for select fields) for the field
 // with the given key in a slice, returning the modified slice.
+// For KindSelect fields where val is not found in Options: if a "Custom" or "Other"
+// option exists it is selected and val is stored in CustomText (round-trip support).
 func setFieldValue(fields []Field, key, val string) []Field {
 	for i := range fields {
 		if fields[i].Key != key {
@@ -304,10 +307,22 @@ func setFieldValue(fields []Field, key, val string) []Field {
 		}
 		fields[i].Value = val
 		if fields[i].Kind == KindSelect {
+			matched := false
 			for j, opt := range fields[i].Options {
 				if opt == val {
 					fields[i].SelIdx = j
+					matched = true
 					break
+				}
+			}
+			// Value not in options — try to use a Custom/Other sentinel option.
+			if !matched && val != "" {
+				for j, opt := range fields[i].Options {
+					if isCustomOption(opt) {
+						fields[i].SelIdx = j
+						fields[i].CustomText = val
+						break
+					}
 				}
 			}
 		}

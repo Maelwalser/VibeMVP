@@ -616,6 +616,9 @@ func (ie InfraEditor) updateInfraDropdown(key tea.KeyMsg) (InfraEditor, tea.Cmd)
 			f.Value = f.Options[ie.ddOptIdx]
 		}
 		ie.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return ie.tryEnterInsert()
+		}
 	case "esc", "b":
 		ie.ddOpen = false
 	}
@@ -675,20 +678,20 @@ func (ie *InfraEditor) saveInput() {
 	val := ie.formInput.Value()
 	switch ie.activeTab {
 	case infraTabNetworking:
-		if ie.netFormIdx < len(ie.networkingFields) && ie.networkingFields[ie.netFormIdx].Kind == KindText {
-			ie.networkingFields[ie.netFormIdx].Value = val
+		if ie.netFormIdx < len(ie.networkingFields) && ie.networkingFields[ie.netFormIdx].CanEditAsText() {
+			ie.networkingFields[ie.netFormIdx].SaveTextInput(val)
 		}
 	case infraTabCICD:
-		if ie.cicdFormIdx < len(ie.cicdFields) && ie.cicdFields[ie.cicdFormIdx].Kind == KindText {
-			ie.cicdFields[ie.cicdFormIdx].Value = val
+		if ie.cicdFormIdx < len(ie.cicdFields) && ie.cicdFields[ie.cicdFormIdx].CanEditAsText() {
+			ie.cicdFields[ie.cicdFormIdx].SaveTextInput(val)
 		}
 	case infraTabObservability:
-		if ie.obsFormIdx < len(ie.obsFields) && ie.obsFields[ie.obsFormIdx].Kind == KindText {
-			ie.obsFields[ie.obsFormIdx].Value = val
+		if ie.obsFormIdx < len(ie.obsFields) && ie.obsFields[ie.obsFormIdx].CanEditAsText() {
+			ie.obsFields[ie.obsFormIdx].SaveTextInput(val)
 		}
 	case infraTabEnvironments:
-		if ie.envTopoFormIdx < len(ie.envTopoFields) && ie.envTopoFields[ie.envTopoFormIdx].Kind == KindText {
-			ie.envTopoFields[ie.envTopoFormIdx].Value = val
+		if ie.envTopoFormIdx < len(ie.envTopoFields) && ie.envTopoFields[ie.envTopoFormIdx].CanEditAsText() {
+			ie.envTopoFields[ie.envTopoFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -728,9 +731,9 @@ func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {
 		if f == nil {
 			break
 		}
-		if f.Kind == KindText || f.Kind == KindTextArea {
+		if f.CanEditAsText() {
 			ie.internalMode = infraInsert
-			ie.formInput.SetValue(f.Value)
+			ie.formInput.SetValue(f.TextInputValue())
 			ie.formInput.Width = ie.width - 22
 			ie.formInput.CursorEnd()
 			return ie, ie.formInput.Focus()

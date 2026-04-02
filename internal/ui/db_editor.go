@@ -47,15 +47,23 @@ func defaultDBForm() []Field {
 		{Key: "is_cache", Label: "is_cache      ", Kind: KindSelect,
 			Options: []string{"no", "yes"}, Value: "no",
 		},
-		// Type-specific fields (conditionally shown)
+		// Security / network integrity (conditionally shown by type)
 		{Key: "ssl_mode", Label: "  ssl_mode    ", Kind: KindSelect,
 			Options: []string{"require", "disable", "verify-ca", "verify-full"},
 			Value:   "require",
 		},
 		{Key: "consistency", Label: "  consistency ", Kind: KindSelect,
-			Options: []string{"LOCAL_QUORUM", "ONE", "QUORUM", "ALL", "LOCAL_ONE"},
-			Value:   "LOCAL_QUORUM",
+			Options: []string{"strong", "eventual", "LOCAL_QUORUM", "ONE", "QUORUM", "ALL", "LOCAL_ONE"},
+			Value:   "strong",
 		},
+		// Availability topology (conditionally shown by type)
+		{Key: "replication", Label: "  replication ", Kind: KindSelect,
+			Options: []string{"single-node", "primary-replica", "multi-region"},
+			Value:   "single-node",
+		},
+		// Connection pooling
+		{Key: "pool_min", Label: "  pool_min    ", Kind: KindText},
+		{Key: "pool_max", Label: "  pool_max    ", Kind: KindText},
 		{Key: "notes", Label: "notes         ", Kind: KindText},
 	}
 }
@@ -72,9 +80,17 @@ func isDBFormFieldDisabled(form []Field, idx int) bool {
 	}
 	switch key {
 	case "ssl_mode":
+		// Only relational databases support explicit SSL mode configuration
 		return dbType != "PostgreSQL" && dbType != "MySQL"
 	case "consistency":
-		return dbType != "Cassandra"
+		// Distributed DBs with tunable consistency
+		return dbType != "Cassandra" && dbType != "MongoDB" && dbType != "DynamoDB"
+	case "replication":
+		// Cache stores and SQLite don't have meaningful replication topology options
+		return dbType == "Redis" || dbType == "Memcached" || dbType == "SQLite"
+	case "pool_min", "pool_max":
+		// Connection pooling doesn't apply to cache stores
+		return dbType == "Redis" || dbType == "Memcached"
 	}
 	return false
 }
@@ -125,6 +141,15 @@ func dbFormFromSource(src manifest.DBSourceDef) []Field {
 	if src.IsCache {
 		setVal("is_cache", "yes")
 	}
+	setVal("ssl_mode", src.SSLMode)
+	setVal("consistency", src.Consistency)
+	setVal("replication", src.Replication)
+	if src.PoolMinSize > 0 {
+		setVal("pool_min", fmt.Sprintf("%d", src.PoolMinSize))
+	}
+	if src.PoolMaxSize > 0 {
+		setVal("pool_max", fmt.Sprintf("%d", src.PoolMaxSize))
+	}
 	setVal("notes", src.Notes)
 	return f
 }
@@ -138,13 +163,27 @@ func dbFormToSource(form []Field) manifest.DBSourceDef {
 		}
 		return ""
 	}
+	getInt := func(key string) int {
+		v := get(key)
+		if v == "" {
+			return 0
+		}
+		n := 0
+		fmt.Sscanf(v, "%d", &n)
+		return n
+	}
 	src := manifest.DBSourceDef{
-		Alias:     get("alias"),
-		Type:      manifest.DatabaseType(get("type")),
-		Version:   get("version"),
-		Namespace: get("namespace"),
-		IsCache:   get("is_cache") == "yes",
-		Notes:     get("notes"),
+		Alias:       get("alias"),
+		Type:        manifest.DatabaseType(get("type")),
+		Version:     get("version"),
+		Namespace:   get("namespace"),
+		IsCache:     get("is_cache") == "yes",
+		SSLMode:     get("ssl_mode"),
+		Consistency: get("consistency"),
+		Replication: get("replication"),
+		PoolMinSize: getInt("pool_min"),
+		PoolMaxSize: getInt("pool_max"),
+		Notes:       get("notes"),
 	}
 	return src
 }
@@ -248,40 +287,40 @@ func (db DBEditor) updateInsert(msg tea.Msg) (DBEditor, tea.Cmd) {
 	if ok {
 		switch key.String() {
 		case "esc":
-			db.dbForm[db.formIdx].Value = db.formInput.Value()
+			db.dbForm[db.formIdx].SaveTextInput(db.formInput.Value())
 			db.internalMode = dbeNormal
 			db.formInput.Blur()
 			return db, nil
 
 		case "tab":
-			db.dbForm[db.formIdx].Value = db.formInput.Value()
+			db.dbForm[db.formIdx].SaveTextInput(db.formInput.Value())
 			if next := nextEditableIdx(db.dbForm, db.formIdx); next >= 0 {
 				db.formIdx = next
 			} else {
 				db.formIdx = nextDBFormIdx(db.dbForm, db.formIdx)
 			}
 			f := db.dbForm[db.formIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				db.formInput.Blur()
 				return db, nil
 			}
-			db.formInput.SetValue(f.Value)
+			db.formInput.SetValue(f.TextInputValue())
 			db.formInput.CursorEnd()
 			return db, db.formInput.Focus()
 
 		case "shift+tab":
-			db.dbForm[db.formIdx].Value = db.formInput.Value()
+			db.dbForm[db.formIdx].SaveTextInput(db.formInput.Value())
 			if prev := prevEditableIdx(db.dbForm, db.formIdx); prev >= 0 {
 				db.formIdx = prev
 			} else {
 				db.formIdx = prevDBFormIdx(db.dbForm, db.formIdx)
 			}
 			f := db.dbForm[db.formIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				db.formInput.Blur()
 				return db, nil
 			}
-			db.formInput.SetValue(f.Value)
+			db.formInput.SetValue(f.TextInputValue())
 			db.formInput.CursorEnd()
 			return db, db.formInput.Focus()
 		}
@@ -377,7 +416,7 @@ func (db DBEditor) updateNormalForm(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if db.dbForm[db.formIdx].Kind == KindText {
+		if db.dbForm[db.formIdx].CanEditAsText() {
 			return db.enterDBFormInsert()
 		}
 	case "b", "esc":
@@ -408,6 +447,9 @@ func (db DBEditor) updateDBDropdown(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 			f.Value = f.Options[db.ddOptIdx]
 		}
 		db.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return db.enterDBFormInsert()
+		}
 	case "esc", "b":
 		db.ddOpen = false
 	}
@@ -416,11 +458,11 @@ func (db DBEditor) updateDBDropdown(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 
 func (db DBEditor) enterDBFormInsert() (DBEditor, tea.Cmd) {
 	f := db.dbForm[db.formIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return db, nil
 	}
 	db.internalMode = dbeInsert
-	db.formInput.SetValue(f.Value)
+	db.formInput.SetValue(f.TextInputValue())
 	db.formInput.Width = db.width - 22
 	db.formInput.CursorEnd()
 	return db, db.formInput.Focus()

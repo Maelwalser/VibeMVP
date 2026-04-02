@@ -635,6 +635,9 @@ func (dt DataTabEditor) updateDropdown(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 			f.SelIdx = dt.ddOptIdx
 			f.Value = f.Options[dt.ddOptIdx]
 			dt.ddOpen = false
+			if f.PrepareCustomEntry() {
+				return dt.tryEnterInsert()
+			}
 		}
 	case "enter":
 		if f.Kind == KindMultiSelect {
@@ -644,6 +647,9 @@ func (dt DataTabEditor) updateDropdown(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 			f.Value = f.Options[dt.ddOptIdx]
 		}
 		dt.ddOpen = false
+		if f.Kind == KindSelect && f.PrepareCustomEntry() {
+			return dt.tryEnterInsert()
+		}
 	case "esc", "b":
 		if f.Kind == KindMultiSelect {
 			f.DDCursor = dt.ddOptIdx
@@ -788,29 +794,29 @@ func (dt *DataTabEditor) saveInput() {
 	case dataTabDomains:
 		switch dt.domainSubView {
 		case domainViewForm:
-			if dt.domainFormIdx < len(dt.domainForm) && dt.domainForm[dt.domainFormIdx].Kind == KindText {
-				dt.domainForm[dt.domainFormIdx].Value = val
+			if dt.domainFormIdx < len(dt.domainForm) && dt.domainForm[dt.domainFormIdx].CanEditAsText() {
+				dt.domainForm[dt.domainFormIdx].SaveTextInput(val)
 			}
 		case domainViewAttrForm:
-			if dt.attrFormIdx < len(dt.attrForm) && dt.attrForm[dt.attrFormIdx].Kind == KindText {
-				dt.attrForm[dt.attrFormIdx].Value = val
+			if dt.attrFormIdx < len(dt.attrForm) && dt.attrForm[dt.attrFormIdx].CanEditAsText() {
+				dt.attrForm[dt.attrFormIdx].SaveTextInput(val)
 			}
 		case domainViewRelForm:
-			if dt.relFormIdx < len(dt.relForm) && dt.relForm[dt.relFormIdx].Kind == KindText {
-				dt.relForm[dt.relFormIdx].Value = val
+			if dt.relFormIdx < len(dt.relForm) && dt.relForm[dt.relFormIdx].CanEditAsText() {
+				dt.relForm[dt.relFormIdx].SaveTextInput(val)
 			}
 		}
 	case dataTabCaching:
-		if dt.cachingFormIdx < len(dt.cachingFields) && dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
-			dt.cachingFields[dt.cachingFormIdx].Value = val
+		if dt.cachingFormIdx < len(dt.cachingFields) && dt.cachingFields[dt.cachingFormIdx].CanEditAsText() {
+			dt.cachingFields[dt.cachingFormIdx].SaveTextInput(val)
 		}
 	case dataTabFileStorage:
-		if dt.fsFormIdx < len(dt.fsForm) && dt.fsForm[dt.fsFormIdx].Kind == KindText {
-			dt.fsForm[dt.fsFormIdx].Value = val
+		if dt.fsFormIdx < len(dt.fsForm) && dt.fsForm[dt.fsFormIdx].CanEditAsText() {
+			dt.fsForm[dt.fsFormIdx].SaveTextInput(val)
 		}
 	case dataTabGovernance:
-		if dt.govFormIdx < len(dt.governanceFields) && dt.governanceFields[dt.govFormIdx].Kind == KindText {
-			dt.governanceFields[dt.govFormIdx].Value = val
+		if dt.govFormIdx < len(dt.governanceFields) && dt.governanceFields[dt.govFormIdx].CanEditAsText() {
+			dt.governanceFields[dt.govFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -868,9 +874,9 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 		if f == nil {
 			break
 		}
-		if f.Kind == KindText || f.Kind == KindTextArea {
+		if f.CanEditAsText() {
 			dt.internalMode = dtInsert
-			dt.formInput.SetValue(f.Value)
+			dt.formInput.SetValue(f.TextInputValue())
 			dt.formInput.Width = dt.width - 22
 			dt.formInput.CursorEnd()
 			return dt, dt.formInput.Focus()
@@ -1014,7 +1020,7 @@ func (dt DataTabEditor) updateDomainForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if dt.domainForm[dt.domainFormIdx].Kind == KindText {
+		if dt.domainForm[dt.domainFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	case "A":
@@ -1208,7 +1214,7 @@ func (dt DataTabEditor) updateAttrForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if dt.attrForm[dt.attrFormIdx].Kind == KindText {
+		if dt.attrForm[dt.attrFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	case "b", "esc":
@@ -1285,7 +1291,7 @@ func (dt DataTabEditor) updateRelForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if dt.relForm[dt.relFormIdx].Kind == KindText {
+		if dt.relForm[dt.relFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	case "b", "esc":
@@ -1340,7 +1346,7 @@ func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		dt.cachingFields = defaultCachingFields()
 		dt.cachingFormIdx = 0
 	case "i", "a":
-		if dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
+		if dt.cachingFields[dt.cachingFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	}
@@ -1388,7 +1394,7 @@ func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 		dt.governanceFields = defaultGovernanceFields()
 		dt.govFormIdx = 0
 	case "i", "a":
-		if dt.governanceFields[dt.govFormIdx].Kind == KindText {
+		if dt.governanceFields[dt.govFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	}
@@ -1469,7 +1475,7 @@ func (dt DataTabEditor) updateFSForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if dt.fsForm[dt.fsFormIdx].Kind == KindText {
+		if dt.fsForm[dt.fsFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
 	case "b", "esc":

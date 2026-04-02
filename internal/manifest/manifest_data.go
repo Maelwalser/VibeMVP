@@ -9,7 +9,19 @@ type DBSourceDef struct {
 	Version   string       `json:"version,omitempty"`
 	Namespace string       `json:"namespace,omitempty"`
 	IsCache   bool         `json:"is_cache"`
-	Notes     string       `json:"notes,omitempty"`
+
+	// Security / network integrity
+	SSLMode     string `json:"ssl_mode,omitempty"`     // disable | require | verify-ca | verify-full
+	Consistency string `json:"consistency,omitempty"` // strong | eventual | LOCAL_QUORUM | ONE | QUORUM | ALL | LOCAL_ONE
+
+	// Connection pooling
+	PoolMinSize int `json:"pool_min_size,omitempty"`
+	PoolMaxSize int `json:"pool_max_size,omitempty"`
+
+	// Availability topology
+	Replication string `json:"replication,omitempty"` // single-node | primary-replica | multi-region
+
+	Notes string `json:"notes,omitempty"`
 }
 
 // ── Column / Entity definitions ───────────────────────────────────────────────

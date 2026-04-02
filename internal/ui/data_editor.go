@@ -525,34 +525,34 @@ func (de DataEditor) updateInsertColForm(msg tea.Msg) (DataEditor, tea.Cmd) {
 	if ok {
 		switch key.String() {
 		case "esc":
-			de.colForm[de.colFormIdx].Value = de.formInput.Value()
+			de.colForm[de.colFormIdx].SaveTextInput(de.formInput.Value())
 			de.internalMode = deNormal
 			de.formInput.Blur()
 			return de, nil
 
 		case "tab":
-			de.colForm[de.colFormIdx].Value = de.formInput.Value()
+			de.colForm[de.colFormIdx].SaveTextInput(de.formInput.Value())
 			de.colFormIdx = nextColFormIdx(de.colForm, de.colFormIdx)
 			f := de.colForm[de.colFormIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				de.internalMode = deNormal
 				de.formInput.Blur()
 				return de, nil
 			}
-			de.formInput.SetValue(f.Value)
+			de.formInput.SetValue(f.TextInputValue())
 			de.formInput.CursorEnd()
 			return de, de.formInput.Focus()
 
 		case "shift+tab":
-			de.colForm[de.colFormIdx].Value = de.formInput.Value()
+			de.colForm[de.colFormIdx].SaveTextInput(de.formInput.Value())
 			de.colFormIdx = prevColFormIdx(de.colForm, de.colFormIdx)
 			f := de.colForm[de.colFormIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				de.internalMode = deNormal
 				de.formInput.Blur()
 				return de, nil
 			}
-			de.formInput.SetValue(f.Value)
+			de.formInput.SetValue(f.TextInputValue())
 			de.formInput.CursorEnd()
 			return de, de.formInput.Focus()
 		}
@@ -567,34 +567,34 @@ func (de DataEditor) updateInsertEntForm(msg tea.Msg) (DataEditor, tea.Cmd) {
 	if ok {
 		switch key.String() {
 		case "esc":
-			de.entForm[de.entFormIdx].Value = de.formInput.Value()
+			de.entForm[de.entFormIdx].SaveTextInput(de.formInput.Value())
 			de.internalMode = deNormal
 			de.formInput.Blur()
 			return de, nil
 
 		case "tab":
-			de.entForm[de.entFormIdx].Value = de.formInput.Value()
+			de.entForm[de.entFormIdx].SaveTextInput(de.formInput.Value())
 			de.entFormIdx = nextEntFormIdx(de.entForm, de.entFormIdx)
 			f := de.entForm[de.entFormIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				de.internalMode = deNormal
 				de.formInput.Blur()
 				return de, nil
 			}
-			de.formInput.SetValue(f.Value)
+			de.formInput.SetValue(f.TextInputValue())
 			de.formInput.CursorEnd()
 			return de, de.formInput.Focus()
 
 		case "shift+tab":
-			de.entForm[de.entFormIdx].Value = de.formInput.Value()
+			de.entForm[de.entFormIdx].SaveTextInput(de.formInput.Value())
 			de.entFormIdx = prevEntFormIdx(de.entForm, de.entFormIdx)
 			f := de.entForm[de.entFormIdx]
-			if f.Kind == KindSelect {
+			if !f.CanEditAsText() {
 				de.internalMode = deNormal
 				de.formInput.Blur()
 				return de, nil
 			}
-			de.formInput.SetValue(f.Value)
+			de.formInput.SetValue(f.TextInputValue())
 			de.formInput.CursorEnd()
 			return de, de.formInput.Focus()
 		}
@@ -696,7 +696,7 @@ func (de DataEditor) updateNormalEntitySettings(key tea.KeyMsg) (DataEditor, tea
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if de.entForm[de.entFormIdx].Kind == KindText {
+		if de.entForm[de.entFormIdx].CanEditAsText() {
 			return de.enterEntFormInsert()
 		}
 	case "c": // go to columns
@@ -712,11 +712,11 @@ func (de DataEditor) updateNormalEntitySettings(key tea.KeyMsg) (DataEditor, tea
 
 func (de DataEditor) enterEntFormInsert() (DataEditor, tea.Cmd) {
 	f := de.entForm[de.entFormIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return de, nil
 	}
 	de.internalMode = deInsert
-	de.formInput.SetValue(f.Value)
+	de.formInput.SetValue(f.TextInputValue())
 	de.formInput.Width = de.width - 22
 	de.formInput.CursorEnd()
 	return de, de.formInput.Focus()
@@ -804,7 +804,7 @@ func (de DataEditor) updateNormalColForm(key tea.KeyMsg) (DataEditor, tea.Cmd) {
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if de.colForm[de.colFormIdx].Kind == KindText {
+		if de.colForm[de.colFormIdx].CanEditAsText() {
 			return de.enterFormInsert()
 		}
 	case "b", "esc":
@@ -835,6 +835,9 @@ func (de DataEditor) updateEntFormDropdown(key tea.KeyMsg) (DataEditor, tea.Cmd)
 			f.Value = f.Options[de.ddOptIdx]
 		}
 		de.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return de.enterEntFormInsert()
+		}
 	case "esc", "b":
 		de.ddOpen = false
 	}
@@ -862,6 +865,9 @@ func (de DataEditor) updateColFormDropdown(key tea.KeyMsg) (DataEditor, tea.Cmd)
 			f.Value = f.Options[de.ddOptIdx]
 		}
 		de.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return de.enterFormInsert()
+		}
 	case "esc", "b":
 		de.ddOpen = false
 	}
@@ -882,11 +888,11 @@ func (de *DataEditor) saveColFormBack() {
 
 func (de DataEditor) enterFormInsert() (DataEditor, tea.Cmd) {
 	f := de.colForm[de.colFormIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return de, nil
 	}
 	de.internalMode = deInsert
-	de.formInput.SetValue(f.Value)
+	de.formInput.SetValue(f.TextInputValue())
 	de.formInput.Width = de.width - 22
 	de.formInput.CursorEnd()
 	return de, de.formInput.Focus()

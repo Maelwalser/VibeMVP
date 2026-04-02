@@ -736,53 +736,32 @@ func (fe *FrontendEditor) saveInput() {
 	val := fe.formInput.Value()
 	switch fe.activeTab {
 	case feTabTech:
-		if fe.techFormIdx < len(fe.techFields) {
-			k := fe.techFields[fe.techFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.techFields[fe.techFormIdx].Value = val
-			}
+		if fe.techFormIdx < len(fe.techFields) && fe.techFields[fe.techFormIdx].CanEditAsText() {
+			fe.techFields[fe.techFormIdx].SaveTextInput(val)
 		}
 	case feTabTheme:
-		if fe.themeFormIdx < len(fe.themeFields) {
-			k := fe.themeFields[fe.themeFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.themeFields[fe.themeFormIdx].Value = val
-			}
+		if fe.themeFormIdx < len(fe.themeFields) && fe.themeFields[fe.themeFormIdx].CanEditAsText() {
+			fe.themeFields[fe.themeFormIdx].SaveTextInput(val)
 		}
 	case feTabPages:
-		if fe.pageSubView == ceViewForm && fe.pageFormIdx < len(fe.pageForm) {
-			k := fe.pageForm[fe.pageFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.pageForm[fe.pageFormIdx].Value = val
-			}
+		if fe.pageSubView == ceViewForm && fe.pageFormIdx < len(fe.pageForm) && fe.pageForm[fe.pageFormIdx].CanEditAsText() {
+			fe.pageForm[fe.pageFormIdx].SaveTextInput(val)
 		}
 	case feTabNav:
-		if fe.navFormIdx < len(fe.navFields) {
-			k := fe.navFields[fe.navFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.navFields[fe.navFormIdx].Value = val
-			}
+		if fe.navFormIdx < len(fe.navFields) && fe.navFields[fe.navFormIdx].CanEditAsText() {
+			fe.navFields[fe.navFormIdx].SaveTextInput(val)
 		}
 	case feTabI18n:
-		if fe.i18nFormIdx < len(fe.i18nFields) {
-			k := fe.i18nFields[fe.i18nFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.i18nFields[fe.i18nFormIdx].Value = val
-			}
+		if fe.i18nFormIdx < len(fe.i18nFields) && fe.i18nFields[fe.i18nFormIdx].CanEditAsText() {
+			fe.i18nFields[fe.i18nFormIdx].SaveTextInput(val)
 		}
 	case feTabA11ySEO:
-		if fe.a11yFormIdx < len(fe.a11yFields) {
-			k := fe.a11yFields[fe.a11yFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.a11yFields[fe.a11yFormIdx].Value = val
-			}
+		if fe.a11yFormIdx < len(fe.a11yFields) && fe.a11yFields[fe.a11yFormIdx].CanEditAsText() {
+			fe.a11yFields[fe.a11yFormIdx].SaveTextInput(val)
 		}
 	case feTabAssets:
-		if fe.assetSubView == ceViewForm && fe.assetFormIdx < len(fe.assetForm) {
-			k := fe.assetForm[fe.assetFormIdx].Kind
-			if k == KindText || k == KindTextArea {
-				fe.assetForm[fe.assetFormIdx].Value = val
-			}
+		if fe.assetSubView == ceViewForm && fe.assetFormIdx < len(fe.assetForm) && fe.assetForm[fe.assetFormIdx].CanEditAsText() {
+			fe.assetForm[fe.assetFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -844,9 +823,9 @@ func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
 		if f == nil {
 			break
 		}
-		if f.Kind == KindText || f.Kind == KindTextArea {
+		if f.CanEditAsText() {
 			fe.internalMode = feInsert
-			fe.formInput.SetValue(f.Value)
+			fe.formInput.SetValue(f.TextInputValue())
 			fe.formInput.Width = fe.width - 22
 			fe.formInput.CursorEnd()
 			return fe, fe.formInput.Focus()
@@ -925,6 +904,9 @@ func (fe FrontendEditor) updateTechDropdown(key tea.KeyMsg) (FrontendEditor, tea
 		fe.ddOpen = false
 		if f.Key == "language" {
 			fe.updateFEFrameworkOptions()
+		}
+		if f.PrepareCustomEntry() {
+			return fe.tryEnterInsert()
 		}
 	case "esc", "b":
 		fe.ddOpen = false
@@ -1012,6 +994,9 @@ func (fe FrontendEditor) updateThemeDropdown(key tea.KeyMsg) (FrontendEditor, te
 			f.Value = f.Options[fe.ddOptIdx]
 		}
 		fe.ddOpen = false
+		if f.PrepareCustomEntry() {
+			return fe.tryEnterInsert()
+		}
 	case "esc", "b":
 		fe.ddOpen = false
 	}
@@ -1144,7 +1129,7 @@ func (fe FrontendEditor) updatePageForm(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if fe.pageForm[fe.pageFormIdx].Kind == KindText {
+		if fe.pageForm[fe.pageFormIdx].CanEditAsText() {
 			return fe.tryEnterInsert()
 		}
 	case "b", "esc":
@@ -1179,6 +1164,9 @@ func (fe FrontendEditor) updatePageFormDropdown(key tea.KeyMsg) (FrontendEditor,
 				f.Value = f.Options[fe.ddOptIdx]
 			}
 			fe.ddOpen = false
+			if f.PrepareCustomEntry() {
+				return fe.tryEnterInsert()
+			}
 		}
 	case "enter":
 		if f.Kind == KindMultiSelect {
@@ -1190,6 +1178,9 @@ func (fe FrontendEditor) updatePageFormDropdown(key tea.KeyMsg) (FrontendEditor,
 			}
 		}
 		fe.ddOpen = false
+		if f.Kind == KindSelect && f.PrepareCustomEntry() {
+			return fe.tryEnterInsert()
+		}
 	case "esc", "b":
 		if f.Kind == KindMultiSelect {
 			f.DDCursor = fe.ddOptIdx

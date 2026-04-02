@@ -1158,15 +1158,21 @@ func (be BackendEditor) updateDropdown(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 			// Toggle the current option
 			be.toggleMultiSelectOption()
 		} else {
-			be.applyDropdown()
+			custom := be.applyDropdown()
 			be.ddOpen = false
+			if custom {
+				return be.tryEnterInsert()
+			}
 		}
 	case "enter":
 		if isMulti {
 			be.toggleMultiSelectOption()
 		} else {
-			be.applyDropdown()
+			custom := be.applyDropdown()
 			be.ddOpen = false
+			if custom {
+				return be.tryEnterInsert()
+			}
 		}
 	case "esc", "ctrl+c":
 		if isMulti {
@@ -1276,53 +1282,48 @@ func (be BackendEditor) dropdownOptions() []string {
 }
 
 // applyDropdown writes ddOptIdx back to the active KindSelect field.
-func (be *BackendEditor) applyDropdown() {
+// applyDropdown applies the highlighted dropdown option to the active field.
+// Returns true if the selected option is "Custom"/"Other" (caller should enter insert mode).
+func (be *BackendEditor) applyDropdown() bool {
+	applyTo := func(f *Field) bool {
+		if f == nil || f.Kind != KindSelect || be.ddOptIdx >= len(f.Options) {
+			return false
+		}
+		f.SelIdx = be.ddOptIdx
+		f.Value = f.Options[be.ddOptIdx]
+		return f.PrepareCustomEntry()
+	}
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
 		if ed.formIdx < len(ed.form) {
 			f := &ed.form[ed.formIdx]
-			if f.Kind == KindSelect && be.ddOptIdx < len(f.Options) {
-				f.SelIdx = be.ddOptIdx
-				f.Value = f.Options[be.ddOptIdx]
-				if f.Key == "language" {
-					be.updateServiceFrameworkOptions(ed)
-				}
+			custom := applyTo(f)
+			if f.Key == "language" {
+				be.updateServiceFrameworkOptions(ed)
 			}
-			// KindMultiSelect handled via toggleMultiSelectOption
+			return custom
 		}
-		return
+		return false
 	}
 	if be.commEditor.itemView == beListViewForm {
 		ed := &be.commEditor
 		if ed.formIdx < len(ed.form) {
-			f := &ed.form[ed.formIdx]
-			if f.Kind == KindSelect && be.ddOptIdx < len(f.Options) {
-				f.SelIdx = be.ddOptIdx
-				f.Value = f.Options[be.ddOptIdx]
-			}
+			return applyTo(&ed.form[ed.formIdx])
 		}
-		return
+		return false
 	}
 	if be.eventEditor.itemView == beListViewForm {
 		ed := &be.eventEditor
 		if ed.formIdx < len(ed.form) {
-			f := &ed.form[ed.formIdx]
-			if f.Kind == KindSelect && be.ddOptIdx < len(f.Options) {
-				f.SelIdx = be.ddOptIdx
-				f.Value = f.Options[be.ddOptIdx]
-			}
+			return applyTo(&ed.form[ed.formIdx])
 		}
-		return
+		return false
 	}
 	if be.jobsSubView == beViewForm {
 		if be.jobsFormIdx < len(be.jobsForm) {
-			f := &be.jobsForm[be.jobsFormIdx]
-			if f.Kind == KindSelect && be.ddOptIdx < len(f.Options) {
-				f.SelIdx = be.ddOptIdx
-				f.Value = f.Options[be.ddOptIdx]
-			}
+			return applyTo(&be.jobsForm[be.jobsFormIdx])
 		}
-		return
+		return false
 	}
 	if be.authSubView == beAuthViewRoleForm {
 		if be.authRoleFormIdx < len(be.authRoleForm) {
@@ -1333,7 +1334,7 @@ func (be *BackendEditor) applyDropdown() {
 			}
 			// KindMultiSelect handled via toggleMultiSelectOption
 		}
-		return
+		return false
 	}
 	if f := be.mutableFieldPtr(); f != nil && f.Kind == KindSelect && be.ddOptIdx < len(f.Options) {
 		f.SelIdx = be.ddOptIdx
@@ -1342,6 +1343,7 @@ func (be *BackendEditor) applyDropdown() {
 			be.updateEnvMonolithOptions()
 		}
 	}
+	return applyTo(be.mutableFieldPtr())
 }
 
 func (be BackendEditor) updateInsert(msg tea.Msg) (BackendEditor, tea.Cmd) {
@@ -1743,7 +1745,7 @@ func (be BackendEditor) updateServiceForm(key tea.KeyMsg) (BackendEditor, tea.Cm
 			}
 		}
 	case "i", "a":
-		if ed.form[ed.formIdx].Kind == KindText {
+		if ed.form[ed.formIdx].CanEditAsText() {
 			return be.enterServiceFormInsert()
 		}
 	case "b", "esc":
@@ -1798,11 +1800,11 @@ func (be *BackendEditor) updateEnvMonolithOptions() {
 func (be BackendEditor) enterServiceFormInsert() (BackendEditor, tea.Cmd) {
 	ed := &be.serviceEditor
 	f := ed.form[ed.formIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return be, nil
 	}
 	be.internalMode = beInsert
-	be.formInput.SetValue(f.Value)
+	be.formInput.SetValue(f.TextInputValue())
 	be.formInput.Width = be.width - 22
 	be.formInput.CursorEnd()
 	return be, be.formInput.Focus()
@@ -1892,7 +1894,7 @@ func (be BackendEditor) updateCommForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if ed.form[ed.formIdx].Kind == KindText {
+		if ed.form[ed.formIdx].CanEditAsText() {
 			return be.enterCommFormInsert()
 		}
 	case "b", "esc":
@@ -1905,11 +1907,11 @@ func (be BackendEditor) updateCommForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 func (be BackendEditor) enterCommFormInsert() (BackendEditor, tea.Cmd) {
 	ed := &be.commEditor
 	f := ed.form[ed.formIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return be, nil
 	}
 	be.internalMode = beInsert
-	be.formInput.SetValue(f.Value)
+	be.formInput.SetValue(f.TextInputValue())
 	be.formInput.Width = be.width - 22
 	be.formInput.CursorEnd()
 	return be, be.formInput.Focus()
@@ -2026,7 +2028,7 @@ func (be BackendEditor) updateEventForm(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if ed.form[ed.formIdx].Kind == KindText {
+		if ed.form[ed.formIdx].CanEditAsText() {
 			return be.enterEventFormInsert()
 		}
 	case "b", "esc":
@@ -2039,11 +2041,11 @@ func (be BackendEditor) updateEventForm(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 func (be BackendEditor) enterEventFormInsert() (BackendEditor, tea.Cmd) {
 	ed := &be.eventEditor
 	f := ed.form[ed.formIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return be, nil
 	}
 	be.internalMode = beInsert
-	be.formInput.SetValue(f.Value)
+	be.formInput.SetValue(f.TextInputValue())
 	be.formInput.Width = be.width - 22
 	be.formInput.CursorEnd()
 	return be, be.formInput.Focus()
@@ -2145,9 +2147,9 @@ func (be BackendEditor) tryEnterInsert() (BackendEditor, tea.Cmd) {
 			break
 		}
 		f := (*fields)[be.activeField]
-		if f.Kind == KindText || f.Kind == KindTextArea {
+		if f.CanEditAsText() {
 			be.internalMode = beInsert
-			be.formInput.SetValue(f.Value)
+			be.formInput.SetValue(f.TextInputValue())
 			be.formInput.Width = be.width - 22
 			be.formInput.CursorEnd()
 			return be, be.formInput.Focus()
@@ -2163,24 +2165,24 @@ func (be *BackendEditor) saveInput() {
 	// Check if we're in a service form
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
-		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindText {
-			ed.form[ed.formIdx].Value = val
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
 		}
 		return
 	}
 	// Check if we're in a comm form
 	if be.commEditor.itemView == beListViewForm {
 		ed := &be.commEditor
-		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindText {
-			ed.form[ed.formIdx].Value = val
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
 		}
 		return
 	}
 	// Check if we're in an event form
 	if be.eventEditor.itemView == beListViewForm {
 		ed := &be.eventEditor
-		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindText {
-			ed.form[ed.formIdx].Value = val
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
 		}
 		return
 	}
@@ -2200,8 +2202,8 @@ func (be *BackendEditor) saveInput() {
 	}
 	// Check if we're in a jobs form
 	if be.jobsSubView == beViewForm {
-		if be.jobsFormIdx < len(be.jobsForm) && be.jobsForm[be.jobsFormIdx].Kind == KindText {
-			be.jobsForm[be.jobsFormIdx].Value = val
+		if be.jobsFormIdx < len(be.jobsForm) && be.jobsForm[be.jobsFormIdx].CanEditAsText() {
+			be.jobsForm[be.jobsFormIdx].SaveTextInput(val)
 		}
 		return
 	}
@@ -2210,8 +2212,8 @@ func (be *BackendEditor) saveInput() {
 	if fields == nil {
 		return
 	}
-	if be.activeField < len(*fields) && (*fields)[be.activeField].Kind == KindText {
-		(*fields)[be.activeField].Value = val
+	if be.activeField < len(*fields) && (*fields)[be.activeField].CanEditAsText() {
+		(*fields)[be.activeField].SaveTextInput(val)
 	}
 }
 
@@ -2632,7 +2634,7 @@ func (be BackendEditor) updateJobsForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 			}
 		}
 	case "i", "a":
-		if be.jobsFormIdx < n && be.jobsForm[be.jobsFormIdx].Kind == KindText {
+		if be.jobsFormIdx < n && be.jobsForm[be.jobsFormIdx].CanEditAsText() {
 			return be.enterJobsFormInsert()
 		}
 	case "b", "esc":
@@ -2647,11 +2649,11 @@ func (be BackendEditor) enterJobsFormInsert() (BackendEditor, tea.Cmd) {
 		return be, nil
 	}
 	f := be.jobsForm[be.jobsFormIdx]
-	if f.Kind != KindText {
+	if !f.CanEditAsText() {
 		return be, nil
 	}
 	be.internalMode = beInsert
-	be.formInput.SetValue(f.Value)
+	be.formInput.SetValue(f.TextInputValue())
 	be.formInput.Width = be.width - 22
 	be.formInput.CursorEnd()
 	return be, be.formInput.Focus()
