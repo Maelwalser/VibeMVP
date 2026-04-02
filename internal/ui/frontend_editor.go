@@ -580,27 +580,27 @@ func (fe FrontendEditor) HintLine() string {
 		if !fe.techEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case feTabTheme:
 		if !fe.themeEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case feTabNav:
 		if !fe.navEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case feTabI18n:
 		if !fe.i18nEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case feTabA11ySEO:
 		if !fe.a11yEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case feTabPages:
 		if fe.pageSubView == ceViewList {
 			return hintBar("j/k", "navigate", "a", "add page", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
@@ -892,6 +892,10 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 				fe.updateFEFrameworkOptions()
 			}
 		}
+	case "D":
+		fe.techEnabled = false
+		fe.techFields = defaultFETechFields()
+		fe.techFormIdx = 0
 	case "i", "a":
 		return fe.tryEnterInsert()
 	}
@@ -977,6 +981,10 @@ func (fe FrontendEditor) updateTheme(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		fe.themeEnabled = false
+		fe.themeFields = defaultFEThemeFields()
+		fe.themeFormIdx = 0
 	case "i", "a":
 		return fe.tryEnterInsert()
 	}
@@ -1241,6 +1249,10 @@ func (fe FrontendEditor) updateNav(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		fe.navEnabled = false
+		fe.navFields = defaultNavFields()
+		fe.navFormIdx = 0
 	case "i", "a":
 		return fe.tryEnterInsert()
 	}
@@ -1369,6 +1381,10 @@ func (fe FrontendEditor) updateI18n(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		fe.i18nEnabled = false
+		fe.i18nFields = defaultI18nFields()
+		fe.i18nFormIdx = 0
 	case "i", "a":
 		return fe.tryEnterInsert()
 	}
@@ -1435,6 +1451,10 @@ func (fe FrontendEditor) updateA11ySEO(key tea.KeyMsg) (FrontendEditor, tea.Cmd)
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		fe.a11yEnabled = false
+		fe.a11yFields = defaultA11ySEOFields()
+		fe.a11yFormIdx = 0
 	case "i", "a":
 		return fe.tryEnterInsert()
 	}

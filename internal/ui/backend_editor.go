@@ -971,7 +971,7 @@ func (be BackendEditor) HintLine() string {
 		if !be.secEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
 		}
-		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "a/Space/Enter", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "a/Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "h/l", "sub-tab")
 	default:
 		t := be.activeTab()
 		configEnabled := true
@@ -986,7 +986,7 @@ func (be BackendEditor) HintLine() string {
 		if !configEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
 		}
-		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab", "b", "change arch")
+		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "D", "delete config", "h/l", "sub-tab", "b", "change arch")
 	}
 }
 
@@ -1361,6 +1361,25 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 	if k == "0" && be.countBuf != "" {
 		be.countBuf += "0"
 		be.gBuf = false
+		return be, nil
+	}
+
+	// Shift+D resets the active single-config tab (ENV, API GW, AUTH).
+	if k == "D" {
+		switch tab {
+		case beTabEnv:
+			be.envEnabled = false
+			be.EnvFields = defaultEnvFields()
+			be.activeField = 0
+		case beTabAPIGW:
+			be.apiGWEnabled = false
+			be.APIGWFields = defaultAPIGWFields()
+			be.activeField = 0
+		case beTabAuth:
+			be.authEnabled = false
+			be.AuthFields = defaultAuthFields()
+			be.activeField = 0
+		}
 		return be, nil
 	}
 
@@ -2565,6 +2584,12 @@ func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 				f.CyclePrev()
 			}
 		}
+	case "D":
+		be.countBuf = ""
+		be.gBuf = false
+		be.secEnabled = false
+		be.securityFields = defaultSecurityFields()
+		be.activeField = 0
 	default:
 		be.countBuf = ""
 		be.gBuf = false

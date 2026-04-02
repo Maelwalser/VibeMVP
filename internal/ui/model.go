@@ -285,8 +285,8 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "ctrl+s":
 		return m.execSave()
 
-	// Section (tab) navigation with Tab/Shift+Tab only when not in insert mode.
-	case "tab":
+	// Section (tab) navigation with Tab/Shift+Tab/Shift+L/Shift+H only when not in insert mode.
+	case "tab", "L":
 		if e := m.activeEditor(); e != nil && e.Mode() == ModeInsert {
 			return m.delegateUpdate(msg)
 		}
@@ -294,7 +294,7 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeField = 0
 		return m, nil
 
-	case "shift+tab":
+	case "shift+tab", "H":
 		if e := m.activeEditor(); e != nil && e.Mode() == ModeInsert {
 			return m.delegateUpdate(msg)
 		}

@@ -464,7 +464,7 @@ func (ce ContractsEditor) HintLine() string {
 		if !ce.versioningEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "D", "delete config", "h/l", "sub-tab")
 	case contractsTabExternal:
 		switch ce.extSubView {
 		case ceViewList:
@@ -1261,6 +1261,10 @@ func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		ce.versioningEnabled = false
+		ce.versioningFields = defaultVersioningFields()
+		ce.verFormIdx = 0
 	case "i", "a":
 		if ce.versioningFields[ce.verFormIdx].Kind == KindText {
 			return ce.tryEnterInsert()

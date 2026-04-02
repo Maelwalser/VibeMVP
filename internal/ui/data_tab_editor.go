@@ -518,7 +518,7 @@ func (dt DataTabEditor) HintLine() string {
 		if !dt.cachingEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	case dataTabFileStorage:
 		return dt.fsHintLine()
 	case dataTabGovernance:
@@ -529,7 +529,7 @@ func (dt DataTabEditor) HintLine() string {
 		if !dt.govEnabled {
 			return hintBar("a", "configure", "h/l", "sub-tab")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "a/i", "edit", "h/l", "sub-tab")
+		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	}
 	return ""
 }
@@ -1335,6 +1335,10 @@ func (dt DataTabEditor) updateCaching(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		dt.cachingEnabled = false
+		dt.cachingFields = defaultCachingFields()
+		dt.cachingFormIdx = 0
 	case "i", "a":
 		if dt.cachingFields[dt.cachingFormIdx].Kind == KindText {
 			return dt.tryEnterInsert()
@@ -1379,6 +1383,10 @@ func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
+	case "D":
+		dt.govEnabled = false
+		dt.governanceFields = defaultGovernanceFields()
+		dt.govFormIdx = 0
 	case "i", "a":
 		if dt.governanceFields[dt.govFormIdx].Kind == KindText {
 			return dt.tryEnterInsert()

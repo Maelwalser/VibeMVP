@@ -273,6 +273,27 @@ func (ie *InfraEditor) enableActiveTab() {
 	}
 }
 
+func (ie *InfraEditor) disableActiveTab() {
+	switch ie.activeTab {
+	case infraTabNetworking:
+		ie.netEnabled = false
+		ie.networkingFields = defaultNetworkingFields()
+		ie.netFormIdx = 0
+	case infraTabCICD:
+		ie.cicdEnabled = false
+		ie.cicdFields = defaultInfraCICDFields()
+		ie.cicdFormIdx = 0
+	case infraTabObservability:
+		ie.obsEnabled = false
+		ie.obsFields = defaultObservabilityFields()
+		ie.obsFormIdx = 0
+	case infraTabEnvironments:
+		ie.envEnabled = false
+		ie.envTopoFields = defaultEnvTopologyFields()
+		ie.envTopoFormIdx = 0
+	}
+}
+
 func newInfraEditor() InfraEditor {
 	return InfraEditor{
 		networkingFields: defaultNetworkingFields(),
@@ -414,7 +435,7 @@ func (ie InfraEditor) HintLine() string {
 	if !ie.activeTabEnabled() {
 		return hintBar("a", "configure", "h/l", "sub-tab")
 	}
-	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Enter/Space", "dropdown", "H", "cycle back", "a/i", "edit text", "h/l", "sub-tab")
+	return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump n lines", "Enter/Space", "dropdown", "H", "cycle back", "D", "delete config", "a/i", "edit text", "h/l", "sub-tab")
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -517,6 +538,9 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 					f.CyclePrev()
 				}
 			}
+		case "D":
+			ie.disableActiveTab()
+			return ie, nil
 		case "i", "a":
 			switch ie.activeTab {
 			case infraTabNetworking:
