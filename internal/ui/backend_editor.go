@@ -1837,18 +1837,25 @@ func (be *BackendEditor) mutableFieldPtr() *Field {
 
 func (be BackendEditor) tryEnterInsert() (BackendEditor, tea.Cmd) {
 	fields := be.currentEditableFields()
-	if fields == nil || be.activeField >= len(*fields) {
+	if fields == nil {
 		return be, nil
 	}
-	f := (*fields)[be.activeField]
-	if f.Kind != KindText {
-		return be, nil
+	n := len(*fields)
+	for range n {
+		if be.activeField >= n {
+			break
+		}
+		f := (*fields)[be.activeField]
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			be.internalMode = beInsert
+			be.formInput.SetValue(f.Value)
+			be.formInput.Width = be.width - 22
+			be.formInput.CursorEnd()
+			return be, be.formInput.Focus()
+		}
+		be.activeField = (be.activeField + 1) % n
 	}
-	be.internalMode = beInsert
-	be.formInput.SetValue(f.Value)
-	be.formInput.Width = be.width - 22
-	be.formInput.CursorEnd()
-	return be, be.formInput.Focus()
+	return be, nil
 }
 
 func (be *BackendEditor) saveInput() {

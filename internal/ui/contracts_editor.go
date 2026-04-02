@@ -685,41 +685,67 @@ func (ce *ContractsEditor) saveInput() {
 }
 
 func (ce ContractsEditor) tryEnterInsert() (ContractsEditor, tea.Cmd) {
-	var f *Field
+	n := 0
 	switch ce.activeTab {
 	case contractsTabDTOs:
 		switch ce.dtoSubView {
 		case ceViewForm:
-			if ce.dtoFormIdx < len(ce.dtoForm) {
-				f = &ce.dtoForm[ce.dtoFormIdx]
-			}
+			n = len(ce.dtoForm)
 		case ceViewSubForm:
-			if ce.dtoFieldFormIdx < len(ce.dtoFieldForm) {
-				f = &ce.dtoFieldForm[ce.dtoFieldFormIdx]
-			}
+			n = len(ce.dtoFieldForm)
 		}
 	case contractsTabEndpoints:
-		visible := ce.visibleEPFields()
-		if ce.epSubView == ceViewForm && ce.epFormIdx < len(visible) {
-			f = ce.epFieldByKey(visible[ce.epFormIdx].Key)
+		if ce.epSubView == ceViewForm {
+			n = len(ce.visibleEPFields())
 		}
 	case contractsTabVersioning:
-		if ce.verFormIdx < len(ce.versioningFields) {
-			f = &ce.versioningFields[ce.verFormIdx]
-		}
+		n = len(ce.versioningFields)
 	case contractsTabExternal:
-		if ce.extSubView == ceViewForm && ce.extFormIdx < len(ce.extForm) {
-			f = &ce.extForm[ce.extFormIdx]
+		if ce.extSubView == ceViewForm {
+			n = len(ce.extForm)
 		}
 	}
-	if f == nil || f.Kind != KindText {
-		return ce, nil
+	for range n {
+		var f *Field
+		switch ce.activeTab {
+		case contractsTabDTOs:
+			switch ce.dtoSubView {
+			case ceViewForm:
+				if ce.dtoFormIdx < len(ce.dtoForm) {
+					f = &ce.dtoForm[ce.dtoFormIdx]
+				}
+			case ceViewSubForm:
+				if ce.dtoFieldFormIdx < len(ce.dtoFieldForm) {
+					f = &ce.dtoFieldForm[ce.dtoFieldFormIdx]
+				}
+			}
+		case contractsTabEndpoints:
+			visible := ce.visibleEPFields()
+			if ce.epSubView == ceViewForm && ce.epFormIdx < len(visible) {
+				f = ce.epFieldByKey(visible[ce.epFormIdx].Key)
+			}
+		case contractsTabVersioning:
+			if ce.verFormIdx < len(ce.versioningFields) {
+				f = &ce.versioningFields[ce.verFormIdx]
+			}
+		case contractsTabExternal:
+			if ce.extSubView == ceViewForm && ce.extFormIdx < len(ce.extForm) {
+				f = &ce.extForm[ce.extFormIdx]
+			}
+		}
+		if f == nil {
+			break
+		}
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			ce.internalMode = ceInsert
+			ce.formInput.SetValue(f.Value)
+			ce.formInput.Width = ce.width - 22
+			ce.formInput.CursorEnd()
+			return ce, ce.formInput.Focus()
+		}
+		ce.advanceField(1)
 	}
-	ce.internalMode = ceInsert
-	ce.formInput.SetValue(f.Value)
-	ce.formInput.Width = ce.width - 22
-	ce.formInput.CursorEnd()
-	return ce, ce.formInput.Focus()
+	return ce, nil
 }
 
 // ── DTO updates ───────────────────────────────────────────────────────────────

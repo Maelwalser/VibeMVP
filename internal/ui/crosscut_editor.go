@@ -463,29 +463,44 @@ func (cc *CrossCutEditor) saveInput() {
 }
 
 func (cc CrossCutEditor) tryEnterInsert() (CrossCutEditor, tea.Cmd) {
-	var f *Field
+	n := 0
 	switch cc.activeTab {
 	case ccTabTesting:
-		if cc.testFormIdx < len(cc.testingFields) {
-			f = &cc.testingFields[cc.testFormIdx]
-		}
+		n = len(cc.testingFields)
 	case ccTabDocs:
-		if cc.docsFormIdx < len(cc.docsFields) {
-			f = &cc.docsFields[cc.docsFormIdx]
-		}
+		n = len(cc.docsFields)
 	case ccTabStandards:
-		if cc.standardsFormIdx < len(cc.standardsFields) {
-			f = &cc.standardsFields[cc.standardsFormIdx]
+		n = len(cc.standardsFields)
+	}
+	for range n {
+		var f *Field
+		switch cc.activeTab {
+		case ccTabTesting:
+			if cc.testFormIdx < len(cc.testingFields) {
+				f = &cc.testingFields[cc.testFormIdx]
+			}
+		case ccTabDocs:
+			if cc.docsFormIdx < len(cc.docsFields) {
+				f = &cc.docsFields[cc.docsFormIdx]
+			}
+		case ccTabStandards:
+			if cc.standardsFormIdx < len(cc.standardsFields) {
+				f = &cc.standardsFields[cc.standardsFormIdx]
+			}
 		}
+		if f == nil {
+			break
+		}
+		if f.Kind == KindText || f.Kind == KindTextArea {
+			cc.internalMode = ccInsert
+			cc.formInput.SetValue(f.Value)
+			cc.formInput.Width = cc.width - 22
+			cc.formInput.CursorEnd()
+			return cc, cc.formInput.Focus()
+		}
+		cc.advanceField(1)
 	}
-	if f == nil || f.Kind != KindText {
-		return cc, nil
-	}
-	cc.internalMode = ccInsert
-	cc.formInput.SetValue(f.Value)
-	cc.formInput.Width = cc.width - 22
-	cc.formInput.CursorEnd()
-	return cc, cc.formInput.Focus()
+	return cc, nil
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────

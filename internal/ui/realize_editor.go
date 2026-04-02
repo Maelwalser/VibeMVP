@@ -327,14 +327,14 @@ func (r RealizeEditor) updateInsert(msg tea.Msg) (RealizeEditor, tea.Cmd) {
 			return r, nil
 		case "tab":
 			r.saveInput()
-			if r.activeIdx < len(r.fields)-1 {
-				r.activeIdx++
+			if next := nextEditableIdx(r.fields, r.activeIdx); next >= 0 {
+				r.activeIdx = next
 			}
 			return r.tryEnterInsert()
 		case "shift+tab":
 			r.saveInput()
-			if r.activeIdx > 0 {
-				r.activeIdx--
+			if prev := prevEditableIdx(r.fields, r.activeIdx); prev >= 0 {
+				r.activeIdx = prev
 			}
 			return r.tryEnterInsert()
 		}

@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-01T23:55:28.17036547+02:00",
+  "created_at": "2026-04-02T16:22:45.724570634+02:00",
   "data": {
     "caching": {
       "layer": "",
@@ -11,23 +11,10 @@
   "backend": {
     "arch_pattern": "monolith",
     "env": {
-      "compute_env": "Containers (Docker)",
-      "cloud_provider": "AWS",
-      "orchestrator": "Docker Compose",
-      "stages": "Development + Staging + Production"
+      "compute_env": "",
+      "cloud_provider": "",
+      "orchestrator": ""
     },
-    "services": [
-      {
-        "name": "",
-        "responsibility": "",
-        "language": "Go",
-        "framework": "Fiber",
-        "pattern_tag": "Monolith part",
-        "healthcheck_path": "/healthz",
-        "error_format": "Platform default",
-        "service_discovery": "None"
-      }
-    ],
     "auth": {
       "strategy": "",
       "provider": "",
@@ -36,11 +23,6 @@
       "mfa": ""
     },
     "waf": {},
-    "cors_strategy": "Permissive",
-    "session_mgmt": "None",
-    "backend_linter": "None",
-    "compute_env": "Containers (Docker)",
-    "cloud_provider": "AWS",
     "language": "Go",
     "framework": "Fiber"
   },

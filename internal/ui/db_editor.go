@@ -244,10 +244,13 @@ func (db DBEditor) updateInsert(msg tea.Msg) (DBEditor, tea.Cmd) {
 
 		case "tab":
 			db.dbForm[db.formIdx].Value = db.formInput.Value()
-			db.formIdx = nextDBFormIdx(db.dbForm, db.formIdx)
+			if next := nextEditableIdx(db.dbForm, db.formIdx); next >= 0 {
+				db.formIdx = next
+			} else {
+				db.formIdx = nextDBFormIdx(db.dbForm, db.formIdx)
+			}
 			f := db.dbForm[db.formIdx]
 			if f.Kind == KindSelect {
-				db.internalMode = dbeNormal
 				db.formInput.Blur()
 				return db, nil
 			}
@@ -257,10 +260,13 @@ func (db DBEditor) updateInsert(msg tea.Msg) (DBEditor, tea.Cmd) {
 
 		case "shift+tab":
 			db.dbForm[db.formIdx].Value = db.formInput.Value()
-			db.formIdx = prevDBFormIdx(db.dbForm, db.formIdx)
+			if prev := prevEditableIdx(db.dbForm, db.formIdx); prev >= 0 {
+				db.formIdx = prev
+			} else {
+				db.formIdx = prevDBFormIdx(db.dbForm, db.formIdx)
+			}
 			f := db.dbForm[db.formIdx]
 			if f.Kind == KindSelect {
-				db.internalMode = dbeNormal
 				db.formInput.Blur()
 				return db, nil
 			}
