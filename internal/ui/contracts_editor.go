@@ -408,6 +408,25 @@ func (ce ContractsEditor) ToManifestContractsPillar() manifest.ContractsPillar {
 	return p
 }
 
+// FromContractsPillar populates the editor from a saved manifest ContractsPillar,
+// reversing the ToManifestContractsPillar() operation.
+func (ce ContractsEditor) FromContractsPillar(cp manifest.ContractsPillar) ContractsEditor {
+	// Collections stored directly; per-item forms rebuilt lazily on navigation.
+	ce.dtos = cp.DTOs
+	ce.endpoints = cp.Endpoints
+	ce.externalAPIs = cp.ExternalAPIs
+
+	// Versioning fields.
+	if cp.Versioning.Strategy != "" {
+		ce.versioningEnabled = true
+		ce.versioningFields = setFieldValue(ce.versioningFields, "strategy", cp.Versioning.Strategy)
+		ce.versioningFields = setFieldValue(ce.versioningFields, "current_version", cp.Versioning.CurrentVersion)
+		ce.versioningFields = setFieldValue(ce.versioningFields, "deprecation", cp.Versioning.DeprecationPolicy)
+	}
+
+	return ce
+}
+
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
 
 func (ce ContractsEditor) Mode() Mode {

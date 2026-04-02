@@ -442,6 +442,48 @@ func (dt DataTabEditor) ToManifestDataPillar() manifest.DataPillar {
 	return p
 }
 
+// FromDataPillar populates the editor from a saved manifest DataPillar,
+// reversing the ToManifestDataPillar() operation.
+func (dt DataTabEditor) FromDataPillar(dp manifest.DataPillar) DataTabEditor {
+	// Databases — Sources stored directly; dbForm rebuilt lazily on navigation.
+	dt.dbEditor.Sources = dp.Databases
+
+	// Entities — stored directly; colForm rebuilt lazily on navigation.
+	dt.dataEditor.Entities = dp.Entities
+
+	// Domains — stored directly.
+	dt.domains = dp.Domains
+
+	// File storages — stored directly.
+	dt.fileStorages = dp.FileStorages
+
+	// Caching fields.
+	if dp.Caching.Layer != "" || dp.Caching.Strategy != "" {
+		dt.cachingEnabled = true
+		dt.cachingFields = setFieldValue(dt.cachingFields, "layer", dp.Caching.Layer)
+		dt.cachingFields = setFieldValue(dt.cachingFields, "strategy", dp.Caching.Strategy)
+		dt.cachingFields = setFieldValue(dt.cachingFields, "invalidation", dp.Caching.Invalidation)
+		dt.cachingFields = setFieldValue(dt.cachingFields, "ttl", dp.Caching.TTL)
+		dt.cachingFields = restoreMultiSelectValue(dt.cachingFields, "entities", dp.Caching.Entities)
+	}
+
+	// Governance fields.
+	if dp.Governance.RetentionPolicy != "" || dp.Governance.DeleteStrategy != "" || dp.MigrationTool != "" {
+		dt.govEnabled = true
+		dt.governanceFields = setFieldValue(dt.governanceFields, "retention_policy", dp.Governance.RetentionPolicy)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "delete_strategy", dp.Governance.DeleteStrategy)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "pii_encryption", dp.Governance.PIIEncryption)
+		dt.governanceFields = restoreMultiSelectValue(dt.governanceFields, "compliance_frameworks", dp.Governance.ComplianceFrameworks)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "data_residency", dp.Governance.DataResidency)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "archival_storage", dp.Governance.ArchivalStorage)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "migration_tool", dp.MigrationTool)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "backup_strategy", dp.BackupStrategy)
+		dt.governanceFields = setFieldValue(dt.governanceFields, "search_tech", dp.SearchTech)
+	}
+
+	return dt
+}
+
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) Mode() Mode {

@@ -479,6 +479,88 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 	return p
 }
 
+// FromFrontendPillar populates the editor from a saved manifest FrontendPillar,
+// reversing the ToManifestFrontendPillar() operation.
+func (fe FrontendEditor) FromFrontendPillar(fp manifest.FrontendPillar) FrontendEditor {
+	t := fp.Tech
+	if t.Language != "" || t.Framework != "" || t.Platform != "" {
+		fe.techEnabled = true
+		fe.techFields = setFieldValue(fe.techFields, "language", t.Language)
+		fe.techFields = setFieldValue(fe.techFields, "platform", t.Platform)
+		fe.techFields = setFieldValue(fe.techFields, "framework", t.Framework)
+		fe.techFields = setFieldValue(fe.techFields, "meta_framework", t.MetaFramework)
+		fe.techFields = setFieldValue(fe.techFields, "pkg_manager", t.PackageManager)
+		fe.techFields = setFieldValue(fe.techFields, "styling", t.Styling)
+		fe.techFields = setFieldValue(fe.techFields, "component_lib", t.ComponentLib)
+		fe.techFields = setFieldValue(fe.techFields, "state_mgmt", t.StateManagement)
+		fe.techFields = setFieldValue(fe.techFields, "data_fetching", t.DataFetching)
+		fe.techFields = setFieldValue(fe.techFields, "form_handling", t.FormHandling)
+		fe.techFields = setFieldValue(fe.techFields, "validation", t.Validation)
+		fe.techFields = setFieldValue(fe.techFields, "pwa_support", t.PWASupport)
+		fe.techFields = setFieldValue(fe.techFields, "realtime", t.RealtimeStrategy)
+		fe.techFields = setFieldValue(fe.techFields, "image_opt", t.ImageOptimization)
+		fe.techFields = setFieldValue(fe.techFields, "auth_flow", t.AuthFlowType)
+		fe.techFields = setFieldValue(fe.techFields, "error_boundary", t.ErrorBoundary)
+		fe.techFields = setFieldValue(fe.techFields, "bundle_opt", t.BundleOptimization)
+		fe.techFields = setFieldValue(fe.techFields, "fe_testing", t.FrontendTesting)
+		fe.techFields = setFieldValue(fe.techFields, "fe_linter", t.FrontendLinter)
+	}
+
+	th := fp.Theme
+	if th.DarkMode != "" || th.BorderRadius != "" {
+		fe.themeEnabled = true
+		fe.themeFields = setFieldValue(fe.themeFields, "dark_mode", th.DarkMode)
+		fe.themeFields = setFieldValue(fe.themeFields, "border_radius", th.BorderRadius)
+		fe.themeFields = setFieldValue(fe.themeFields, "spacing", th.Spacing)
+		fe.themeFields = setFieldValue(fe.themeFields, "elevation", th.Elevation)
+		fe.themeFields = setFieldValue(fe.themeFields, "motion", th.Motion)
+		fe.themeFields = setFieldValue(fe.themeFields, "vibe", th.Vibe)
+		fe.themeFields = setFieldValue(fe.themeFields, "colors", th.Colors)
+		fe.themeFields = setFieldValue(fe.themeFields, "description", th.Description)
+	}
+
+	// Collections stored directly; per-item forms rebuilt lazily on navigation.
+	fe.pages = fp.Pages
+	fe.assets = fp.Assets
+
+	n := fp.Navigation
+	if n.NavType != "" {
+		fe.navEnabled = true
+		fe.navFields = setFieldValue(fe.navFields, "nav_type", n.NavType)
+		boolStr := func(b bool) string {
+			if b {
+				return "true"
+			}
+			return "false"
+		}
+		fe.navFields = setFieldValue(fe.navFields, "breadcrumbs", boolStr(n.Breadcrumbs))
+		fe.navFields = setFieldValue(fe.navFields, "auth_aware", boolStr(n.AuthAware))
+	}
+
+	i := fp.I18n
+	if i.Enabled != "" || i.DefaultLocale != "" {
+		fe.i18nEnabled = true
+		fe.i18nFields = setFieldValue(fe.i18nFields, "enabled", i.Enabled)
+		fe.i18nFields = setFieldValue(fe.i18nFields, "default_locale", i.DefaultLocale)
+		fe.i18nFields = setFieldValue(fe.i18nFields, "supported_locales", i.SupportedLocales)
+		fe.i18nFields = setFieldValue(fe.i18nFields, "translation_strategy", i.TranslationStrategy)
+		fe.i18nFields = setFieldValue(fe.i18nFields, "timezone_handling", i.TimezoneHandling)
+	}
+
+	a := fp.A11ySEO
+	if a.WCAGLevel != "" || a.SEORenderStrategy != "" {
+		fe.a11yEnabled = true
+		fe.a11yFields = setFieldValue(fe.a11yFields, "wcag_level", a.WCAGLevel)
+		fe.a11yFields = setFieldValue(fe.a11yFields, "seo_render_strategy", a.SEORenderStrategy)
+		fe.a11yFields = setFieldValue(fe.a11yFields, "sitemap", a.Sitemap)
+		fe.a11yFields = setFieldValue(fe.a11yFields, "meta_tag_injection", a.MetaTagInjection)
+		fe.a11yFields = setFieldValue(fe.a11yFields, "analytics", a.Analytics)
+		fe.a11yFields = setFieldValue(fe.a11yFields, "telemetry", a.Telemetry)
+	}
+
+	return fe
+}
+
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
 
 func (fe FrontendEditor) Mode() Mode {

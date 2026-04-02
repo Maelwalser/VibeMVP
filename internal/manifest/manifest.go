@@ -85,6 +85,19 @@ type Manifest struct {
 	Telemetry TelemetryPillar `json:"telemetry,omitempty"`
 }
 
+// Load reads and parses a Manifest from a JSON file at path.
+func Load(path string) (*Manifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest %s: %w", path, err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest %s: %w", path, err)
+	}
+	return &m, nil
+}
+
 // Save writes the manifest to path as indented JSON.
 func (m *Manifest) Save(path string) error {
 	m.CreatedAt = time.Now()

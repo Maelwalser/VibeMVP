@@ -48,6 +48,13 @@ type modalState struct {
 	menu ProviderMenu
 }
 
+// openFileModal holds state for the "O: open manifest" path-input dialog.
+type openFileModal struct {
+	open   bool
+	input  textinput.Model
+	errMsg string
+}
+
 // realizeState holds realization-screen state.
 type realizeState struct {
 	screen    RealizationScreen
@@ -75,10 +82,12 @@ type Model struct {
 	crossCutEditor  CrossCutEditor
 	realizeEditor   RealizeEditor
 
-	cmd     cmdState
-	modal   modalState
-	realize realizeState
+	cmd      cmdState
+	modal    modalState
+	openFile openFileModal
+	realize  realizeState
 
+	filePath      string // active save path; empty = use onSave callback default
 	modified      bool
 	width, height int
 	onSave        SaveFunc
@@ -104,6 +113,10 @@ func NewModel(onSave SaveFunc) Model {
 	ta.BlurredStyle.Base = lipgloss.NewStyle().
 		Background(lipgloss.Color(clrBgHL))
 
+	ofInput := newFormInput()
+	ofInput.Placeholder = "e.g. ./project/manifest.json"
+	ofInput.Width = 50
+
 	return Model{
 		sections:        initSections(),
 		textInput:       ti,
@@ -117,9 +130,13 @@ func NewModel(onSave SaveFunc) Model {
 		realizeEditor:   newRealizeEditor(),
 		realize:         realizeState{screen: newRealizationScreen()},
 		modal:           modalState{menu: newProviderMenu()},
+		openFile:        openFileModal{input: ofInput},
 		onSave:          onSave,
 	}
 }
+
+// SetFilePath sets the active save path (used when loading an existing manifest).
+func (m *Model) SetFilePath(path string) { m.filePath = path }
 
 // Init satisfies tea.Model — starts the animation ticker.
 func (m Model) Init() tea.Cmd {
@@ -194,8 +211,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m2, saveCmd := m.execSave()
 		m = m2.(Model)
 		mf := m.BuildManifest()
+		realizePath := "manifest.json"
+		if m.filePath != "" {
+			realizePath = m.filePath
+		}
 		var startCmd tea.Cmd
-		m.realize.screen, startCmd = m.realize.screen.Start("manifest.json", mf)
+		m.realize.screen, startCmd = m.realize.screen.Start(realizePath, mf)
 		m.realize.show = true
 		return m, tea.Sequence(saveCmd, startCmd)
 	}
@@ -229,6 +250,11 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	m.cmd.status = ""
 
+	// Open-file modal intercepts all input when open.
+	if m.openFile.open {
+		return m.updateOpenFileModal(msg)
+	}
+
 	// Provider menu intercepts all input when open.
 	if m.modal.open {
 		switch key.String() {
@@ -254,6 +280,12 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Global keys always processed regardless of section.
 	switch key.String() {
+	case "O":
+		m.openFile.open = true
+		m.openFile.errMsg = ""
+		m.openFile.input.SetValue("")
+		return m, m.openFile.input.Focus()
+
 	case "M":
 		m.modal.open = true
 		return m, nil
@@ -291,6 +323,79 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Delegate all remaining input to the active section editor.
 	return m.delegateUpdate(msg)
+}
+
+func (m Model) updateOpenFileModal(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		var cmd tea.Cmd
+		m.openFile.input, cmd = m.openFile.input.Update(msg)
+		return m, cmd
+	}
+	switch key.String() {
+	case "esc", "ctrl+c":
+		m.openFile.open = false
+		m.openFile.input.Blur()
+		return m, nil
+	case "enter":
+		path := strings.TrimSpace(m.openFile.input.Value())
+		if path == "" {
+			m.openFile.errMsg = "path cannot be empty"
+			return m, nil
+		}
+		loaded, err := m.LoadManifestIntoModel(path)
+		if err != nil {
+			m.openFile.errMsg = fmt.Sprintf("Error: %v", err)
+			return m, nil
+		}
+		loaded.openFile.open = false
+		loaded.openFile.input.Blur()
+		loaded.filePath = path
+		loaded.onSave = func(mf *manifest.Manifest) error {
+			return mf.Save(path)
+		}
+		loaded.cmd.status = fmt.Sprintf("%q loaded", path)
+		loaded.cmd.isErr = false
+		return loaded, nil
+	default:
+		var cmd tea.Cmd
+		m.openFile.input, cmd = m.openFile.input.Update(msg)
+		return m, cmd
+	}
+}
+
+// LoadManifestIntoModel reads the manifest at path and returns a new Model
+// with all pillar editors populated from the manifest data.
+func (m Model) LoadManifestIntoModel(path string) (Model, error) {
+	mf, err := manifest.Load(path)
+	if err != nil {
+		return m, err
+	}
+	m.backendEditor = m.backendEditor.FromBackendPillar(mf.Backend)
+	m.dataTabEditor = m.dataTabEditor.FromDataPillar(mf.Data)
+	m.contractsEditor = m.contractsEditor.FromContractsPillar(mf.Contracts)
+	m.frontendEditor = m.frontendEditor.FromFrontendPillar(mf.Frontend)
+	m.infraEditor = m.infraEditor.FromInfraPillar(mf.Infra)
+	m.crossCutEditor = m.crossCutEditor.FromCrossCutPillar(mf.CrossCut)
+	m.realizeEditor = m.realizeEditor.FromRealizeOptions(mf.Realize)
+	// Restore configured provider selections.
+	if len(mf.ConfiguredProviders) > 0 {
+		if m.modal.menu.configured == nil {
+			m.modal.menu.configured = make(map[string]ProviderSelection)
+		}
+		for label, pa := range mf.ConfiguredProviders {
+			m.modal.menu.configured[label] = ProviderSelection{
+				Provider:   pa.Provider,
+				Model:      pa.Model,
+				Version:    pa.Version,
+				Auth:       pa.Auth,
+				Credential: pa.Credential,
+			}
+		}
+		m.realizeEditor = m.realizeEditor.UpdateProviderOptions(m.modal.menu.GetConfiguredProviders())
+	}
+	m.modified = false
+	return m, nil
 }
 
 func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -476,7 +581,11 @@ func (m Model) execSave() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.modified = false
-	m.cmd.status = `"manifest.json" written`
+	savePath := "manifest.json"
+	if m.filePath != "" {
+		savePath = m.filePath
+	}
+	m.cmd.status = fmt.Sprintf("%q written", savePath)
 	m.cmd.isErr = false
 	return m, nil
 }
@@ -530,6 +639,27 @@ func (m Model) View() string {
 	}
 
 	base := m.renderBaseView()
+
+	if m.openFile.open {
+		overlay := m.viewOpenFileModal()
+		overlayLines := strings.Split(overlay, "\n")
+		overlayH := len(overlayLines)
+		overlayW := 0
+		for _, l := range overlayLines {
+			if w := lipgloss.Width(l); w > overlayW {
+				overlayW = w
+			}
+		}
+		x := (m.width - overlayW) / 2
+		y := (m.height - overlayH) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		return placeOverlay(base, overlay, x, y)
+	}
 
 	if m.modal.open {
 		modal := m.modal.menu.View()

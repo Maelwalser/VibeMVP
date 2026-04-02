@@ -826,6 +826,99 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 	return bp
 }
 
+// FromBackendPillar populates the editor from a saved manifest BackendPillar,
+// reversing the ToManifest() operation.
+func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEditor {
+	// Restore arch selection.
+	arch := string(bp.ArchPattern)
+	for i, opt := range beArchOptions {
+		if opt.value == arch {
+			be.ArchIdx = i
+			be.dropdownIdx = i
+			break
+		}
+	}
+	if arch != "" {
+		be.ArchConfirmed = true
+		be.dropdownOpen = false
+	}
+
+	// Env fields.
+	if bp.Env.ComputeEnv != "" || bp.Env.CloudProvider != "" || bp.CORSStrategy != "" || bp.BackendLinter != "" {
+		be.envEnabled = true
+		be.EnvFields = setFieldValue(be.EnvFields, "compute_env", bp.Env.ComputeEnv)
+		be.EnvFields = setFieldValue(be.EnvFields, "cloud_provider", bp.Env.CloudProvider)
+		be.EnvFields = setFieldValue(be.EnvFields, "orchestrator", bp.Env.Orchestrator)
+		be.EnvFields = restoreMultiSelectValue(be.EnvFields, "regions", bp.Env.Regions)
+		be.EnvFields = setFieldValue(be.EnvFields, "stages", bp.Env.Stages)
+		be.EnvFields = setFieldValue(be.EnvFields, "cors_strategy", bp.CORSStrategy)
+		be.EnvFields = setFieldValue(be.EnvFields, "cors_origins", bp.CORSOrigins)
+		be.EnvFields = setFieldValue(be.EnvFields, "session_mgmt", bp.SessionMgmt)
+		be.EnvFields = setFieldValue(be.EnvFields, "be_linter", bp.BackendLinter)
+		if arch == "monolith" {
+			be.EnvFields = setFieldValue(be.EnvFields, "monolith_lang", bp.Language)
+			be.EnvFields = setFieldValue(be.EnvFields, "monolith_fw", bp.Framework)
+		}
+	}
+
+	// Auth fields.
+	if bp.Auth.Strategy != "" || bp.Auth.Provider != "" {
+		be.authEnabled = true
+		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "strategy", bp.Auth.Strategy)
+		be.AuthFields = setFieldValue(be.AuthFields, "provider", bp.Auth.Provider)
+		be.AuthFields = setFieldValue(be.AuthFields, "authz_model", bp.Auth.AuthzModel)
+		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "roles", bp.Auth.Roles)
+		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "token_storage", bp.Auth.TokenStorage)
+		be.AuthFields = setFieldValue(be.AuthFields, "refresh_token", bp.Auth.RefreshToken)
+		be.AuthFields = setFieldValue(be.AuthFields, "mfa", bp.Auth.MFA)
+	}
+
+	// Security / WAF fields.
+	if bp.WAF.Provider != "" || bp.WAF.Ruleset != "" {
+		be.secEnabled = true
+		be.securityFields = setFieldValue(be.securityFields, "waf_provider", bp.WAF.Provider)
+		be.securityFields = setFieldValue(be.securityFields, "waf_ruleset", bp.WAF.Ruleset)
+		be.securityFields = setFieldValue(be.securityFields, "captcha", bp.WAF.CAPTCHA)
+		be.securityFields = setFieldValue(be.securityFields, "bot_protection", bp.WAF.BotProtection)
+		be.securityFields = setFieldValue(be.securityFields, "rate_limit_strategy", bp.WAF.RateLimitStrategy)
+		be.securityFields = setFieldValue(be.securityFields, "rate_limit_backend", bp.WAF.RateLimitBackend)
+		be.securityFields = setFieldValue(be.securityFields, "ddos_protection", bp.WAF.DDoSProtection)
+	}
+
+	// Messaging fields.
+	if bp.Messaging != nil {
+		be.MessagingFields = setFieldValue(be.MessagingFields, "broker_tech", bp.Messaging.BrokerTech)
+		be.MessagingFields = setFieldValue(be.MessagingFields, "deployment", bp.Messaging.Deployment)
+		be.MessagingFields = setFieldValue(be.MessagingFields, "serialization", bp.Messaging.Serialization)
+		be.MessagingFields = setFieldValue(be.MessagingFields, "delivery", bp.Messaging.Delivery)
+	}
+
+	// API Gateway fields.
+	if bp.APIGateway != nil {
+		be.apiGWEnabled = true
+		be.APIGWFields = setFieldValue(be.APIGWFields, "technology", bp.APIGateway.Technology)
+		be.APIGWFields = setFieldValue(be.APIGWFields, "routing", bp.APIGateway.Routing)
+		be.APIGWFields = setFieldValue(be.APIGWFields, "features", bp.APIGateway.Features)
+	}
+
+	// Collections — stored directly; per-item forms are rebuilt lazily on navigation.
+	be.Services = bp.Services
+	be.serviceEditor.items = make([][]Field, len(bp.Services))
+	for i, svc := range bp.Services {
+		be.serviceEditor.items[i] = serviceFieldsFromDef(svc)
+	}
+
+	be.CommLinks = bp.CommLinks
+	be.commEditor.items = make([][]Field, len(bp.CommLinks))
+	for i, link := range bp.CommLinks {
+		be.commEditor.items[i] = commFieldsFromLink(link)
+	}
+
+	be.jobQueues = bp.JobQueues
+
+	return be
+}
+
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
 
 func (be BackendEditor) Mode() Mode {

@@ -223,6 +223,47 @@ func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
 	return p
 }
 
+// FromCrossCutPillar populates the editor from a saved manifest CrossCutPillar,
+// reversing the ToManifestCrossCutPillar() operation.
+func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutEditor {
+	t := p.Testing
+	if t.Unit != "" || t.Integration != "" || t.E2E != "" {
+		cc.testingEnabled = true
+		cc.testingFields = setFieldValue(cc.testingFields, "unit", t.Unit)
+		cc.testingFields = setFieldValue(cc.testingFields, "integration", t.Integration)
+		cc.testingFields = setFieldValue(cc.testingFields, "e2e", t.E2E)
+		cc.testingFields = setFieldValue(cc.testingFields, "api", t.API)
+		cc.testingFields = setFieldValue(cc.testingFields, "load", t.Load)
+		cc.testingFields = setFieldValue(cc.testingFields, "contract", t.Contract)
+	}
+
+	d := p.Docs
+	if d.APIDocs != "" {
+		cc.docsEnabled = true
+		cc.docsFields = setFieldValue(cc.docsFields, "api_docs", d.APIDocs)
+		boolStr := func(b bool) string {
+			if b {
+				return "true"
+			}
+			return "false"
+		}
+		cc.docsFields = setFieldValue(cc.docsFields, "auto_generate", boolStr(d.AutoGenerate))
+		cc.docsFields = setFieldValue(cc.docsFields, "changelog", d.Changelog)
+	}
+
+	if p.BranchStrategy != "" || p.DependencyUpdates != "" {
+		cc.standardsEnabled = true
+		cc.standardsFields = setFieldValue(cc.standardsFields, "branch_strategy", p.BranchStrategy)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "dep_updates", p.DependencyUpdates)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "code_review", p.CodeReview)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "feature_flags", p.FeatureFlags)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "uptime_slo", p.UptimeSLO)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "latency_p99", p.LatencyP99)
+	}
+
+	return cc
+}
+
 // ── Mode / HintLine ───────────────────────────────────────────────────────────
 
 func (cc CrossCutEditor) Mode() Mode {
