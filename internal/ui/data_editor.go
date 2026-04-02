@@ -331,19 +331,16 @@ func prevColFormIdx(form []Field, cur int) int {
 // buildEntitySettingsForm constructs the entity-level settings form, dynamically
 // populating database and cache_store selects from the available DBSources.
 func buildEntitySettingsForm(ent manifest.EntityDef, dbs []manifest.DBSourceDef) []Field {
-	// Build db options list
-	dbOptions := []string{"(none)"}
+	var dbAliases, cacheAliases []string
 	for _, db := range dbs {
-		dbOptions = append(dbOptions, db.Alias)
-	}
-
-	// Build cache options list (only sources marked as cache)
-	cacheOptions := []string{"(none)"}
-	for _, db := range dbs {
+		dbAliases = append(dbAliases, db.Alias)
 		if db.IsCache {
-			cacheOptions = append(cacheOptions, db.Alias)
+			cacheAliases = append(cacheAliases, db.Alias)
 		}
 	}
+
+	dbOptions, dbDefault := noneOrPlaceholder(dbAliases, "(no databases configured)")
+	cacheOptions, cacheDefault := noneOrPlaceholder(cacheAliases, "(no cache DBs configured)")
 
 	findIdx := func(opts []string, val string) int {
 		for i, o := range opts {
@@ -363,11 +360,11 @@ func buildEntitySettingsForm(ent manifest.EntityDef, dbs []manifest.DBSourceDef)
 
 	dbVal := ent.Database
 	if dbVal == "" {
-		dbVal = "(none)"
+		dbVal = dbDefault
 	}
 	cacheVal := ent.CacheStore
 	if cacheVal == "" {
-		cacheVal = "(none)"
+		cacheVal = cacheDefault
 	}
 
 	return []Field{

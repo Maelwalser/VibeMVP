@@ -77,7 +77,7 @@ func (f *Field) PrepareCustomEntry() bool {
 func (f Field) DisplayValue() string {
 	if f.Kind == KindSelect {
 		if len(f.Options) == 0 {
-			return ""
+			return f.Value // placeholder shown when dependent items not yet created
 		}
 		opt := f.Options[f.SelIdx]
 		if isCustomOption(opt) && f.CustomText != "" {
@@ -86,6 +86,9 @@ func (f Field) DisplayValue() string {
 		return opt
 	}
 	if f.Kind == KindMultiSelect {
+		if len(f.Options) == 0 {
+			return f.Value // placeholder shown when dependent items not yet created
+		}
 		if len(f.SelectedIdxs) == 0 {
 			return ""
 		}
@@ -247,4 +250,27 @@ func splitLines(s string) []string {
 	}
 	lines = append(lines, s[start:])
 	return lines
+}
+
+// placeholderFor returns placeholder when opts is empty, or "" otherwise.
+// Use as the Value of a KindSelect/KindMultiSelect field whose Options are
+// populated dynamically — DisplayValue will show it when Options is empty,
+// but it is never added to the options list so it cannot be "selected".
+func placeholderFor(opts []string, placeholder string) string {
+	if len(opts) == 0 {
+		return placeholder
+	}
+	return ""
+}
+
+// noneOrPlaceholder handles fields where "(none)" is a valid explicit choice.
+// When items is non-empty it returns options with "(none)" prepended and "(none)"
+// as the default value.  When items is empty it returns an empty options slice
+// and the placeholder string as the value, so DisplayValue shows the hint
+// without adding a fake selectable entry.
+func noneOrPlaceholder(items []string, placeholder string) (opts []string, defaultVal string) {
+	if len(items) == 0 {
+		return []string{}, placeholder
+	}
+	return append([]string{"(none)"}, items...), "(none)"
 }

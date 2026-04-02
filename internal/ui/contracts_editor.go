@@ -55,6 +55,7 @@ func defaultDTOFormFields(domainOptions []string) []Field {
 		{
 			Key: "source_domains", Label: "source_domains", Kind: KindMultiSelect,
 			Options: domainOptions,
+			Value:   placeholderFor(domainOptions, "(no domains configured)"),
 		},
 		{Key: "description", Label: "description   ", Kind: KindText},
 	}
@@ -98,16 +99,11 @@ func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
 	if dtoOptions == nil {
 		dtoOptions = []string{}
 	}
-	serviceKind := KindText
-	if len(serviceOptions) > 0 {
-		serviceKind = KindSelect
-	}
-	dtoKind := KindText
-	if len(dtoOptions) > 0 {
-		dtoKind = KindSelect
-	}
 	fields := []Field{
-		{Key: "service_unit", Label: "service_unit  ", Kind: serviceKind, Options: serviceOptions},
+		{Key: "service_unit", Label: "service_unit  ", Kind: KindSelect,
+			Options: serviceOptions,
+			Value:   placeholderFor(serviceOptions, "(no services configured)"),
+		},
 		{Key: "name_path", Label: "name_path     ", Kind: KindText},
 		{
 			Key: "protocol", Label: "protocol      ", Kind: KindSelect,
@@ -118,8 +114,14 @@ func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
 			Key: "auth_required", Label: "auth_required ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
 		},
-		{Key: "request_dto", Label: "request_dto   ", Kind: dtoKind, Options: dtoOptions},
-		{Key: "response_dto", Label: "response_dto  ", Kind: dtoKind, Options: dtoOptions},
+		{Key: "request_dto", Label: "request_dto   ", Kind: KindSelect,
+			Options: dtoOptions,
+			Value:   placeholderFor(dtoOptions, "(no DTOs configured)"),
+		},
+		{Key: "response_dto", Label: "response_dto  ", Kind: KindSelect,
+			Options: dtoOptions,
+			Value:   placeholderFor(dtoOptions, "(no DTOs configured)"),
+		},
 		{
 			Key: "http_method", Label: "http_method   ", Kind: KindSelect,
 			Options: []string{"GET", "POST", "PUT", "PATCH", "DELETE"},

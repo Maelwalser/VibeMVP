@@ -121,9 +121,11 @@ type DomainRelationship struct {
 
 // ── Data pillar supporting types ──────────────────────────────────────────────
 
-// CachingConfig describes the application-level caching strategy.
+// CachingConfig describes a single application-level caching strategy.
 type CachingConfig struct {
+	Name         string `json:"name,omitempty"`
 	Layer        string `json:"layer"`
+	CacheDB      string `json:"cache_db,omitempty"`
 	Strategy     string `json:"strategy"`
 	Invalidation string `json:"invalidation"`
 	TTL          string `json:"ttl,omitempty"`
@@ -156,7 +158,7 @@ type DataPillar struct {
 	Databases         []DBSourceDef        `json:"databases,omitempty"`
 	Domains           []DomainDef          `json:"domains,omitempty"`
 	Entities          []EntityDef          `json:"entities,omitempty"` // legacy
-	Caching           CachingConfig        `json:"caching"`
+	Cachings          []CachingConfig      `json:"cachings,omitempty"`
 	FileStorages      []FileStorageDef     `json:"file_storages,omitempty"`
 	Governance        DataGovernanceConfig `json:"governance,omitempty"`
 	MigrationTool     string               `json:"migration_tool,omitempty"`

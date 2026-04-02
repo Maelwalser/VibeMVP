@@ -515,8 +515,8 @@ func defaultSecurityFields() []Field {
 }
 
 func defaultJobQueueFormFields(services, dtos []string) []Field {
-	workerOpts := append([]string{"(none)"}, services...)
-	payloadOpts := append([]string{"(none)"}, dtos...)
+	workerOpts, workerVal := noneOrPlaceholder(services, "(no services configured)")
+	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{
@@ -537,11 +537,11 @@ func defaultJobQueueFormFields(services, dtos []string) []Field {
 		},
 		{
 			Key: "worker_service", Label: "worker_service", Kind: KindSelect,
-			Options: workerOpts, Value: "(none)",
+			Options: workerOpts, Value: workerVal,
 		},
 		{
 			Key: "payload_dto", Label: "payload_dto   ", Kind: KindSelect,
-			Options: payloadOpts, Value: "(none)",
+			Options: payloadOpts, Value: payloadVal,
 		},
 	}
 }
@@ -552,8 +552,14 @@ func defaultRoleFormFields(permNames, roleNames []string) []Field {
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "description", Label: "description   ", Kind: KindText},
-		{Key: "permissions", Label: "permissions   ", Kind: KindMultiSelect, Options: permNames},
-		{Key: "inherits", Label: "inherits      ", Kind: KindMultiSelect, Options: roleNames},
+		{Key: "permissions", Label: "permissions   ", Kind: KindMultiSelect,
+			Options: permNames,
+			Value:   placeholderFor(permNames, "(no permissions configured)"),
+		},
+		{Key: "inherits", Label: "inherits      ", Kind: KindMultiSelect,
+			Options: roleNames,
+			Value:   placeholderFor(roleNames, "(no roles configured)"),
+		},
 	}
 }
 
@@ -707,9 +713,6 @@ func (be *BackendEditor) SetDTONames(names []string) {
 // KindSelect dropdowns populated with the current service names.
 func (be BackendEditor) withServiceNames(fields []Field) []Field {
 	names := be.ServiceNames()
-	if len(names) == 0 {
-		return fields
-	}
 	out := copyFields(fields)
 	for i := range out {
 		if out[i].Key != "from" && out[i].Key != "to" {
@@ -717,21 +720,16 @@ func (be BackendEditor) withServiceNames(fields []Field) []Field {
 		}
 		out[i].Kind = KindSelect
 		out[i].Options = names
-		// Try to preserve the existing value by finding it in the options.
-		// If not found, keep Value as-is but point SelIdx to first option.
-		found := false
+		out[i].Value = placeholderFor(names, "(no services configured)")
+		out[i].SelIdx = 0
 		for j, n := range names {
 			if n == out[i].Value {
 				out[i].SelIdx = j
-				found = true
 				break
 			}
 		}
-		if !found {
-			out[i].SelIdx = 0
-			if out[i].Value == "" {
-				out[i].Value = names[0]
-			}
+		if len(names) > 0 && out[i].Value == "" {
+			out[i].Value = names[0]
 		}
 	}
 	return out
@@ -740,31 +738,22 @@ func (be BackendEditor) withServiceNames(fields []Field) []Field {
 // withDomainNames returns a copy of fields where the domain field is upgraded to
 // a KindSelect dropdown populated with the available domain names.
 func (be BackendEditor) withDomainNames(fields []Field) []Field {
-	if len(be.DomainNames) == 0 {
-		return fields
-	}
+	names := be.DomainNames
 	out := copyFields(fields)
 	for i := range out {
 		if out[i].Key == "domain" {
 			out[i].Kind = KindSelect
-			out[i].Options = be.DomainNames
-			found := false
-			for _, n := range be.DomainNames {
+			out[i].Options = names
+			out[i].Value = placeholderFor(names, "(no domains configured)")
+			out[i].SelIdx = 0
+			for j, n := range names {
 				if n == out[i].Value {
-					found = true
+					out[i].SelIdx = j
 					break
 				}
 			}
-			if !found {
-				out[i].Value = be.DomainNames[0]
-				out[i].SelIdx = 0
-			} else {
-				for j, n := range be.DomainNames {
-					if n == out[i].Value {
-						out[i].SelIdx = j
-						break
-					}
-				}
+			if len(names) > 0 && out[i].Value == "" {
+				out[i].Value = names[0]
 			}
 		}
 	}
