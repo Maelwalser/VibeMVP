@@ -215,7 +215,7 @@ func roleDescription(kind dag.TaskKind) string {
 		dag.TaskKindServicePlan: `You are a Go software architect. Your ONLY job is to output the project skeleton files that ALL downstream implementation agents will depend on.
 
 STRICT SCOPE — output EXACTLY these files:
-1. go.mod — module name MUST be exactly the module_path value from the payload. List ONLY your direct (first-party) dependencies with stable semver versions. Do NOT list transitive dependencies — a dedicated dependency resolution step will run "go mod tidy" to resolve them. Never guess pseudo-versions; use well-known stable tags (e.g. v5.5.5, v2.52.5). Include every library that repository, service, and handler layers will need (e.g. pgx/v5, fiber/v2, jwt, uuid).
+1. go.mod — module name MUST be exactly the module_path value from the payload. List ONLY your direct (first-party) dependencies. Do NOT list transitive dependencies — a dedicated dependency resolution step will run "go mod tidy" to resolve them. Use EXACTLY the module paths and versions from the "Dependency & API Reference" section below — do NOT invent versions. Include every library that repository, service, and handler layers will need (e.g. pgx/v5, fiber/v2, jwt, uuid).
 2. internal/repository/interfaces.go — defines every repository interface for each domain entity (e.g. UserRepository, BlogRepository). Each interface must list all CRUD methods with precise Go types derived from the domain structs in Shared Team Context. If any database is PostgreSQL, also define the PgxPool interface here (with Exec, Query, QueryRow, SendBatch, Begin methods).
 3. internal/domain/errors.go — domain-level sentinel errors (ErrNotFound, ErrAlreadyExists, etc.) if not already present in Shared Team Context.
 
@@ -286,7 +286,8 @@ STRICT SCOPE:
 CRITICAL RULES:
 - Config file: use next.config.mjs (NOT next.config.ts — TypeScript config requires Next.js 15.3+; .mjs works universally)
 - Package versions: use EXACTLY the versions from the "Infrastructure & Dependency Reference" section
-- package.json: always include all packages with pinned versions from the reference section`,
+- package.json: always include all packages with pinned versions from the reference section
+- Tailwind CSS v4 (any version ≥ 4.x): the PostCSS plugin moved to @tailwindcss/postcss — see the "Tailwind CSS v4" section in the reference for the exact postcss.config.mjs and globals.css format; using the old tailwindcss plugin or @tailwind directives will crash the build`,
 
 		dag.TaskKindInfraDocker: `You are an expert DevOps engineer. Your job is to generate ONLY infrastructure configuration files.
 
@@ -374,7 +375,7 @@ Example:
   },
   {
     "path": "services/user-api/Dockerfile",
-    "content": "FROM golang:1.26-alpine\n..."
+    "content": "FROM golang:<version>-alpine\n..."
   }
 ]
 </files>

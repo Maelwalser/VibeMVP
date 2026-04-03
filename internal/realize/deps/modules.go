@@ -127,7 +127,8 @@ var WellKnownNpmPackages = map[string]string{
 	"@types/react":          "19.1.0",
 	"@types/react-dom":      "19.1.0",
 	"@types/node":           "22.10.0",
-	"tailwindcss":           "3.4.17",
+	"tailwindcss":           "4.0.0",
+	"@tailwindcss/postcss": "4.0.0",
 	"postcss":               "8.5.1",
 	"autoprefixer":          "10.4.20",
 	"eslint":                "9.17.0",
@@ -303,12 +304,111 @@ func ResolveGoVersion(ctx context.Context) string {
 	return min
 }
 
+// resolveGoModuleVersion fetches the latest tagged version of a single Go module
+// from the Go module proxy. Falls back to info.Version on any error.
+// TestDeps versions are not changed — they are resolved transitively by go mod tidy.
+func resolveGoModuleVersion(ctx context.Context, info ModuleInfo) ModuleInfo {
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	encoded := goModProxyPath(info.Module)
+	latestURL := "https://proxy.golang.org/" + encoded + "/@latest"
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, latestURL, nil)
+	if err != nil {
+		return info
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return info
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return info
+	}
+	var latest struct {
+		Version string `json:"Version"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&latest); err != nil || latest.Version == "" {
+		return info
+	}
+	resolved := info
+	resolved.Version = latest.Version
+	return resolved
+}
+
+// ResolveGoModuleVersions fetches the latest versions for every module in
+// WellKnownGoModules from the Go module proxy, deduplicating by module path so
+// each import URL is queried only once. Falls back to static versions on any error.
+// Call once at pipeline startup and pass the result to PromptContext / GoModForService.
+func ResolveGoModuleVersions(ctx context.Context) map[string]ModuleInfo {
+	// Deduplicate: multiple keys may share the same module path (e.g. "pgx" and
+	// "PostgreSQL" both use github.com/jackc/pgx/v5). Resolve each module path once.
+	type job struct {
+		keys []string // all WellKnownGoModules keys that share this module path
+		info ModuleInfo
+	}
+	byModule := make(map[string]*job)
+	for key, info := range WellKnownGoModules {
+		if j, ok := byModule[info.Module]; ok {
+			j.keys = append(j.keys, key)
+		} else {
+			infoCopy := info
+			byModule[info.Module] = &job{keys: []string{key}, info: infoCopy}
+		}
+	}
+
+	type result struct {
+		modulePath string
+		resolved   ModuleInfo
+	}
+	ch := make(chan result, len(byModule))
+	var wg sync.WaitGroup
+	for _, j := range byModule {
+		wg.Add(1)
+		go func(jb *job) {
+			defer wg.Done()
+			ch <- result{jb.info.Module, resolveGoModuleVersion(ctx, jb.info)}
+		}(j)
+	}
+	wg.Wait()
+	close(ch)
+
+	// Build resolved-by-module-path map.
+	resolvedByPath := make(map[string]ModuleInfo, len(byModule))
+	for r := range ch {
+		resolvedByPath[r.modulePath] = r.resolved
+	}
+
+	// Re-expand back to the original key space.
+	out := make(map[string]ModuleInfo, len(WellKnownGoModules))
+	for key, info := range WellKnownGoModules {
+		if resolved, ok := resolvedByPath[info.Module]; ok {
+			out[key] = resolved
+		} else {
+			out[key] = info
+		}
+	}
+	return out
+}
+
+// moduleSource returns the resolved map if non-nil, otherwise falls back to
+// the static WellKnownGoModules. Used by PromptContext and GoModForService.
+func moduleSource(resolved map[string]ModuleInfo) map[string]ModuleInfo {
+	if resolved != nil {
+		return resolved
+	}
+	return WellKnownGoModules
+}
+
 // PromptContext generates text to inject into agent prompts that provides
 // exact dependency versions and library API docs for the task's technology stack.
 // goVersion, if non-empty, is the minimum Go runtime version required by dev tools
 // (resolved at pipeline startup via ResolveGoVersion); it is injected so the plan
 // task generates the correct `go X.Y` directive in go.mod.
-func PromptContext(framework string, technologies []string, goVersion string) string {
+// resolved, if non-nil, is the live-fetched module map from ResolveGoModuleVersions;
+// pass nil to use static fallback versions.
+func PromptContext(framework string, technologies []string, goVersion string, resolved map[string]ModuleInfo) string {
+	modules_ := moduleSource(resolved)
 	var b strings.Builder
 
 	b.WriteString("\n## Dependency & API Reference\n\n")
@@ -318,12 +418,12 @@ func PromptContext(framework string, technologies []string, goVersion string) st
 	seen := make(map[string]bool)
 	var modules []ModuleInfo
 
-	if info, ok := WellKnownGoModules[framework]; ok && !seen[info.Module] {
+	if info, ok := modules_[framework]; ok && !seen[info.Module] {
 		seen[info.Module] = true
 		modules = append(modules, info)
 	}
 	for _, tech := range technologies {
-		if info, ok := WellKnownGoModules[tech]; ok && !seen[info.Module] {
+		if info, ok := modules_[tech]; ok && !seen[info.Module] {
 			seen[info.Module] = true
 			modules = append(modules, info)
 		}
@@ -378,7 +478,9 @@ func PromptContext(framework string, technologies []string, goVersion string) st
 // framework and database dependencies, using only known-good versions.
 // goVersion is the minimum Go runtime version (e.g. "1.25") resolved at
 // pipeline startup via ResolveGoVersion; it must match the Docker base image.
-func GoModForService(modulePath, framework, goVersion string, technologies []string) string {
+// resolved, if non-nil, is the live-fetched module map from ResolveGoModuleVersions.
+func GoModForService(modulePath, framework, goVersion string, technologies []string, resolved map[string]ModuleInfo) string {
+	modules_ := moduleSource(resolved)
 	var requires []string
 	seen := make(map[string]bool)
 
@@ -395,16 +497,16 @@ func GoModForService(modulePath, framework, goVersion string, technologies []str
 		}
 	}
 
-	if info, ok := WellKnownGoModules[framework]; ok {
+	if info, ok := modules_[framework]; ok {
 		addModule(info)
 	}
 	for _, tech := range technologies {
-		if info, ok := WellKnownGoModules[tech]; ok {
+		if info, ok := modules_[tech]; ok {
 			addModule(info)
 		}
 	}
 	for _, key := range []string{"testify", "uuid"} {
-		if info, ok := WellKnownGoModules[key]; ok {
+		if info, ok := modules_[key]; ok {
 			addModule(info)
 		}
 	}
@@ -641,6 +743,30 @@ func InfraPromptContext(ctx context.Context, hasGoServices bool, hasFrontend boo
 		b.WriteString("\n")
 		b.WriteString(LibraryAPIDocs["next"])
 		b.WriteString("\n")
+
+		// Tailwind CSS v4 breaking changes — injected when tailwindcss >= 4.x is resolved.
+		if twVer := resolved["tailwindcss"]; twVer != "" && twVer[0] >= '4' {
+			b.WriteString("### Tailwind CSS v4 — CRITICAL Configuration Rules\n\n")
+			b.WriteString("Tailwind CSS 4.x moved its PostCSS plugin to a separate package. " +
+				"Using `tailwindcss` directly as a PostCSS plugin will crash the build.\n\n")
+			b.WriteString("**postcss.config.mjs** — CORRECT for Tailwind v4:\n")
+			b.WriteString("```js\n" +
+				"const config = {\n" +
+				"  plugins: {\n" +
+				"    \"@tailwindcss/postcss\": {},\n" +
+				"    autoprefixer: {}\n" +
+				"  }\n" +
+				"};\n" +
+				"export default config;\n" +
+				"```\n\n")
+			b.WriteString("WRONG (v3 syntax — causes build crash in v4):\n")
+			b.WriteString("```js\n// DO NOT DO THIS:\nplugins: { tailwindcss: {} }\n```\n\n")
+			b.WriteString("**globals.css** — CORRECT for Tailwind v4:\n")
+			b.WriteString("```css\n@import \"tailwindcss\";\n```\n\n")
+			b.WriteString("WRONG (v3 directives — removed in v4):\n")
+			b.WriteString("```css\n// DO NOT DO THIS:\n@tailwind base;\n@tailwind components;\n@tailwind utilities;\n```\n\n")
+			b.WriteString("**package.json devDependencies** must include `@tailwindcss/postcss` at the same version as `tailwindcss`.\n\n")
+		}
 	}
 
 	return b.String()
