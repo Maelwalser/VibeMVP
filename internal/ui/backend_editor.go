@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vibe-menu/internal/manifest"
@@ -186,9 +188,10 @@ type BackendEditor struct {
 	Events    []manifest.EventDef
 
 	// Cross-tab references (injected from model.go)
-	DomainNames   []string
-	availableDTOs []string
-	cacheAliases  []string // IsCache DB aliases from the Data pillar
+	DomainNames        []string
+	availableDTOs      []string
+	availableEndpoints []string
+	cacheAliases       []string // IsCache DB aliases from the Data pillar
 
 	// Vim motion state
 	countBuf string
@@ -226,6 +229,39 @@ func (be *BackendEditor) SetCacheAliases(aliases []string) {
 // SetDTONames injects DTO names from the contracts tab for job payload dropdowns.
 func (be *BackendEditor) SetDTONames(names []string) {
 	be.availableDTOs = names
+}
+
+// SetEndpointNames injects endpoint names from the contracts tab for the API
+// Gateway endpoints multiselect, preserving any existing selection by name.
+func (be *BackendEditor) SetEndpointNames(names []string) {
+	be.availableEndpoints = names
+	for i := range be.APIGWFields {
+		if be.APIGWFields[i].Key != "endpoints" {
+			continue
+		}
+		// Collect currently selected names before replacing options.
+		var selectedNames []string
+		if len(be.APIGWFields[i].Options) > 0 {
+			for _, idx := range be.APIGWFields[i].SelectedIdxs {
+				if idx < len(be.APIGWFields[i].Options) {
+					selectedNames = append(selectedNames, be.APIGWFields[i].Options[idx])
+				}
+			}
+		} else if be.APIGWFields[i].Value != "" {
+			selectedNames = strings.Split(be.APIGWFields[i].Value, ", ")
+		}
+		be.APIGWFields[i].Options = names
+		be.APIGWFields[i].SelectedIdxs = nil
+		for _, name := range selectedNames {
+			for j, opt := range names {
+				if opt == name {
+					be.APIGWFields[i].SelectedIdxs = append(be.APIGWFields[i].SelectedIdxs, j)
+					break
+				}
+			}
+		}
+		break
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -329,7 +365,8 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 			gw := manifest.APIGatewayConfig{
 				Technology: fieldGet(be.APIGWFields, "technology"),
 				Routing:    fieldGet(be.APIGWFields, "routing"),
-				Features:   fieldGet(be.APIGWFields, "features"),
+				Features:   fieldGetMulti(be.APIGWFields, "features"),
+				Endpoints:  fieldGetMulti(be.APIGWFields, "endpoints"),
 			}
 			bp.APIGateway = &gw
 		}
@@ -423,7 +460,15 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.apiGWEnabled = true
 		be.APIGWFields = setFieldValue(be.APIGWFields, "technology", bp.APIGateway.Technology)
 		be.APIGWFields = setFieldValue(be.APIGWFields, "routing", bp.APIGateway.Routing)
-		be.APIGWFields = setFieldValue(be.APIGWFields, "features", bp.APIGateway.Features)
+		be.APIGWFields = restoreMultiSelectValue(be.APIGWFields, "features", bp.APIGateway.Features)
+		// Endpoint options are injected lazily via SetEndpointNames; store names
+		// in Value so they can be restored once options become available.
+		for i := range be.APIGWFields {
+			if be.APIGWFields[i].Key == "endpoints" {
+				be.APIGWFields[i].Value = bp.APIGateway.Endpoints
+				break
+			}
+		}
 	}
 
 	// Collections — stored directly; per-item forms are rebuilt lazily on navigation.

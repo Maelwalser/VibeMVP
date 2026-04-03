@@ -316,7 +316,7 @@ func (be BackendEditor) updateCommList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		}
 	case "a":
 		be.CommLinks = append(be.CommLinks, manifest.CommLink{})
-		ed.items = append(ed.items, be.withServiceNames(defaultCommFields()))
+		ed.items = append(ed.items, be.withDTONames(be.withServiceNames(defaultCommFields())))
 		ed.itemIdx = len(ed.items) - 1
 		ed.form = copyFields(ed.items[ed.itemIdx])
 		ed.formIdx = 0
@@ -332,7 +332,7 @@ func (be BackendEditor) updateCommList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		}
 	case "enter":
 		if n > 0 {
-			ed.form = be.withServiceNames(copyFields(ed.items[ed.itemIdx]))
+			ed.form = be.withDTONames(be.withServiceNames(copyFields(ed.items[ed.itemIdx])))
 			ed.formIdx = 0
 			ed.itemView = beListViewForm
 			be.activeField = 0
@@ -362,9 +362,13 @@ func (be BackendEditor) updateCommForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		ed.formIdx = (ed.formIdx - 1 + n) % n
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			be.dd.Open = true
-			be.dd.OptIdx = f.SelIdx
+			if f.Kind == KindSelect {
+				be.dd.OptIdx = f.SelIdx
+			} else {
+				be.dd.OptIdx = f.DDCursor
+			}
 		} else {
 			return be.enterCommFormInsert()
 		}

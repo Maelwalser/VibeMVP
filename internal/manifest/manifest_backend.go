@@ -25,13 +25,14 @@ type ExposedInterface struct {
 
 // CommLink describes a directed communication link between two service units.
 type CommLink struct {
-	From               string   `json:"from"`
-	To                 string   `json:"to"`
-	Direction          string   `json:"direction"`
-	Protocol           string   `json:"protocol"`
-	Trigger            string   `json:"trigger,omitempty"`
+	From               string        `json:"from"`
+	To                 string        `json:"to"`
+	Direction          string        `json:"direction"`
+	Protocol           string        `json:"protocol"`
+	Trigger            string        `json:"trigger,omitempty"`
 	SyncAsync          SyncAsyncMode `json:"sync_async"`
-	ResiliencePatterns []string `json:"resilience_patterns,omitempty"`
+	ResiliencePatterns []string      `json:"resilience_patterns,omitempty"`
+	DTOs               []string      `json:"dtos,omitempty"`
 }
 
 // MessagingConfig describes the message broker configuration.
@@ -54,6 +55,7 @@ type APIGatewayConfig struct {
 	Technology string `json:"technology"`
 	Routing    string `json:"routing"`
 	Features   string `json:"features,omitempty"`
+	Endpoints  string `json:"endpoints,omitempty"`
 }
 
 // PermissionDef defines a named permission (e.g. "users:read").

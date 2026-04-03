@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/vibe-menu/internal/manifest"
+import (
+	"strings"
+
+	"github.com/vibe-menu/internal/manifest"
+)
 
 // ── language / framework / linter tables ─────────────────────────────────────
 
@@ -237,20 +241,31 @@ func defaultCommFields() []Field {
 			Key: "resilience", Label: "resilience    ", Kind: KindMultiSelect,
 			Options: []string{"Circuit breaker", "Retry with backoff", "Timeout", "Bulkhead", "None"},
 		},
+		{
+			// Options populated dynamically via withDTONames(); Value stores
+			// comma-sep names for lazy restoration before options are injected.
+			Key: "dto", Label: "dto           ", Kind: KindMultiSelect,
+		},
 	}
 }
 
 func commLinkFromFields(fields []Field) manifest.CommLink {
-	// Read resilience multiselect
 	var resilience []string
+	var dtos []string
 	for _, f := range fields {
-		if f.Key == "resilience" {
+		switch f.Key {
+		case "resilience":
 			for _, idx := range f.SelectedIdxs {
 				if idx < len(f.Options) {
 					resilience = append(resilience, f.Options[idx])
 				}
 			}
-			break
+		case "dto":
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					dtos = append(dtos, f.Options[idx])
+				}
+			}
 		}
 	}
 	return manifest.CommLink{
@@ -261,6 +276,7 @@ func commLinkFromFields(fields []Field) manifest.CommLink {
 		Trigger:            fieldGet(fields, "trigger"),
 		SyncAsync:          fieldGet(fields, "sync_async"),
 		ResiliencePatterns: resilience,
+		DTOs:               dtos,
 	}
 }
 
@@ -277,6 +293,15 @@ func commFieldsFromLink(l manifest.CommLink) []Field {
 	f = setFieldValue(f, "trigger", l.Trigger)
 	if l.SyncAsync != "" {
 		f = setFieldValue(f, "sync_async", l.SyncAsync)
+	}
+	// Store selected DTO names in Value for lazy restoration via withDTONames().
+	if len(l.DTOs) > 0 {
+		for i := range f {
+			if f[i].Key == "dto" {
+				f[i].Value = strings.Join(l.DTOs, ", ")
+				break
+			}
+		}
 	}
 	return f
 }
@@ -340,6 +365,11 @@ func defaultAPIGWFields() []Field {
 				"Request transformation", "CORS handling",
 				"IP allowlist/blocklist", "Circuit breaking", "Health checks",
 			},
+		},
+		{
+			// Options populated dynamically via SetEndpointNames(); Value stores
+			// comma-sep names for lazy restoration before options are injected.
+			Key: "endpoints", Label: "endpoints     ", Kind: KindMultiSelect,
 		},
 	}
 }
@@ -515,6 +545,42 @@ func (be BackendEditor) withServiceNames(fields []Field) []Field {
 		if len(names) > 0 && out[i].Value == "" {
 			out[i].Value = names[0]
 		}
+	}
+	return out
+}
+
+// withDTONames returns a copy of fields where the dto field's options are
+// populated with the currently available DTO names, restoring any prior
+// selections by matching option names.
+func (be BackendEditor) withDTONames(fields []Field) []Field {
+	out := copyFields(fields)
+	for i := range out {
+		if out[i].Key != "dto" {
+			continue
+		}
+		// Collect previously selected DTO names before replacing options.
+		var selectedNames []string
+		if len(out[i].Options) > 0 {
+			for _, idx := range out[i].SelectedIdxs {
+				if idx < len(out[i].Options) {
+					selectedNames = append(selectedNames, out[i].Options[idx])
+				}
+			}
+		} else if out[i].Value != "" {
+			// Options not yet set — Value stores comma-sep names from commFieldsFromLink.
+			selectedNames = strings.Split(out[i].Value, ", ")
+		}
+		out[i].Options = be.availableDTOs
+		out[i].SelectedIdxs = nil
+		for _, name := range selectedNames {
+			for j, opt := range out[i].Options {
+				if opt == name {
+					out[i].SelectedIdxs = append(out[i].SelectedIdxs, j)
+					break
+				}
+			}
+		}
+		break
 	}
 	return out
 }

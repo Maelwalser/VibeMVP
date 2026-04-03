@@ -47,6 +47,12 @@ func (be BackendEditor) isMultiSelectDropdown() bool {
 			return ed.form[ed.formIdx].Kind == KindMultiSelect
 		}
 	}
+	if be.commEditor.itemView == beListViewForm {
+		ed := &be.commEditor
+		if ed.formIdx < len(ed.form) {
+			return ed.form[ed.formIdx].Kind == KindMultiSelect
+		}
+	}
 	if be.authSubView == beAuthViewRoleForm {
 		if be.authRoleFormIdx < len(be.authRoleForm) {
 			return be.authRoleForm[be.authRoleFormIdx].Kind == KindMultiSelect
@@ -75,6 +81,14 @@ func (be *BackendEditor) toggleMultiSelectOption() {
 		}
 		return
 	}
+	if be.commEditor.itemView == beListViewForm {
+		ed := &be.commEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].ToggleMultiSelect(be.dd.OptIdx)
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
 	if f := be.mutableFieldPtr(); f != nil && f.Kind == KindMultiSelect {
 		f.ToggleMultiSelect(be.dd.OptIdx)
 		f.DDCursor = be.dd.OptIdx
@@ -91,6 +105,13 @@ func (be *BackendEditor) saveMultiSelectCursor() {
 	}
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
+	if be.commEditor.itemView == beListViewForm {
+		ed := &be.commEditor
 		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
 			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
 		}
