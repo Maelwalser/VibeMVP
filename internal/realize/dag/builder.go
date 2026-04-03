@@ -518,6 +518,11 @@ func serviceOutputDirs(m *manifest.Manifest) map[string]string {
 			dirs[svcSlug(svc.Name)] = "."
 		}
 	}
+	// Tell the infra.docker task where frontend source files live so it can
+	// set the correct docker-compose build context instead of inventing ./frontend.
+	if m.Frontend.Tech.Framework != "" {
+		dirs["frontend"] = "."
+	}
 	return dirs
 }
 

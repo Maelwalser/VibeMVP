@@ -40,14 +40,16 @@ type TaskOutput struct {
 // It is written to by TaskRunner after a successful commit and read by
 // downstream agents before they are invoked.
 type SharedMemory struct {
-	mu      sync.RWMutex
-	outputs map[string]*TaskOutput
+	mu       sync.RWMutex
+	outputs  map[string]*TaskOutput
+	rawPaths map[string][]string // task ID → committed file paths (untruncated)
 }
 
 // New returns an empty SharedMemory.
 func New() *SharedMemory {
 	return &SharedMemory{
-		outputs: make(map[string]*TaskOutput),
+		outputs:  make(map[string]*TaskOutput),
+		rawPaths: make(map[string][]string),
 	}
 }
 
@@ -63,9 +65,35 @@ func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
 		Files:  excerpts,
 	}
 
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputs[task.ID] = out
+	m.rawPaths[task.ID] = paths
+}
+
+// CommittedPaths returns all file paths committed by the given dependency task IDs.
+// Used by downstream task runners to stage dependency files in the verifier sandbox.
+// Safe for concurrent use.
+func (m *SharedMemory) CommittedPaths(depIDs []string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	seen := make(map[string]struct{})
+	var result []string
+	for _, id := range depIDs {
+		for _, p := range m.rawPaths[id] {
+			if _, ok := seen[p]; !ok {
+				seen[p] = struct{}{}
+				result = append(result, p)
+			}
+		}
+	}
+	return result
 }
 
 // DepsOf returns the recorded outputs for each direct dependency of task.
