@@ -258,8 +258,19 @@ func (fe FrontendEditor) viewComponentActions(w int) []string {
 					label = fmt.Sprintf("(action #%d)", i+1)
 				}
 				detail := a.ActionType
-				if a.Endpoint != "" {
+				switch {
+				case a.Endpoint != "":
 					detail += " → " + a.Endpoint
+				case a.FormTarget != "":
+					detail += " → " + a.FormTarget
+				case a.ModalTarget != "":
+					detail += " → " + a.ModalTarget
+				case a.TargetPage != "":
+					detail += " → " + a.TargetPage
+				case a.ToastMessage != "":
+					detail += ": " + a.ToastMessage
+				case a.StateKey != "":
+					detail += " → " + a.StateKey
 				}
 				lines = append(lines, renderListItem(w, i == fe.actionIdx, "  ▶ ", label, detail))
 			}
