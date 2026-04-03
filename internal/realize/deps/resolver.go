@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/vibe-mvp/internal/realize/agent"
-	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/agent"
+	"github.com/vibe-menu/internal/realize/dag"
 )
 
 // Agent resolves project dependencies by running the language-appropriate package

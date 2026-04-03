@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/vibe-mvp/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/dag"
 )
 
 // TryFix attempts deterministic, zero-LLM fixes on generated files based on

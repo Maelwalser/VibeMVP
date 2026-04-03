@@ -1,3 +1,5 @@
+//go:build ignore
+
 package agent
 
 // This file shows the KEY CHANGES to prompt.go. Merge these into your existing prompt.go.
@@ -11,9 +13,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vibe-mvp/internal/realize/dag"
-	"github.com/vibe-mvp/internal/realize/deps"
-	"github.com/vibe-mvp/internal/realize/skills"
+	"github.com/vibe-menu/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/deps"
+	"github.com/vibe-menu/internal/realize/skills"
 )
 
 // SystemPromptV2 builds the system prompt with library API docs injected.
@@ -22,19 +24,30 @@ func SystemPromptV2(kind dag.TaskKind, skillDocs []skills.Doc, depsContext strin
 	var b strings.Builder
 
 	b.WriteString(roleDescription(kind))
-	b.WriteString("\n\n")
+	b.WriteString("
+
+")
 	b.WriteString(outputFormatInstructionsV2())
 
 	// ── NEW: inject dependency & API reference ──
 	if depsContext != "" {
-		b.WriteString("\n")
+		b.WriteString("
+")
 		b.WriteString(depsContext)
 	}
 
 	if len(skillDocs) > 0 {
-		b.WriteString("\n\n## Technology Skill Guides\n\n")
+		b.WriteString("
+
+## Technology Skill Guides
+
+")
 		for _, doc := range skillDocs {
-			b.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", doc.Technology, doc.Content))
+			b.WriteString(fmt.Sprintf("### %s
+
+%s
+
+", doc.Technology, doc.Content))
 		}
 	}
 
@@ -77,7 +90,9 @@ Example:
 [
   {
     "path": "services/user-api/main.go",
-    "content": "package main\n\nimport ..."
+    "content": "package main
+
+import ..."
   }
 ]
 </files>
@@ -96,7 +111,7 @@ Rules:
 - All Go regex patterns MUST use backtick raw strings, not double-quoted strings:
   CORRECT: regexp.MustCompile(` + "`" + `\d{4}-\d{2}-\d{2}` + "`" + `)
   WRONG:   regexp.MustCompile("\d{4}-\d{2}-\d{2}")    // invalid escape sequences
-  WRONG:   regexp.MustCompile("\\d{4}-\\d{2}-\\d{2}") // works but fragile
+  WRONG:   regexp.MustCompile("\d{4}-\d{2}-\d{2}") // works but fragile
 - All Go code MUST be gofmt-clean. Use tabs for indentation, not spaces.
 - Generate _test.go files for all handlers, services, and repositories.
 - Use table-driven tests covering happy path, error cases, and edge cases.

@@ -1,6 +1,6 @@
 package orchestrator
 
-import "github.com/vibe-mvp/internal/realize/dag"
+import "github.com/vibe-menu/internal/realize/dag"
 
 // defaultTierForKind maps each task kind to its default Claude model ID.
 // Simple/boilerplate tasks use Haiku; medium-complexity tasks use Sonnet.
