@@ -9,7 +9,22 @@ type DTOField struct {
 	Required   bool   `json:"required"`
 	Nullable   bool   `json:"nullable"`
 	Validation string `json:"validation,omitempty"`
+	Default    string `json:"default,omitempty"`
 	Notes      string `json:"notes,omitempty"`
+
+	// Protobuf-specific
+	FieldNumber   string `json:"field_number,omitempty"`
+	ProtoModifier string `json:"proto_modifier,omitempty"`
+	JsonName      string `json:"json_name,omitempty"`
+
+	// Thrift / Cap'n Proto
+	FieldID string `json:"field_id,omitempty"`
+
+	// Thrift-specific
+	ThriftModifier string `json:"thrift_modifier,omitempty"`
+
+	// FlatBuffers-specific
+	Deprecated bool `json:"deprecated,omitempty"`
 }
 
 // DTODef describes a Data Transfer Object.
@@ -18,7 +33,24 @@ type DTODef struct {
 	Category      string     `json:"category"`
 	SourceDomains string     `json:"source_domains,omitempty"`
 	Description   string     `json:"description,omitempty"`
+	Protocol      string     `json:"protocol,omitempty"`
 	Fields        []DTOField `json:"fields,omitempty"`
+
+	// Protobuf-specific
+	ProtoPackage string `json:"proto_package,omitempty"`
+	ProtoSyntax  string `json:"proto_syntax,omitempty"`
+	ProtoOptions string `json:"proto_options,omitempty"`
+
+	// Avro-specific
+	AvroNamespace  string `json:"avro_namespace,omitempty"`
+	SchemaRegistry string `json:"schema_registry,omitempty"`
+
+	// Thrift-specific
+	ThriftNamespace string `json:"thrift_namespace,omitempty"`
+	ThriftLanguage  string `json:"thrift_language,omitempty"`
+
+	// FlatBuffers / Cap'n Proto
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // EndpointDef describes an API endpoint or operation.

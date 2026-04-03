@@ -58,20 +58,96 @@ func defaultDTOFormFields(domainOptions []string) []Field {
 			Value:   placeholderFor(domainOptions, "(no domains configured)"),
 		},
 		{Key: "description", Label: "description   ", Kind: KindText},
+		{
+			Key: "protocol", Label: "protocol      ", Kind: KindSelect,
+			Options: []string{"REST/JSON", "Protobuf", "Avro", "MessagePack", "Thrift", "FlatBuffers", "Cap'n Proto"},
+			Value:   "REST/JSON",
+		},
+		// ── Protobuf-specific ────────────────────────────────────────────────────
+		{Key: "proto_package", Label: "proto_package ", Kind: KindText},
+		{
+			Key: "proto_syntax", Label: "proto_syntax  ", Kind: KindSelect,
+			Options: []string{"proto3", "proto2"}, Value: "proto3",
+		},
+		{Key: "proto_options", Label: "proto_options ", Kind: KindText},
+		// ── Avro-specific ────────────────────────────────────────────────────────
+		{Key: "avro_namespace", Label: "avro_namespace", Kind: KindText},
+		{Key: "schema_registry", Label: "schema_reg    ", Kind: KindText},
+		// ── Thrift-specific ──────────────────────────────────────────────────────
+		{Key: "thrift_namespace", Label: "thrift_ns     ", Kind: KindText},
+		{
+			Key: "thrift_language", Label: "thrift_lang   ", Kind: KindSelect,
+			Options: []string{"go", "java", "python", "cpp", "js", "php", "ruby"},
+			Value:   "go",
+		},
+		// ── FlatBuffers / Cap'n Proto ────────────────────────────────────────────
+		{Key: "namespace", Label: "namespace     ", Kind: KindText},
 	}
 }
 
-func defaultDTOFieldForm() []Field {
+// typeOptionsForDTOProtocol returns the native types for a given DTO serialisation protocol.
+func typeOptionsForDTOProtocol(proto string) []string {
+	switch proto {
+	case "Protobuf":
+		return []string{
+			"string", "bool", "bytes",
+			"int32", "int64", "uint32", "uint64", "sint32", "sint64",
+			"fixed32", "fixed64", "sfixed32", "sfixed64",
+			"float", "double",
+			"enum", "message", "repeated", "map", "oneof",
+			"google.Any", "google.Timestamp", "google.Duration",
+		}
+	case "Avro":
+		return []string{
+			"null", "boolean", "int", "long", "float", "double",
+			"bytes", "string",
+			"record", "enum", "array", "map", "union", "fixed",
+		}
+	case "MessagePack":
+		return []string{
+			"string", "int", "float", "bool", "binary",
+			"array", "map", "nil", "timestamp", "ext",
+		}
+	case "Thrift":
+		return []string{
+			"bool", "byte", "i16", "i32", "i64", "double",
+			"string", "binary",
+			"list", "set", "map", "enum", "struct", "void",
+		}
+	case "FlatBuffers":
+		return []string{
+			"bool",
+			"int8", "int16", "int32", "int64",
+			"uint8", "uint16", "uint32", "uint64",
+			"float32", "float64",
+			"string", "[type]", "struct", "table", "enum", "union",
+		}
+	case "Cap'n Proto":
+		return []string{
+			"Bool",
+			"Int8", "Int16", "Int32", "Int64",
+			"UInt8", "UInt16", "UInt32", "UInt64",
+			"Float32", "Float64",
+			"Text", "Data",
+			"List", "Struct", "Enum", "Union", "AnyPointer",
+		}
+	default: // REST/JSON
+		return []string{
+			"string", "int", "float", "boolean", "datetime",
+			"uuid", "enum(values)", "array(type)", "nested(DTO)", "map(key,value)",
+		}
+	}
+}
+
+func defaultDTOFieldForm(protocol string) []Field {
+	typeOpts := typeOptionsForDTOProtocol(protocol)
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{
 			Key: "type", Label: "type          ", Kind: KindSelect,
-			Options: []string{
-				"string", "int", "float", "boolean", "datetime",
-				"uuid", "enum(values)", "array(type)", "nested(DTO)", "map(key,value)",
-			},
-			Value: "string",
+			Options: typeOpts, Value: typeOpts[0],
 		},
+		// ── REST/JSON · MessagePack · Avro ───────────────────────────────────────
 		{
 			Key: "required", Label: "required      ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
@@ -87,8 +163,113 @@ func defaultDTOFieldForm() []Field {
 				"email", "url", "regex", "uuid", "enum", "phone", "pattern", "custom",
 			},
 		},
+		// ── Default value (Avro, Thrift, FlatBuffers, Cap'n Proto, REST/JSON) ───
+		{Key: "default", Label: "default       ", Kind: KindText},
+		// ── Protobuf-specific ────────────────────────────────────────────────────
+		{Key: "field_number", Label: "field_number  ", Kind: KindText},
+		{
+			Key: "proto_modifier", Label: "proto_modifier", Kind: KindSelect,
+			Options: []string{"optional", "repeated", "oneof"}, Value: "optional",
+		},
+		{Key: "json_name", Label: "json_name     ", Kind: KindText},
+		// ── Thrift / Cap'n Proto ─────────────────────────────────────────────────
+		{Key: "field_id", Label: "field_id      ", Kind: KindText},
+		// ── Thrift-specific ──────────────────────────────────────────────────────
+		{
+			Key: "thrift_mod", Label: "thrift_mod    ", Kind: KindSelect,
+			Options: []string{"required", "optional", "default"}, Value: "optional",
+		},
+		// ── FlatBuffers-specific ─────────────────────────────────────────────────
+		{
+			Key: "deprecated", Label: "deprecated    ", Kind: KindSelect,
+			Options: []string{"false", "true"}, Value: "false",
+		},
 		{Key: "notes", Label: "notes         ", Kind: KindText},
 	}
+}
+
+// refreshDTOFieldTypeOptions updates the type field options in a field form to match
+// the given protocol, preserving the current value when possible.
+func refreshDTOFieldTypeOptions(form []Field, protocol string) []Field {
+	opts := typeOptionsForDTOProtocol(protocol)
+	for i := range form {
+		if form[i].Key != "type" {
+			continue
+		}
+		cur := form[i].DisplayValue()
+		form[i].Options = opts
+		form[i].SelIdx = 0
+		form[i].Value = opts[0]
+		for j, t := range opts {
+			if t == cur {
+				form[i].SelIdx = j
+				form[i].Value = t
+				break
+			}
+		}
+		break
+	}
+	return form
+}
+
+// currentDTOProtocol returns the serialisation protocol selected in the DTO form.
+func (ce ContractsEditor) currentDTOProtocol() string {
+	proto := fieldGet(ce.dtoForm, "protocol")
+	if proto == "" {
+		return "REST/JSON"
+	}
+	return proto
+}
+
+// visibleDTOFieldFormFields returns only the field-form fields relevant to the
+// current DTO protocol, hiding inapplicable options.
+func (ce ContractsEditor) visibleDTOFieldFormFields() []Field {
+	proto := ce.currentDTOProtocol()
+	var visible []Field
+	for _, f := range ce.dtoFieldForm {
+		switch f.Key {
+		case "required", "nullable":
+			if proto != "REST/JSON" && proto != "MessagePack" && proto != "Avro" {
+				continue
+			}
+		case "validation":
+			if proto != "REST/JSON" && proto != "MessagePack" {
+				continue
+			}
+		case "default":
+			if proto == "Protobuf" {
+				continue
+			}
+		case "field_number", "proto_modifier", "json_name":
+			if proto != "Protobuf" {
+				continue
+			}
+		case "field_id":
+			if proto != "Thrift" && proto != "Cap'n Proto" {
+				continue
+			}
+		case "thrift_mod":
+			if proto != "Thrift" {
+				continue
+			}
+		case "deprecated":
+			if proto != "FlatBuffers" {
+				continue
+			}
+		}
+		visible = append(visible, f)
+	}
+	return visible
+}
+
+// dtoFieldFormFieldByKey returns a pointer to the field-form field with the given key.
+func (ce *ContractsEditor) dtoFieldFormFieldByKey(key string) *Field {
+	for i := range ce.dtoFieldForm {
+		if ce.dtoFieldForm[i].Key == key {
+			return &ce.dtoFieldForm[i]
+		}
+	}
+	return nil
 }
 
 func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
@@ -356,6 +537,60 @@ func (ce *ContractsEditor) updateEPDependentFields() {
 	}
 }
 
+// visibleDTOFields returns only the DTO form fields relevant to the selected
+// serialisation protocol, hiding the other protocol-specific fields.
+func (ce ContractsEditor) visibleDTOFields() []Field {
+	if len(ce.dtoForm) == 0 {
+		return nil
+	}
+	proto := fieldGet(ce.dtoForm, "protocol")
+	var visible []Field
+	for _, f := range ce.dtoForm {
+		switch f.Key {
+		case "proto_package", "proto_syntax", "proto_options":
+			if proto != "Protobuf" {
+				continue
+			}
+		case "avro_namespace", "schema_registry":
+			if proto != "Avro" {
+				continue
+			}
+		case "thrift_namespace", "thrift_language":
+			if proto != "Thrift" {
+				continue
+			}
+		case "namespace":
+			if proto != "FlatBuffers" && proto != "Cap'n Proto" {
+				continue
+			}
+		}
+		visible = append(visible, f)
+	}
+	return visible
+}
+
+// dtoFormFieldByKey returns a pointer to the DTO form field with the given key.
+func (ce *ContractsEditor) dtoFormFieldByKey(key string) *Field {
+	for i := range ce.dtoForm {
+		if ce.dtoForm[i].Key == key {
+			return &ce.dtoForm[i]
+		}
+	}
+	return nil
+}
+
+// updateDTODependentFields clamps dtoFormIdx to the visible field range after a
+// protocol change so the cursor never lands on a hidden field.
+func (ce *ContractsEditor) updateDTODependentFields() {
+	if ce.activeTab != contractsTabDTOs || ce.dtoSubView != ceViewForm {
+		return
+	}
+	visible := ce.visibleDTOFields()
+	if len(visible) > 0 && ce.dtoFormIdx >= len(visible) {
+		ce.dtoFormIdx = len(visible) - 1
+	}
+}
+
 // visibleEPFields returns only the endpoint form fields relevant to the
 // currently selected protocol, hiding the other protocol-specific fields.
 func (ce ContractsEditor) visibleEPFields() []Field {
@@ -506,12 +741,14 @@ func (ce *ContractsEditor) activeCEFieldPtr() *Field {
 	case contractsTabDTOs:
 		switch ce.dtoSubView {
 		case ceViewForm:
-			if ce.dtoFormIdx < len(ce.dtoForm) {
-				return &ce.dtoForm[ce.dtoFormIdx]
+			visible := ce.visibleDTOFields()
+			if ce.dtoFormIdx < len(visible) {
+				return ce.dtoFormFieldByKey(visible[ce.dtoFormIdx].Key)
 			}
 		case ceViewSubForm:
-			if ce.dtoFieldFormIdx < len(ce.dtoFieldForm) {
-				return &ce.dtoFieldForm[ce.dtoFieldFormIdx]
+			visible := ce.visibleDTOFieldFormFields()
+			if ce.dtoFieldFormIdx < len(visible) {
+				return ce.dtoFieldFormFieldByKey(visible[ce.dtoFieldFormIdx].Key)
 			}
 		}
 	case contractsTabEndpoints:
@@ -589,7 +826,8 @@ func (ce ContractsEditor) updateDropdown(key tea.KeyMsg) (ContractsEditor, tea.C
 		}
 		ce.ddOpen = false
 	}
-	// After any dropdown interaction, refresh EP dependent fields (protocol options, visibility)
+	// After any dropdown interaction, refresh dependent fields for both DTO and EP forms.
+	ce.updateDTODependentFields()
 	ce.updateEPDependentFields()
 	return ce, nil
 }
@@ -665,12 +903,12 @@ func (ce *ContractsEditor) advanceField(delta int) {
 	case contractsTabDTOs:
 		switch ce.dtoSubView {
 		case ceViewForm:
-			n := len(ce.dtoForm)
+			n := len(ce.visibleDTOFields())
 			if n > 0 {
 				ce.dtoFormIdx = (ce.dtoFormIdx + delta + n) % n
 			}
 		case ceViewSubForm:
-			n := len(ce.dtoFieldForm)
+			n := len(ce.visibleDTOFieldFormFields())
 			if n > 0 {
 				ce.dtoFieldFormIdx = (ce.dtoFieldFormIdx + delta + n) % n
 			}
@@ -738,7 +976,7 @@ func (ce ContractsEditor) tryEnterInsert() (ContractsEditor, tea.Cmd) {
 		case ceViewForm:
 			n = len(ce.dtoForm)
 		case ceViewSubForm:
-			n = len(ce.dtoFieldForm)
+			n = len(ce.visibleDTOFieldFormFields())
 		}
 	case contractsTabEndpoints:
 		if ce.epSubView == ceViewForm {
@@ -858,11 +1096,28 @@ func (ce ContractsEditor) updateDTOList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 				}
 			}
 			ce.dtoForm = setFieldValue(ce.dtoForm, "description", d.Description)
+			if d.Protocol != "" {
+				ce.dtoForm = setFieldValue(ce.dtoForm, "protocol", d.Protocol)
+			}
+			ce.dtoForm = setFieldValue(ce.dtoForm, "proto_package", d.ProtoPackage)
+			ce.dtoForm = setFieldValue(ce.dtoForm, "proto_syntax", d.ProtoSyntax)
+			ce.dtoForm = setFieldValue(ce.dtoForm, "proto_options", d.ProtoOptions)
+			ce.dtoForm = setFieldValue(ce.dtoForm, "avro_namespace", d.AvroNamespace)
+			ce.dtoForm = setFieldValue(ce.dtoForm, "schema_registry", d.SchemaRegistry)
+			ce.dtoForm = setFieldValue(ce.dtoForm, "thrift_namespace", d.ThriftNamespace)
+			if d.ThriftLanguage != "" {
+				ce.dtoForm = setFieldValue(ce.dtoForm, "thrift_language", d.ThriftLanguage)
+			}
+			ce.dtoForm = setFieldValue(ce.dtoForm, "namespace", d.Namespace)
 			ce.dtoFormIdx = 0
 			// Rebuild field items
+			proto := d.Protocol
+			if proto == "" {
+				proto = "REST/JSON"
+			}
 			ce.dtoFieldItems = make([][]Field, len(d.Fields))
 			for i, df := range d.Fields {
-				f := defaultDTOFieldForm()
+				f := defaultDTOFieldForm(proto)
 				f = setFieldValue(f, "name", df.Name)
 				f = setFieldValue(f, "type", df.Type)
 				if df.Required {
@@ -872,6 +1127,19 @@ func (ce ContractsEditor) updateDTOList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 					f = setFieldValue(f, "nullable", "true")
 				}
 				f = restoreMultiSelectValue(f, "validation", df.Validation)
+				f = setFieldValue(f, "default", df.Default)
+				f = setFieldValue(f, "field_number", df.FieldNumber)
+				if df.ProtoModifier != "" {
+					f = setFieldValue(f, "proto_modifier", df.ProtoModifier)
+				}
+				f = setFieldValue(f, "json_name", df.JsonName)
+				f = setFieldValue(f, "field_id", df.FieldID)
+				if df.ThriftModifier != "" {
+					f = setFieldValue(f, "thrift_mod", df.ThriftModifier)
+				}
+				if df.Deprecated {
+					f = setFieldValue(f, "deprecated", "true")
+				}
 				f = setFieldValue(f, "notes", df.Notes)
 				ce.dtoFieldItems[i] = f
 			}
@@ -898,9 +1166,10 @@ func splitCSV(s string) []string {
 }
 
 func (ce ContractsEditor) updateDTOForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd) {
+	visible := ce.visibleDTOFields()
 	switch key.String() {
 	case "j", "down":
-		if ce.dtoFormIdx < len(ce.dtoForm)-1 {
+		if ce.dtoFormIdx < len(visible)-1 {
 			ce.dtoFormIdx++
 		}
 	case "k", "up":
@@ -908,7 +1177,10 @@ func (ce ContractsEditor) updateDTOForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 			ce.dtoFormIdx--
 		}
 	case "enter", " ":
-		f := &ce.dtoForm[ce.dtoFormIdx]
+		f := ce.activeCEFieldPtr()
+		if f == nil {
+			break
+		}
 		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			ce.ddOpen = true
 			if f.Kind == KindSelect {
@@ -920,12 +1192,14 @@ func (ce ContractsEditor) updateDTOForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 			return ce.tryEnterInsert()
 		}
 	case "H", "shift+left":
-		f := &ce.dtoForm[ce.dtoFormIdx]
-		if f.Kind == KindSelect {
+		f := ce.activeCEFieldPtr()
+		if f != nil && f.Kind == KindSelect {
 			f.CyclePrev()
+			ce.updateDTODependentFields()
 		}
 	case "i", "a":
-		if ce.dtoForm[ce.dtoFormIdx].CanEditAsText() {
+		f := ce.activeCEFieldPtr()
+		if f != nil && f.CanEditAsText() {
 			return ce.tryEnterInsert()
 		}
 	case "F":
@@ -960,7 +1234,7 @@ func (ce *ContractsEditor) populateDTOFieldsFromDomains() {
 				continue
 			}
 			for _, attr := range domainDef.Attributes {
-				f := defaultDTOFieldForm()
+				f := defaultDTOFieldForm(ce.currentDTOProtocol())
 				f = setFieldValue(f, "name", attr.Name)
 				f = setFieldValue(f, "type", domainTypeToDTOType(attr.Type))
 				if attr.Sensitive {
@@ -1012,16 +1286,32 @@ func (ce *ContractsEditor) saveDTOForm() {
 	d.Category = fieldGet(ce.dtoForm, "category")
 	d.SourceDomains = fieldGetMulti(ce.dtoForm, "source_domains")
 	d.Description = fieldGet(ce.dtoForm, "description")
+	d.Protocol = fieldGet(ce.dtoForm, "protocol")
+	d.ProtoPackage = fieldGet(ce.dtoForm, "proto_package")
+	d.ProtoSyntax = fieldGet(ce.dtoForm, "proto_syntax")
+	d.ProtoOptions = fieldGet(ce.dtoForm, "proto_options")
+	d.AvroNamespace = fieldGet(ce.dtoForm, "avro_namespace")
+	d.SchemaRegistry = fieldGet(ce.dtoForm, "schema_registry")
+	d.ThriftNamespace = fieldGet(ce.dtoForm, "thrift_namespace")
+	d.ThriftLanguage = fieldGet(ce.dtoForm, "thrift_language")
+	d.Namespace = fieldGet(ce.dtoForm, "namespace")
 
 	d.Fields = make([]manifest.DTOField, len(ce.dtoFieldItems))
 	for i, item := range ce.dtoFieldItems {
 		d.Fields[i] = manifest.DTOField{
-			Name:       fieldGet(item, "name"),
-			Type:       fieldGet(item, "type"),
-			Required:   fieldGet(item, "required") == "true",
-			Nullable:   fieldGet(item, "nullable") == "true",
-			Validation: fieldGet(item, "validation"),
-			Notes:      fieldGet(item, "notes"),
+			Name:           fieldGet(item, "name"),
+			Type:           fieldGet(item, "type"),
+			Required:       fieldGet(item, "required") == "true",
+			Nullable:       fieldGet(item, "nullable") == "true",
+			Validation:     fieldGetMulti(item, "validation"),
+			Default:        fieldGet(item, "default"),
+			FieldNumber:    fieldGet(item, "field_number"),
+			ProtoModifier:  fieldGet(item, "proto_modifier"),
+			JsonName:       fieldGet(item, "json_name"),
+			FieldID:        fieldGet(item, "field_id"),
+			ThriftModifier: fieldGet(item, "thrift_mod"),
+			Deprecated:     fieldGet(item, "deprecated") == "true",
+			Notes:          fieldGet(item, "notes"),
 		}
 	}
 }
@@ -1038,7 +1328,7 @@ func (ce ContractsEditor) updateDTOFieldList(key tea.KeyMsg) (ContractsEditor, t
 			ce.dtoFieldIdx--
 		}
 	case "a":
-		ce.dtoFieldItems = append(ce.dtoFieldItems, defaultDTOFieldForm())
+		ce.dtoFieldItems = append(ce.dtoFieldItems, defaultDTOFieldForm(ce.currentDTOProtocol()))
 		ce.dtoFieldIdx = len(ce.dtoFieldItems) - 1
 		ce.dtoFieldForm = copyFields(ce.dtoFieldItems[ce.dtoFieldIdx])
 		ce.dtoFieldFormIdx = 0
@@ -1054,6 +1344,7 @@ func (ce ContractsEditor) updateDTOFieldList(key tea.KeyMsg) (ContractsEditor, t
 	case "enter":
 		if n > 0 {
 			ce.dtoFieldForm = copyFields(ce.dtoFieldItems[ce.dtoFieldIdx])
+			ce.dtoFieldForm = refreshDTOFieldTypeOptions(ce.dtoFieldForm, ce.currentDTOProtocol())
 			ce.dtoFieldFormIdx = 0
 			ce.dtoSubView = ceViewSubForm
 		}
@@ -1064,9 +1355,10 @@ func (ce ContractsEditor) updateDTOFieldList(key tea.KeyMsg) (ContractsEditor, t
 }
 
 func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd) {
+	visible := ce.visibleDTOFieldFormFields()
 	switch key.String() {
 	case "j", "down":
-		if ce.dtoFieldFormIdx < len(ce.dtoFieldForm)-1 {
+		if ce.dtoFieldFormIdx < len(visible)-1 {
 			ce.dtoFieldFormIdx++
 		}
 	case "k", "up":
@@ -1074,7 +1366,10 @@ func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, t
 			ce.dtoFieldFormIdx--
 		}
 	case "enter", " ":
-		f := &ce.dtoFieldForm[ce.dtoFieldFormIdx]
+		f := ce.activeCEFieldPtr()
+		if f == nil {
+			break
+		}
 		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			ce.ddOpen = true
 			if f.Kind == KindSelect {
@@ -1086,12 +1381,13 @@ func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, t
 			return ce.tryEnterInsert()
 		}
 	case "H", "shift+left":
-		f := &ce.dtoFieldForm[ce.dtoFieldFormIdx]
-		if f.Kind == KindSelect {
+		f := ce.activeCEFieldPtr()
+		if f != nil && f.Kind == KindSelect {
 			f.CyclePrev()
 		}
 	case "i", "a":
-		if ce.dtoFieldForm[ce.dtoFieldFormIdx].CanEditAsText() {
+		f := ce.activeCEFieldPtr()
+		if f != nil && f.CanEditAsText() {
 			return ce.tryEnterInsert()
 		}
 	case "b", "esc":
@@ -1484,7 +1780,7 @@ func (ce ContractsEditor) viewDTOs(w int) []string {
 		}
 		var lines []string
 		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(name), "")
-		lines = append(lines, renderFormFields(w, ce.dtoForm, ce.dtoFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
+		lines = append(lines, renderFormFields(w, ce.visibleDTOFields(), ce.dtoFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
 		lines = append(lines, "", StyleSectionDesc.Render(fmt.Sprintf("  F: edit fields  (%d field(s))", len(ce.dtoFieldItems))))
 		return lines
 
@@ -1518,7 +1814,7 @@ func (ce ContractsEditor) viewDTOs(w int) []string {
 		}
 		var lines []string
 		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(fname), "")
-		lines = append(lines, renderFormFields(w, ce.dtoFieldForm, ce.dtoFieldFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
+		lines = append(lines, renderFormFields(w, ce.visibleDTOFieldFormFields(), ce.dtoFieldFormIdx, ce.internalMode == ceInsert, ce.formInput, ce.ddOpen, ce.ddOptIdx)...)
 		return lines
 	}
 	return nil
