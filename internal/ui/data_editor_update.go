@@ -266,6 +266,7 @@ func (de DataEditor) updateNormalEntitySettings(key tea.KeyMsg) (DataEditor, tea
 		de.saveEntFormBack()
 		de.view = deViewEntities
 	}
+	de.saveEntFormBack()
 	return de, nil
 }
 
@@ -370,6 +371,7 @@ func (de DataEditor) updateNormalColForm(key tea.KeyMsg) (DataEditor, tea.Cmd) {
 		de.saveColFormBack()
 		de.view = deViewColumns
 	}
+	de.saveColFormBack()
 	return de, nil
 }
 
@@ -393,6 +395,7 @@ func (de DataEditor) updateEntFormDropdown(key tea.KeyMsg) (DataEditor, tea.Cmd)
 	case "esc", "b":
 		de.dd.Open = false
 	}
+	de.saveEntFormBack()
 	return de, nil
 }
 
@@ -416,6 +419,7 @@ func (de DataEditor) updateColFormDropdown(key tea.KeyMsg) (DataEditor, tea.Cmd)
 	case "esc", "b":
 		de.dd.Open = false
 	}
+	de.saveColFormBack()
 	return de, nil
 }
 

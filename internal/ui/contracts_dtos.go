@@ -179,6 +179,7 @@ func (ce ContractsEditor) updateDTOForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 		ce.saveDTOForm()
 		ce.dtoSubView = ceViewList
 	}
+	ce.saveDTOForm()
 	return ce, nil
 }
 
@@ -370,6 +371,9 @@ func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, t
 			ce.dtoFieldItems[ce.dtoFieldIdx] = copyFields(ce.dtoFieldForm)
 		}
 		ce.dtoSubView = ceViewSubList
+	}
+	if ce.dtoFieldIdx < len(ce.dtoFieldItems) {
+		ce.dtoFieldItems[ce.dtoFieldIdx] = copyFields(ce.dtoFieldForm)
 	}
 	return ce, nil
 }

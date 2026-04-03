@@ -122,6 +122,7 @@ func (be BackendEditor) updateJobsForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		be.saveJobsForm()
 		be.jobsSubView = beViewList
 	}
+	be.saveJobsForm()
 	return be, nil
 }
 

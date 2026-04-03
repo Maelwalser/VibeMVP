@@ -141,6 +141,7 @@ func (fe FrontendEditor) updateAssetForm(key tea.KeyMsg) (FrontendEditor, tea.Cm
 		fe.saveAssetForm()
 		fe.assetSubView = ceViewList
 	}
+	fe.saveAssetForm()
 	return fe, nil
 }
 
@@ -185,6 +186,7 @@ func (fe FrontendEditor) updateAssetFormDropdown(key tea.KeyMsg) (FrontendEditor
 		}
 		fe.dd.Open = false
 	}
+	fe.saveAssetForm()
 	return fe, nil
 }
 

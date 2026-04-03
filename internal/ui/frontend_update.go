@@ -345,6 +345,7 @@ func (fe FrontendEditor) updatePageForm(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 		fe.savePageForm()
 		fe.pageSubView = ceViewList
 	}
+	fe.savePageForm()
 	return fe, nil
 }
 
@@ -389,6 +390,7 @@ func (fe FrontendEditor) updatePageFormDropdown(key tea.KeyMsg) (FrontendEditor,
 		}
 		fe.dd.Open = false
 	}
+	fe.savePageForm()
 	return fe, nil
 }
 
@@ -505,6 +507,7 @@ func (fe FrontendEditor) updateCompForm(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 		fe.saveCompForm()
 		fe.compSubView = ceViewList
 	}
+	fe.saveCompForm()
 	return fe, nil
 }
 
@@ -543,6 +546,7 @@ func (fe FrontendEditor) updateCompFormDropdown(key tea.KeyMsg) (FrontendEditor,
 		}
 		fe.dd.Open = false
 	}
+	fe.saveCompForm()
 	return fe, nil
 }
 
@@ -712,6 +716,8 @@ func (fe FrontendEditor) updateCompActionForm(key tea.KeyMsg) (FrontendEditor, t
 		fe.saveActionsToComp()
 		fe.actionSubView = ceViewList
 	}
+	fe.saveActionForm()
+	fe.saveActionsToComp()
 	return fe, nil
 }
 
@@ -739,6 +745,8 @@ func (fe FrontendEditor) updateCompActionFormDropdown(key tea.KeyMsg) (FrontendE
 	case "esc", "b":
 		fe.dd.Open = false
 	}
+	fe.saveActionForm()
+	fe.saveActionsToComp()
 	return fe, nil
 }
 

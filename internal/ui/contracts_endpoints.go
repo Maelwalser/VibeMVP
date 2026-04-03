@@ -150,6 +150,7 @@ func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 		ce.saveEPForm()
 		ce.epSubView = ceViewList
 	}
+	ce.saveEPForm()
 	return ce, nil
 }
 
@@ -367,6 +368,7 @@ func (ce ContractsEditor) updateExtForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 		ce.saveExtForm()
 		ce.extSubView = ceViewList
 	}
+	ce.saveExtForm()
 	return ce, nil
 }
 

@@ -351,6 +351,26 @@ func (ce ContractsEditor) updateDropdown(key tea.KeyMsg) (ContractsEditor, tea.C
 	ce.updateDTODependentFields()
 	ce.updateEPDependentFields()
 	ce.updateExtDependentFields()
+	// Auto-save the active form so changes persist without requiring b/esc.
+	switch ce.activeTab {
+	case contractsTabDTOs:
+		switch ce.dtoSubView {
+		case ceViewForm:
+			ce.saveDTOForm()
+		case ceViewSubForm:
+			if ce.dtoFieldIdx < len(ce.dtoFieldItems) {
+				ce.dtoFieldItems[ce.dtoFieldIdx] = copyFields(ce.dtoFieldForm)
+			}
+		}
+	case contractsTabEndpoints:
+		if ce.epSubView == ceViewForm {
+			ce.saveEPForm()
+		}
+	case contractsTabExternal:
+		if ce.extSubView == ceViewForm {
+			ce.saveExtForm()
+		}
+	}
 	return ce, nil
 }
 

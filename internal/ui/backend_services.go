@@ -148,6 +148,7 @@ func (be BackendEditor) updateServiceForm(key tea.KeyMsg) (BackendEditor, tea.Cm
 		be.saveServiceForm()
 		ed.itemView = beListViewList
 	}
+	be.saveServiceForm()
 	return be, nil
 }
 
@@ -458,6 +459,7 @@ func (be BackendEditor) updateCommForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		be.saveCommForm()
 		ed.itemView = beListViewList
 	}
+	be.saveCommForm()
 	return be, nil
 }
 
@@ -608,6 +610,7 @@ func (be BackendEditor) updateEventForm(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 		be.saveEventForm()
 		ed.itemView = beListViewList
 	}
+	be.saveEventForm()
 	return be, nil
 }
 

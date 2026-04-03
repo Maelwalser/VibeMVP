@@ -433,6 +433,17 @@ func (fe FrontendEditor) Update(msg tea.Msg) (FrontendEditor, tea.Cmd) {
 	case "h", "left", "l", "right":
 		inCompForm := fe.activeTab == feTabComponents && (fe.compSubView == ceViewForm || fe.inCompAction)
 		if !inCompForm {
+			// Auto-save any open form before switching tabs.
+			switch fe.activeTab {
+			case feTabPages:
+				if fe.pageSubView == ceViewForm {
+					fe.savePageForm()
+				}
+			case feTabAssets:
+				if fe.assetSubView == ceViewForm {
+					fe.saveAssetForm()
+				}
+			}
 			fe.activeTab = feTabIdx(NavigateTab(key.String(), int(fe.activeTab), len(feTabLabels)))
 		}
 		return fe, nil
@@ -580,12 +591,16 @@ func (fe *FrontendEditor) saveInput() {
 	case feTabComponents:
 		if fe.inCompAction && fe.actionSubView == ceViewForm && fe.actionFormIdx < len(fe.actionForm) && fe.actionForm[fe.actionFormIdx].CanEditAsText() {
 			fe.actionForm[fe.actionFormIdx].SaveTextInput(val)
+			fe.saveActionForm()
+			fe.saveActionsToComp()
 		} else if fe.compSubView == ceViewForm && fe.compFormIdx < len(fe.compForm) && fe.compForm[fe.compFormIdx].CanEditAsText() {
 			fe.compForm[fe.compFormIdx].SaveTextInput(val)
+			fe.saveCompForm()
 		}
 	case feTabPages:
 		if fe.pageSubView == ceViewForm && fe.pageFormIdx < len(fe.pageForm) && fe.pageForm[fe.pageFormIdx].CanEditAsText() {
 			fe.pageForm[fe.pageFormIdx].SaveTextInput(val)
+			fe.savePageForm()
 		}
 	case feTabNav:
 		if fe.navFormIdx < len(fe.navFields) && fe.navFields[fe.navFormIdx].CanEditAsText() {
@@ -602,6 +617,7 @@ func (fe *FrontendEditor) saveInput() {
 	case feTabAssets:
 		if fe.assetSubView == ceViewForm && fe.assetFormIdx < len(fe.assetForm) && fe.assetForm[fe.assetFormIdx].CanEditAsText() {
 			fe.assetForm[fe.assetFormIdx].SaveTextInput(val)
+			fe.saveAssetForm()
 		}
 	}
 }
