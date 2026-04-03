@@ -59,6 +59,7 @@ type EndpointDef struct {
 	NamePath           string `json:"name_path"`
 	Protocol           string `json:"protocol"`
 	AuthRequired       string `json:"auth_required"`
+	AuthRoles          string `json:"auth_roles,omitempty"`
 	RequestDTO         string `json:"request_dto,omitempty"`
 	ResponseDTO        string `json:"response_dto,omitempty"`
 	HTTPMethod         string `json:"http_method,omitempty"`

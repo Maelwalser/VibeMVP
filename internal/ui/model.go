@@ -356,6 +356,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.contractsEditor.SetDomainDefs(m.dataTabEditor.domains)
 		m.contractsEditor.SetServices(m.backendEditor.ServiceNames())
 		m.contractsEditor.SetServiceDefs(m.backendEditor.ServiceDefs())
+		m.contractsEditor.SetAuthRoles(m.backendEditor.AuthRoleOptions())
 		m.contractsEditor, cmd = m.contractsEditor.Update(msg)
 	case "frontend":
 		m.frontendEditor.SetAuthRoles(m.backendEditor.AuthRoleOptions())

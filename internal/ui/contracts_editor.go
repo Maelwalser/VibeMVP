@@ -272,13 +272,16 @@ func (ce *ContractsEditor) dtoFieldFormFieldByKey(key string) *Field {
 	return nil
 }
 
-func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
+func defaultEndpointFormFields(serviceOptions, dtoOptions, roleOptions []string) []Field {
 	// Ensure at least empty slice so KindSelect works
 	if serviceOptions == nil {
 		serviceOptions = []string{}
 	}
 	if dtoOptions == nil {
 		dtoOptions = []string{}
+	}
+	if roleOptions == nil {
+		roleOptions = []string{}
 	}
 	fields := []Field{
 		{Key: "service_unit", Label: "service_unit  ", Kind: KindSelect,
@@ -294,6 +297,10 @@ func defaultEndpointFormFields(serviceOptions, dtoOptions []string) []Field {
 		{
 			Key: "auth_required", Label: "auth_required ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
+		},
+		{Key: "auth_roles", Label: "auth_roles    ", Kind: KindMultiSelect,
+			Options: roleOptions,
+			Value:   placeholderFor(roleOptions, "(no roles configured)"),
 		},
 		{Key: "request_dto", Label: "request_dto   ", Kind: KindSelect,
 			Options: dtoOptions,
@@ -571,10 +578,11 @@ type ContractsEditor struct {
 	extFormIdx   int
 
 	// Cross-editor reference data (set by model.go before each Update)
-	availableDomains    []string               // from DataTabEditor.domainNames()
-	availableDomainDefs []manifest.DomainDef   // from DataTabEditor.domains
-	availableServices   []string               // from BackendEditor.ServiceNames()
-	availableServiceDefs []manifest.ServiceDef // from BackendEditor.ServiceDefs()
+	availableDomains     []string               // from DataTabEditor.domainNames()
+	availableDomainDefs  []manifest.DomainDef   // from DataTabEditor.domains
+	availableServices    []string               // from BackendEditor.ServiceNames()
+	availableServiceDefs []manifest.ServiceDef  // from BackendEditor.ServiceDefs()
+	availableAuthRoles   []string               // from BackendEditor.AuthRoleOptions()
 
 	// Dropdown state for KindSelect/KindMultiSelect fields
 	ddOpen   bool
@@ -606,6 +614,11 @@ func (ce *ContractsEditor) SetServices(services []string) {
 // SetServiceDefs updates full service definitions for technology-based protocol filtering.
 func (ce *ContractsEditor) SetServiceDefs(defs []manifest.ServiceDef) {
 	ce.availableServiceDefs = defs
+}
+
+// SetAuthRoles updates the auth role options used in endpoint forms.
+func (ce *ContractsEditor) SetAuthRoles(roles []string) {
+	ce.availableAuthRoles = roles
 }
 
 // protocolsForService returns the protocol options valid for the named service
@@ -737,15 +750,20 @@ func (ce *ContractsEditor) updateDTODependentFields() {
 }
 
 // visibleEPFields returns only the endpoint form fields relevant to the
-// currently selected protocol, hiding the other protocol-specific fields.
+// currently selected protocol and auth setting.
 func (ce ContractsEditor) visibleEPFields() []Field {
 	if len(ce.epForm) == 0 {
 		return nil
 	}
 	proto := fieldGet(ce.epForm, "protocol")
+	authRequired := fieldGet(ce.epForm, "auth_required")
 	var visible []Field
 	for _, f := range ce.epForm {
 		switch f.Key {
+		case "auth_roles":
+			if authRequired != "true" {
+				continue
+			}
 		case "http_method":
 			if proto != "REST" {
 				continue
@@ -1643,7 +1661,7 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 	case "a":
 		ce.endpoints = append(ce.endpoints, manifest.EndpointDef{})
 		ce.epIdx = len(ce.endpoints) - 1
-		ce.epForm = defaultEndpointFormFields(ce.availableServices, ce.dtoNames())
+		ce.epForm = defaultEndpointFormFields(ce.availableServices, ce.dtoNames(), ce.availableAuthRoles)
 		existing := make([]string, 0, len(ce.endpoints)-1)
 		for i, ep := range ce.endpoints {
 			if i != ce.epIdx {
@@ -1664,13 +1682,28 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 	case "enter":
 		if n > 0 {
 			ep := ce.endpoints[ce.epIdx]
-			ce.epForm = defaultEndpointFormFields(ce.availableServices, ce.dtoNames())
+			ce.epForm = defaultEndpointFormFields(ce.availableServices, ce.dtoNames(), ce.availableAuthRoles)
 			ce.epForm = setFieldValue(ce.epForm, "service_unit", ep.ServiceUnit)
 			ce.epForm = setFieldValue(ce.epForm, "name_path", ep.NamePath)
 			if ep.Protocol != "" {
 				ce.epForm = setFieldValue(ce.epForm, "protocol", ep.Protocol)
 			}
 			ce.epForm = setFieldValue(ce.epForm, "auth_required", ep.AuthRequired)
+			if ep.AuthRoles != "" {
+				for i := range ce.epForm {
+					if ce.epForm[i].Key != "auth_roles" {
+						continue
+					}
+					for _, sel := range strings.Split(ep.AuthRoles, ", ") {
+						for j, opt := range ce.epForm[i].Options {
+							if opt == strings.TrimSpace(sel) {
+								ce.epForm[i].SelectedIdxs = append(ce.epForm[i].SelectedIdxs, j)
+							}
+						}
+					}
+					break
+				}
+			}
 			ce.epForm = setFieldValue(ce.epForm, "request_dto", ep.RequestDTO)
 			ce.epForm = setFieldValue(ce.epForm, "response_dto", ep.ResponseDTO)
 			if ep.HTTPMethod != "" {
@@ -1714,9 +1747,13 @@ func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 	case "enter", " ":
 		if ce.epFormIdx < n {
 			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
-			if f != nil && f.Kind == KindSelect {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
 				ce.ddOpen = true
-				ce.ddOptIdx = f.SelIdx
+				if f.Kind == KindMultiSelect {
+					ce.ddOptIdx = f.DDCursor
+				} else {
+					ce.ddOptIdx = f.SelIdx
+				}
 			} else {
 				return ce.tryEnterInsert()
 			}
@@ -1752,6 +1789,7 @@ func (ce *ContractsEditor) saveEPForm() {
 	ep.NamePath = fieldGet(ce.epForm, "name_path")
 	ep.Protocol = fieldGet(ce.epForm, "protocol")
 	ep.AuthRequired = fieldGet(ce.epForm, "auth_required")
+	ep.AuthRoles = fieldGetMulti(ce.epForm, "auth_roles")
 	ep.RequestDTO = fieldGet(ce.epForm, "request_dto")
 	ep.ResponseDTO = fieldGet(ce.epForm, "response_dto")
 	ep.HTTPMethod = fieldGet(ce.epForm, "http_method")
@@ -1925,9 +1963,13 @@ func (ce ContractsEditor) updateExtForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 	case "enter", " ":
 		if ce.extFormIdx < n {
 			f := ce.extFormFieldByKey(visible[ce.extFormIdx].Key)
-			if f != nil && f.Kind == KindSelect {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
 				ce.ddOpen = true
-				ce.ddOptIdx = f.SelIdx
+				if f.Kind == KindMultiSelect {
+					ce.ddOptIdx = f.DDCursor
+				} else {
+					ce.ddOptIdx = f.SelIdx
+				}
 			} else {
 				return ce.tryEnterInsert()
 			}
