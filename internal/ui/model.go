@@ -375,6 +375,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "crosscut":
 		m.crossCutEditor.SetTestingContext(
 			m.backendEditor.Languages(),
+			m.backendEditor.CommProtocols(),
 			m.frontendEditor.Language(),
 			m.frontendEditor.Framework(),
 		)

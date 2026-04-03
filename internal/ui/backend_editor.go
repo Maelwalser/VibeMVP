@@ -3460,6 +3460,20 @@ func (be BackendEditor) Languages() []string {
 	return langs
 }
 
+// CommProtocols returns the unique set of protocols used across all communication links.
+func (be BackendEditor) CommProtocols() []string {
+	seen := make(map[string]bool)
+	var protos []string
+	for _, link := range be.CommLinks {
+		p := link.Protocol
+		if p != "" && !seen[p] {
+			seen[p] = true
+			protos = append(protos, p)
+		}
+	}
+	return protos
+}
+
 // copyFields makes a deep copy of a field slice.
 func copyFields(src []Field) []Field {
 	dst := make([]Field, len(src))
