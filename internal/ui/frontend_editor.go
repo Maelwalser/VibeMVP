@@ -154,6 +154,17 @@ func (fe FrontendEditor) pageRoutes() []string {
 	return routes
 }
 
+// assetNames returns names of all existing assets (for page assets options).
+func (fe FrontendEditor) assetNames() []string {
+	names := make([]string, 0, len(fe.assets))
+	for _, a := range fe.assets {
+		if a.Name != "" {
+			names = append(names, a.Name)
+		}
+	}
+	return names
+}
+
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {

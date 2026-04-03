@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vibe-menu/internal/manifest"
@@ -10,7 +9,7 @@ import (
 
 // ── Asset form fields ─────────────────────────────────────────────────────────
 
-func newAssetForm(a manifest.AssetDef, pageRoutes []string) []Field {
+func newAssetForm(a manifest.AssetDef) []Field {
 	usageIdx := 0
 	if a.Usage == manifest.AssetUsageInspiration {
 		usageIdx = 1
@@ -53,11 +52,6 @@ func newAssetForm(a manifest.AssetDef, pageRoutes []string) []Field {
 			Options: []string{"project", "inspiration"}, Value: []string{"project", "inspiration"}[usageIdx], SelIdx: usageIdx,
 		},
 		{
-			Key: "pages", Label: "pages         ", Kind: KindMultiSelect,
-			Options: pageRoutes,
-			Value:   placeholderFor(pageRoutes, "(no pages configured)"),
-		},
-		{
 			Key: "description", Label: "description   ", Kind: KindText,
 			Value: a.Description,
 		},
@@ -87,7 +81,7 @@ func (fe FrontendEditor) updateAssetList(key tea.KeyMsg) (FrontendEditor, tea.Cm
 	case "a":
 		fe.assets = append(fe.assets, manifest.AssetDef{})
 		fe.assetIdx = len(fe.assets) - 1
-		fe.assetForm = newAssetForm(manifest.AssetDef{}, fe.pageRoutes())
+		fe.assetForm = newAssetForm(manifest.AssetDef{})
 		fe.assetFormIdx = 0
 		fe.assetSubView = ceViewForm
 		return fe.tryEnterInsert()
@@ -101,22 +95,7 @@ func (fe FrontendEditor) updateAssetList(key tea.KeyMsg) (FrontendEditor, tea.Cm
 	case "enter":
 		if n > 0 {
 			a := fe.assets[fe.assetIdx]
-			fe.assetForm = newAssetForm(a, fe.pageRoutes())
-			// Restore pages multiselect
-			if a.Pages != "" {
-				for i := range fe.assetForm {
-					if fe.assetForm[i].Key == "pages" {
-						for _, sel := range strings.Split(a.Pages, ", ") {
-							for j, opt := range fe.assetForm[i].Options {
-								if opt == strings.TrimSpace(sel) {
-									fe.assetForm[i].SelectedIdxs = append(fe.assetForm[i].SelectedIdxs, j)
-								}
-							}
-						}
-						break
-					}
-				}
-			}
+			fe.assetForm = newAssetForm(a)
 			fe.assetFormIdx = 0
 			fe.assetSubView = ceViewForm
 		}
@@ -219,7 +198,6 @@ func (fe *FrontendEditor) saveAssetForm() {
 	a.AssetType = fieldGet(fe.assetForm, "asset_type")
 	a.Format = fieldGet(fe.assetForm, "format")
 	a.Usage = manifest.AssetUsage(fieldGet(fe.assetForm, "usage"))
-	a.Pages = fieldGetMulti(fe.assetForm, "pages")
 	a.Description = fieldGet(fe.assetForm, "description")
 }
 
