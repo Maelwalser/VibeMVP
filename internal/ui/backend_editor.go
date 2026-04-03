@@ -963,6 +963,8 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 	for i, svc := range bp.Services {
 		be.serviceEditor.items[i] = serviceFieldsFromDef(svc)
 	}
+	// Apply orchestrator-based service discovery options now that items are populated.
+	be.updateServiceDiscoveryOptions()
 
 	be.CommLinks = bp.CommLinks
 	be.commEditor.items = make([][]Field, len(bp.CommLinks))
@@ -1331,6 +1333,9 @@ func (be *BackendEditor) applyDropdown() bool {
 		if be.activeTab() == beTabEnv && f.Key == "monolith_lang" {
 			be.updateEnvMonolithOptions()
 		}
+		if be.activeTab() == beTabEnv && f.Key == "orchestrator" {
+			be.updateServiceDiscoveryOptions()
+		}
 	}
 	return applyTo(be.mutableFieldPtr())
 }
@@ -1611,6 +1616,9 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 			if be.activeTab() == beTabEnv && f.Key == "monolith_lang" {
 				be.updateEnvMonolithOptions()
 			}
+			if be.activeTab() == beTabEnv && f.Key == "orchestrator" {
+				be.updateServiceDiscoveryOptions()
+			}
 		}
 	case "i", "a":
 		be.countBuf = ""
@@ -1638,7 +1646,9 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 	case "a":
 		svc := manifest.ServiceDef{}
 		be.Services = append(be.Services, svc)
-		ed.items = append(ed.items, defaultServiceFields())
+		newFields := defaultServiceFields()
+		be.applyServiceDiscoveryOpts(newFields)
+		ed.items = append(ed.items, newFields)
 		ed.itemIdx = len(ed.items) - 1
 		ed.form = copyFields(ed.items[ed.itemIdx])
 		existing := make([]string, 0, len(be.Services)-1)
@@ -1773,6 +1783,56 @@ func (be *BackendEditor) updateServiceFrameworkOptions(ed *beListEditor) {
 			ed.form[i].Value = opts[0]
 			break
 		}
+	}
+}
+
+// serviceDiscoveryByOrchestrator maps orchestrator → valid service discovery options.
+var serviceDiscoveryByOrchestrator = map[string][]string{
+	"K3s":          {"Kubernetes DNS", "Consul", "Static config"},
+	"K8s (managed)": {"Kubernetes DNS", "Consul", "Static config"},
+	"Docker Compose": {"DNS-based", "Static config"},
+	"ECS":          {"DNS-based (Cloud Map)", "Consul"},
+	"Nomad":        {"Consul", "DNS-based"},
+	"Cloud Run":    {"DNS-based"},
+	"None":         {"Static config", "None"},
+}
+
+// applyServiceDiscoveryOpts sets the service_discovery options in a field slice
+// to match the currently selected orchestrator, preserving the current value if valid.
+func (be *BackendEditor) applyServiceDiscoveryOpts(fields []Field) {
+	orch := fieldGet(be.EnvFields, "orchestrator")
+	opts, ok := serviceDiscoveryByOrchestrator[orch]
+	if !ok {
+		opts = []string{"Static config", "None"}
+	}
+	for i := range fields {
+		if fields[i].Key == "service_discovery" {
+			current := fields[i].Value
+			fields[i].Options = opts
+			found := false
+			for j, o := range opts {
+				if o == current {
+					fields[i].SelIdx = j
+					found = true
+					break
+				}
+			}
+			if !found {
+				fields[i].SelIdx = 0
+				fields[i].Value = opts[0]
+			}
+			break
+		}
+	}
+}
+
+// updateServiceDiscoveryOptions refreshes the service_discovery dropdown
+// in the service form and all existing service items to show only the options
+// valid for the currently selected orchestrator.
+func (be *BackendEditor) updateServiceDiscoveryOptions() {
+	be.applyServiceDiscoveryOpts(be.serviceEditor.form)
+	for _, item := range be.serviceEditor.items {
+		be.applyServiceDiscoveryOpts(item)
 	}
 }
 
