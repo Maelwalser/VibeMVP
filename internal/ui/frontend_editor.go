@@ -178,6 +178,7 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 			Elevation:    fieldGet(fe.themeFields, "elevation"),
 			Motion:       fieldGet(fe.themeFields, "motion"),
 			Vibe:         fieldGet(fe.themeFields, "vibe"),
+			Font:         fieldGet(fe.themeFields, "font"),
 			Colors:       fieldGet(fe.themeFields, "colors"),
 			Description:  fieldGet(fe.themeFields, "description"),
 		}
@@ -247,6 +248,7 @@ func (fe FrontendEditor) FromFrontendPillar(fp manifest.FrontendPillar) Frontend
 		fe.themeFields = setFieldValue(fe.themeFields, "elevation", th.Elevation)
 		fe.themeFields = setFieldValue(fe.themeFields, "motion", th.Motion)
 		fe.themeFields = setFieldValue(fe.themeFields, "vibe", th.Vibe)
+		fe.themeFields = setFieldValue(fe.themeFields, "font", th.Font)
 		fe.themeFields = setFieldValue(fe.themeFields, "colors", th.Colors)
 		fe.themeFields = setFieldValue(fe.themeFields, "description", th.Description)
 	}

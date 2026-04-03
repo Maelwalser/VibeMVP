@@ -173,7 +173,7 @@ func (dt DataTabEditor) updateFSList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 	case "a":
 		dt.fileStorages = append(dt.fileStorages, manifest.FileStorageDef{})
 		dt.fsIdx = len(dt.fileStorages) - 1
-		dt.fsForm = defaultFSFormFields(dt.domainNames())
+		dt.fsForm = defaultFSFormFields(dt.serviceNames, dt.domainNames())
 		existing := make([]string, 0, len(dt.fileStorages)-1)
 		for i, fs := range dt.fileStorages {
 			if i != dt.fsIdx {
@@ -192,7 +192,7 @@ func (dt DataTabEditor) updateFSList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		}
 	case "enter":
 		if n > 0 {
-			dt.fsForm = fsFormFromDef(dt.fileStorages[dt.fsIdx], dt.domainNames())
+			dt.fsForm = fsFormFromDef(dt.fileStorages[dt.fsIdx], dt.serviceNames, dt.domainNames())
 			dt.fsFormIdx = 0
 			dt.fsSubView = fsViewForm
 		}

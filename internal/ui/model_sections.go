@@ -64,6 +64,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 			editor: func(m *Model) Editor { return m.dataTabEditor },
 			update: func(m *Model, msg tea.Msg) tea.Cmd {
 				m.dataTabEditor.SetMigrationContext(m.backendEditor.Languages())
+				m.dataTabEditor.SetServiceNames(m.backendEditor.ServiceNames())
 				var cmd tea.Cmd
 				m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)
 				// Refresh rate_limit_backend options whenever cache sources change.

@@ -102,6 +102,8 @@ type DataTabEditor struct {
 
 	// Context from backend — used to filter migration tool options.
 	backendLangs []string
+	// Context from backend — used to populate the service selector in FS forms.
+	serviceNames []string
 
 	// Shared
 	internalMode Mode

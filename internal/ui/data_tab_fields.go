@@ -192,6 +192,15 @@ func (dt *DataTabEditor) updateSearchTechOptions() {
 	}
 }
 
+// SetServiceNames updates the backend service names used to populate the
+// service selector in file storage forms.
+func (dt *DataTabEditor) SetServiceNames(names []string) {
+	if stringSlicesEqual(dt.serviceNames, names) {
+		return
+	}
+	dt.serviceNames = names
+}
+
 // SetMigrationContext updates the backend languages used to filter migration tool
 // options. Recomputes the governance field options immediately, preserving the
 // current selection when it remains valid.
@@ -384,7 +393,7 @@ func (dt DataTabEditor) withRefreshedCachingDBs() DataTabEditor {
 	return dt
 }
 
-func defaultFSFormFields(domainOptions []string) []Field {
+func defaultFSFormFields(serviceOptions, domainOptions []string) []Field {
 	return []Field{
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
@@ -392,6 +401,11 @@ func defaultFSFormFields(domainOptions []string) []Field {
 			Value:   "S3",
 		},
 		{Key: "purpose", Label: "purpose       ", Kind: KindText},
+		{
+			Key: "service", Label: "service       ", Kind: KindSelect,
+			Options: serviceOptions,
+			Value:   placeholderFor(serviceOptions, "(no services configured)"),
+		},
 		{
 			Key: "access", Label: "access        ", Kind: KindSelect,
 			Options: []string{"Public (CDN-fronted)", "Private (signed URLs)", "Internal only"},
@@ -419,10 +433,11 @@ func defaultFSFormFields(domainOptions []string) []Field {
 	}
 }
 
-func fsFormFromDef(def manifest.FileStorageDef, domainOptions []string) []Field {
-	f := defaultFSFormFields(domainOptions)
+func fsFormFromDef(def manifest.FileStorageDef, serviceOptions, domainOptions []string) []Field {
+	f := defaultFSFormFields(serviceOptions, domainOptions)
 	f = setFieldValue(f, "technology", def.Technology)
 	f = setFieldValue(f, "purpose", def.Purpose)
+	f = setFieldValue(f, "service", def.Service)
 	if def.Access != "" {
 		f = setFieldValue(f, "access", def.Access)
 	}
@@ -451,6 +466,7 @@ func fsDefFromForm(fields []Field) manifest.FileStorageDef {
 	return manifest.FileStorageDef{
 		Technology:   fieldGet(fields, "technology"),
 		Purpose:      fieldGet(fields, "purpose"),
+		Service:      fieldGet(fields, "service"),
 		Access:       fieldGet(fields, "access"),
 		MaxSize:      fieldGet(fields, "max_size"),
 		Domains:      fieldGetMulti(fields, "domains"),
