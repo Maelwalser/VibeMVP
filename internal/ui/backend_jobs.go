@@ -46,6 +46,7 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 			jq := be.jobQueues[be.jobsIdx]
 			be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs)
 			be.jobsForm = setFieldValue(be.jobsForm, "name", jq.Name)
+			be.jobsForm = setFieldValue(be.jobsForm, "description", jq.Description)
 			be.jobsForm = setFieldValue(be.jobsForm, "technology", jq.Technology)
 			be.jobsForm = setFieldValue(be.jobsForm, "concurrency", jq.Concurrency)
 			be.jobsForm = setFieldValue(be.jobsForm, "max_retries", jq.MaxRetries)
@@ -145,6 +146,7 @@ func (be *BackendEditor) saveJobsForm() {
 	}
 	jq := &be.jobQueues[be.jobsIdx]
 	jq.Name = fieldGet(be.jobsForm, "name")
+	jq.Description = fieldGet(be.jobsForm, "description")
 	jq.Technology = fieldGet(be.jobsForm, "technology")
 	jq.Concurrency = fieldGet(be.jobsForm, "concurrency")
 	jq.MaxRetries = fieldGet(be.jobsForm, "max_retries")

@@ -312,9 +312,14 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 
 	var auth manifest.AuthConfig
 	if be.authEnabled {
+		svcUnit := fieldGet(be.AuthFields, "service_unit")
+		if svcUnit == "None (external)" || svcUnit == "None" || svcUnit == "(no services configured)" {
+			svcUnit = ""
+		}
 		auth = manifest.AuthConfig{
 			Strategy:     fieldGetMulti(be.AuthFields, "strategy"),
 			Provider:     fieldGet(be.AuthFields, "provider"),
+			ServiceUnit:  svcUnit,
 			AuthzModel:   fieldGet(be.AuthFields, "authz_model"),
 			Permissions:  be.authPerms,
 			Roles:        be.authRoles,
@@ -427,6 +432,17 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.authEnabled = true
 		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "strategy", bp.Auth.Strategy)
 		be.AuthFields = setFieldValue(be.AuthFields, "provider", bp.Auth.Provider)
+		if bp.Auth.ServiceUnit != "" {
+			// Restore service_unit; options will be repopulated lazily on first open.
+			for i := range be.AuthFields {
+				if be.AuthFields[i].Key == "service_unit" {
+					be.AuthFields[i].Options = []string{bp.Auth.ServiceUnit}
+					be.AuthFields[i].Value = bp.Auth.ServiceUnit
+					be.AuthFields[i].SelIdx = 0
+					break
+				}
+			}
+		}
 		be.AuthFields = setFieldValue(be.AuthFields, "authz_model", bp.Auth.AuthzModel)
 		be.authPerms = bp.Auth.Permissions
 		be.authRoles = bp.Auth.Roles

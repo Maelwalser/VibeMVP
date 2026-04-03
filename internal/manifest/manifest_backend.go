@@ -83,6 +83,7 @@ type PolicyRule struct {
 type AuthConfig struct {
 	Strategy     AuthStrategy `json:"strategy"`
 	Provider     string       `json:"provider"`
+	ServiceUnit  string       `json:"service_unit,omitempty"` // service responsible for auth (self-managed / Keycloak)
 	AuthzModel   string       `json:"authz_model"`
 	TokenStorage string       `json:"token_storage"`
 	MFA          string       `json:"mfa"`
@@ -114,6 +115,7 @@ type CronJobDef struct {
 // JobQueueDef describes a worker pool or task queue.
 type JobQueueDef struct {
 	Name          string       `json:"name"`
+	Description   string       `json:"description,omitempty"`
 	Technology    string       `json:"technology"`
 	Concurrency   string       `json:"concurrency,omitempty"`
 	MaxRetries    string       `json:"max_retries,omitempty"`

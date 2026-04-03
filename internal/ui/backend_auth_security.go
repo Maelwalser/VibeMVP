@@ -144,6 +144,9 @@ func (be BackendEditor) updateAuthConfig(key tea.KeyMsg) (BackendEditor, tea.Cmd
 		if be.activeField < n {
 			f := &be.AuthFields[be.activeField]
 			if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+				if f.Key == "service_unit" {
+					be.refreshAuthServiceUnitOptions(f)
+				}
 				be.dd.Open = true
 				if f.Kind == KindSelect {
 					be.dd.OptIdx = f.SelIdx
@@ -160,6 +163,9 @@ func (be BackendEditor) updateAuthConfig(key tea.KeyMsg) (BackendEditor, tea.Cmd
 		if be.activeField < n {
 			f := &be.AuthFields[be.activeField]
 			if f.Kind == KindSelect {
+				if f.Key == "service_unit" {
+					be.refreshAuthServiceUnitOptions(f)
+				}
 				f.CyclePrev()
 			}
 		}
@@ -426,6 +432,48 @@ func (be BackendEditor) permissionNames() []string {
 		}
 	}
 	return names
+}
+
+// authProviderNeedsService returns true for providers that are self-hosted and
+// require a backend service unit to handle authentication.
+func authProviderNeedsService(provider string) bool {
+	switch provider {
+	case "Self-managed", "Keycloak":
+		return true
+	}
+	return false
+}
+
+// refreshAuthServiceUnitOptions updates the service_unit field options based on
+// the currently selected provider. External providers get a single "None (external)"
+// option; self-managed providers get the list of configured service names.
+func (be *BackendEditor) refreshAuthServiceUnitOptions(f *Field) {
+	provider := fieldGet(be.AuthFields, "provider")
+	var opts []string
+	if authProviderNeedsService(provider) {
+		svcNames := be.ServiceNames()
+		if len(svcNames) == 0 {
+			opts = []string{"(no services configured)"}
+		} else {
+			opts = append([]string{"None"}, svcNames...)
+		}
+	} else {
+		opts = []string{"None (external)"}
+	}
+	f.Options = opts
+	// Keep current value if still present; otherwise reset to first option.
+	found := false
+	for j, o := range opts {
+		if o == f.Value {
+			f.SelIdx = j
+			found = true
+			break
+		}
+	}
+	if !found {
+		f.SelIdx = 0
+		f.Value = opts[0]
+	}
 }
 
 // roleNamesExcept returns names of all roles except the one at excludeIdx.

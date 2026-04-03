@@ -392,6 +392,15 @@ func defaultAuthFields() []Field {
 			Value: "Self-managed",
 		},
 		{
+			// Options populated lazily from configured services when provider is
+			// Self-managed or Keycloak; otherwise stays as "None (external)".
+			Key:     "service_unit",
+			Label:   "service_unit  ",
+			Kind:    KindSelect,
+			Options: []string{"None (external)"},
+			Value:   "None (external)",
+		},
+		{
 			Key: "authz_model", Label: "authz_model   ", Kind: KindSelect,
 			Options: []string{"RBAC", "ABAC", "ACL", "ReBAC", "Policy-based (OPA/Cedar)", "Custom"},
 			Value:   "RBAC",
@@ -461,6 +470,7 @@ func defaultJobQueueFormFields(services, dtos []string) []Field {
 	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
+		{Key: "description", Label: "description   ", Kind: KindText},
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
 			Options: []string{"Temporal", "BullMQ", "Sidekiq", "Celery", "Faktory", "Asynq", "River", "Custom"},
