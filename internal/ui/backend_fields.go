@@ -337,9 +337,54 @@ func defaultMessagingFields() []Field {
 func defaultEventFields() []Field {
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
-		{Key: "domain", Label: "domain        ", Kind: KindText},
+		{Key: "publisher_service", Label: "publisher_svc ", Kind: KindText},
+		{Key: "consumer_service", Label: "consumer_svc  ", Kind: KindText},
+		{Key: "dto", Label: "dto           ", Kind: KindSelect},
 		{Key: "description", Label: "description   ", Kind: KindText},
 	}
+}
+
+// withEventNames returns a copy of fields where publisher_service and
+// consumer_service are upgraded to KindSelect dropdowns populated with service
+// names, and dto is upgraded to a KindSelect populated with available DTO names.
+func (be BackendEditor) withEventNames(fields []Field) []Field {
+	svcNames := be.ServiceNames()
+	dtoOpts, defaultDTO := noneOrPlaceholder(be.availableDTOs, "(no DTOs configured)")
+	out := copyFields(fields)
+	for i := range out {
+		switch out[i].Key {
+		case "publisher_service", "consumer_service":
+			out[i].Kind = KindSelect
+			out[i].Options = svcNames
+			prev := out[i].Value
+			out[i].Value = placeholderFor(svcNames, "(no services configured)")
+			out[i].SelIdx = 0
+			for j, n := range svcNames {
+				if n == prev {
+					out[i].SelIdx = j
+					out[i].Value = n
+					break
+				}
+			}
+			if len(svcNames) > 0 && out[i].Value == "" {
+				out[i].Value = svcNames[0]
+			}
+		case "dto":
+			out[i].Kind = KindSelect
+			out[i].Options = dtoOpts
+			prev := out[i].Value
+			out[i].Value = defaultDTO
+			out[i].SelIdx = 0
+			for j, opt := range dtoOpts {
+				if opt == prev {
+					out[i].SelIdx = j
+					out[i].Value = opt
+					break
+				}
+			}
+		}
+	}
+	return out
 }
 
 func defaultAPIGWFields() []Field {

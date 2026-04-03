@@ -360,6 +360,7 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 				Delivery:      fieldGet(be.MessagingFields, "delivery"),
 			}
 			bp.Messaging = &mc
+			bp.Events = be.Events
 		}
 		if t == beTabAPIGW && be.apiGWEnabled {
 			gw := manifest.APIGatewayConfig{
@@ -453,6 +454,19 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.MessagingFields = setFieldValue(be.MessagingFields, "deployment", bp.Messaging.Deployment)
 		be.MessagingFields = setFieldValue(be.MessagingFields, "serialization", bp.Messaging.Serialization)
 		be.MessagingFields = setFieldValue(be.MessagingFields, "delivery", bp.Messaging.Delivery)
+	}
+
+	// Event catalog.
+	be.Events = bp.Events
+	be.eventEditor.items = make([][]Field, len(bp.Events))
+	for i, evt := range bp.Events {
+		f := defaultEventFields()
+		f = setFieldValue(f, "name", evt.Name)
+		f = setFieldValue(f, "publisher_service", evt.PublisherService)
+		f = setFieldValue(f, "consumer_service", evt.ConsumerService)
+		f = setFieldValue(f, "dto", evt.DTO)
+		f = setFieldValue(f, "description", evt.Description)
+		be.eventEditor.items[i] = f
 	}
 
 	// API Gateway fields.

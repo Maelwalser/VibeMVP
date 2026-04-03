@@ -45,9 +45,11 @@ type MessagingConfig struct {
 
 // EventDef describes a single entry in the event catalog.
 type EventDef struct {
-	Name        string `json:"name"`
-	Domain      string `json:"domain,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name             string `json:"name"`
+	PublisherService string `json:"publisher_service,omitempty"`
+	ConsumerService  string `json:"consumer_service,omitempty"`
+	DTO              string `json:"dto,omitempty"`
+	Description      string `json:"description,omitempty"`
 }
 
 // APIGatewayConfig describes API gateway configuration.
@@ -140,6 +142,7 @@ type BackendPillar struct {
 	Services      []ServiceDef      `json:"services,omitempty"`
 	CommLinks     []CommLink        `json:"comm_links,omitempty"`
 	Messaging     *MessagingConfig  `json:"messaging,omitempty"`
+	Events        []EventDef        `json:"events,omitempty"`
 	APIGateway    *APIGatewayConfig `json:"api_gateway,omitempty"`
 	Auth          AuthConfig        `json:"auth"`
 	JobQueues     []JobQueueDef     `json:"job_queues,omitempty"`

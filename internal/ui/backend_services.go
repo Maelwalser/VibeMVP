@@ -461,7 +461,7 @@ func (be BackendEditor) updateMessaging(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 		} else {
 			eventIdx := be.activeField - brokerCount
 			if eventIdx < eventCount {
-				ed.form = be.withDomainNames(copyFields(ed.items[eventIdx]))
+				ed.form = be.withEventNames(copyFields(ed.items[eventIdx]))
 				ed.formIdx = 0
 				ed.itemIdx = eventIdx
 				ed.itemView = beListViewForm
@@ -476,7 +476,7 @@ func (be BackendEditor) updateMessaging(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 		}
 	case "a":
 		be.Events = append(be.Events, manifest.EventDef{})
-		ed.items = append(ed.items, be.withDomainNames(defaultEventFields()))
+		ed.items = append(ed.items, be.withEventNames(defaultEventFields()))
 		ed.itemIdx = len(ed.items) - 1
 		ed.form = copyFields(ed.items[ed.itemIdx])
 		existing := make([]string, 0, len(be.Events)-1)
@@ -567,9 +567,11 @@ func (be *BackendEditor) saveEventForm() {
 	}
 	ed.items[ed.itemIdx] = copyFields(ed.form)
 	evt := manifest.EventDef{
-		Name:        fieldGet(ed.form, "name"),
-		Domain:      fieldGet(ed.form, "domain"),
-		Description: fieldGet(ed.form, "description"),
+		Name:             fieldGet(ed.form, "name"),
+		PublisherService: fieldGet(ed.form, "publisher_service"),
+		ConsumerService:  fieldGet(ed.form, "consumer_service"),
+		DTO:              fieldGet(ed.form, "dto"),
+		Description:      fieldGet(ed.form, "description"),
 	}
 	if ed.itemIdx < len(be.Events) {
 		be.Events[ed.itemIdx] = evt
