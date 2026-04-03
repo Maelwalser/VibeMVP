@@ -306,16 +306,25 @@ DO NOT generate any of these — they are already written by service agents:
   - go.mod, go.sum
 
 BUILD CONTEXT RULES — this is critical for Docker to find the source files:
-  The payload field "service_dirs" maps each service slug to the directory where its
-  generated files live, relative to the output root. Use this EXACTLY as the docker-compose
-  build context. Do NOT invent subdirectories like "services/api/" that don't exist.
+  The payload field "service_dirs" maps each service slug AND "frontend" to the directory
+  where their generated files live, relative to the output root. Use these values EXACTLY
+  as the docker-compose build context. Do NOT invent subdirectories that are not in service_dirs.
 
-  Example: if service_dirs = {"monolith": "."}, then docker-compose must be:
+  Example: if service_dirs = {"monolith": ".", "frontend": "."}, then docker-compose must be:
     services:
       core-api:
         build:
-          context: .          ← use the value from service_dirs
+          context: .          ← value from service_dirs["monolith"]
           dockerfile: Dockerfile
+      frontend:
+        build:
+          context: .          ← value from service_dirs["frontend"]
+          dockerfile: frontend/Dockerfile
+
+  CRITICAL: if service_dirs contains "frontend": ".", the frontend source files (package.json,
+  src/, etc.) live at the output root — NOT in a "./frontend" subdirectory. The Dockerfile
+  for the frontend must be placed at frontend/Dockerfile but use context "." so COPY paths
+  resolve against the root where package.json actually lives.
 
   The Dockerfile for the Go service must use COPY paths matching the build context:
     COPY go.mod go.sum ./   ← correct when context is "." (go.mod is at the root)
