@@ -437,7 +437,21 @@ func (fe FrontendEditor) View(w, h int) string {
 		}
 	case feTabTheme:
 		if fe.themeEnabled {
-			lines = append(lines, renderFormFields(w, fe.themeFields, fe.themeFormIdx, fe.internalMode == ModeInsert, fe.formInput, fe.dd.Open, fe.dd.OptIdx)...)
+			if fe.inTextArea && fe.internalMode == ModeInsert {
+				// Render all fields in normal mode, then show the textarea expanded below.
+				lines = append(lines, renderFormFields(w, fe.themeFields, fe.themeFormIdx, false, fe.formInput, false, 0)...)
+				lines = append(lines, "")
+				lines = append(lines, StyleFieldKeyActive.Render("  ── description ─────────────────────────────────────"))
+				taHeight := h - feHeaderH - len(fe.themeFields) - 3
+				if taHeight < 4 {
+					taHeight = 4
+				}
+				fe.formTextArea.SetHeight(taHeight)
+				fe.formTextArea.SetWidth(w - 4)
+				lines = append(lines, fe.formTextArea.View())
+			} else {
+				lines = append(lines, renderFormFields(w, fe.themeFields, fe.themeFormIdx, fe.internalMode == ModeInsert, fe.formInput, fe.dd.Open, fe.dd.OptIdx)...)
+			}
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}

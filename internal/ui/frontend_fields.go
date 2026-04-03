@@ -162,6 +162,7 @@ func defaultFEThemeFields() []Field {
 			Options: []string{
 				"Professional", "Playful", "Minimal", "Bold",
 				"Elegant", "Technical", "Creative", "Friendly", "Serious", "Modern",
+				"Custom",
 			},
 			Value: "Professional",
 		},
