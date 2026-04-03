@@ -576,19 +576,21 @@ func (db DBEditor) viewForm(w, h int) string {
 		valW = 10
 	}
 
+	visIdx := 0
 	for i, f := range db.dbForm {
+		if isDBFormFieldDisabled(db.dbForm, i) {
+			continue
+		}
 		isCur := i == db.formIdx
-		disabled := isDBFormFieldDisabled(db.dbForm, i)
+		visIdx++
 
-		lineNo := StyleLineNum.Render(fmt.Sprintf("%3d ", i+1))
+		lineNo := StyleLineNum.Render(fmt.Sprintf("%3d ", visIdx))
 		if isCur {
-			lineNo = StyleCurLineNum.Render(fmt.Sprintf("%3d ", i+1))
+			lineNo = StyleCurLineNum.Render(fmt.Sprintf("%3d ", visIdx))
 		}
 
 		var keyStr string
 		switch {
-		case disabled:
-			keyStr = StyleSectionDesc.Render(f.Label)
 		case isCur:
 			keyStr = StyleFieldKeyActive.Render(f.Label)
 		default:
@@ -599,8 +601,6 @@ func (db DBEditor) viewForm(w, h int) string {
 
 		var valStr string
 		switch {
-		case disabled:
-			valStr = StyleSectionDesc.Render("—")
 		case db.internalMode == dbeInsert && isCur && f.Kind == KindText:
 			valStr = db.formInput.View()
 		case f.Kind == KindSelect:
@@ -630,7 +630,7 @@ func (db DBEditor) viewForm(w, h int) string {
 		}
 
 		row := lineNo + keyStr + eq + valStr
-		if isCur && !disabled {
+		if isCur {
 			raw := lipgloss.Width(row)
 			if raw < w {
 				row += strings.Repeat(" ", w-raw)
@@ -640,7 +640,7 @@ func (db DBEditor) viewForm(w, h int) string {
 		lines = append(lines, row)
 
 		// Inject dropdown options below the active KindSelect field
-		if isCur && db.ddOpen && !disabled && f.Kind == KindSelect {
+		if isCur && db.ddOpen && f.Kind == KindSelect {
 			const ddIndent = 4 + 14 + 3 // lineNumW + labelW + eqW
 			indent := strings.Repeat(" ", ddIndent)
 			for j, opt := range f.Options {
