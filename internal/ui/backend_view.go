@@ -305,59 +305,81 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 		"",
 	)
 
+	const beOuterH = 4
 	tab := be.activeTab()
 	switch tab {
 	case beTabEnv:
 		if be.envEnabled {
 			envFields := be.visibleEnvFields()
-			lines = append(lines, renderFormFields(w, envFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)...)
+			fl := renderFormFields(w, envFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, be.activeField, h-beOuterH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case beTabServices:
 		const beListHeaderH = 2
 		svcLines := be.viewServiceEditor(w)
-		if be.serviceEditor.itemView == beListViewList {
-			svcLines = appendViewport(svcLines, beListHeaderH, be.serviceEditor.itemIdx, h-4)
+		switch be.serviceEditor.itemView {
+		case beListViewList:
+			svcLines = appendViewport(svcLines, beListHeaderH, be.serviceEditor.itemIdx, h-beOuterH)
+		case beListViewForm:
+			svcLines = appendViewport(svcLines, 2, be.serviceEditor.formIdx, h-beOuterH)
 		}
 		lines = append(lines, svcLines...)
 	case beTabComm:
 		commLines := be.viewCommEditor(w)
-		if be.commEditor.itemView == beListViewList {
-			commLines = appendViewport(commLines, 2, be.commEditor.itemIdx, h-4)
+		switch be.commEditor.itemView {
+		case beListViewList:
+			commLines = appendViewport(commLines, 2, be.commEditor.itemIdx, h-beOuterH)
+		case beListViewForm:
+			commLines = appendViewport(commLines, 2, be.commEditor.formIdx, h-beOuterH)
 		}
 		lines = append(lines, commLines...)
 	case beTabMessaging:
 		msgLines := be.viewMessaging(w)
-		if be.eventEditor.itemView == beListViewList {
-			msgLines = appendViewport(msgLines, 2, be.eventEditor.itemIdx, h-4)
+		switch be.eventEditor.itemView {
+		case beListViewList:
+			msgLines = appendViewport(msgLines, 2, be.eventEditor.itemIdx, h-beOuterH)
+		case beListViewForm:
+			msgLines = appendViewport(msgLines, 2, be.eventEditor.formIdx, h-beOuterH)
 		}
 		lines = append(lines, msgLines...)
 	case beTabAPIGW:
 		if be.apiGWEnabled {
-			lines = append(lines, renderFormFields(w, be.APIGWFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)...)
+			fl := renderFormFields(w, be.APIGWFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, be.activeField, h-beOuterH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case beTabJobs:
 		jobLines := be.viewJobs(w)
-		if be.jobsSubView == beViewList {
-			jobLines = appendViewport(jobLines, 2, be.jobsIdx, h-4)
+		switch be.jobsSubView {
+		case beViewList:
+			jobLines = appendViewport(jobLines, 2, be.jobsIdx, h-beOuterH)
+		case beViewForm:
+			jobLines = appendViewport(jobLines, 2, be.jobsFormIdx, h-beOuterH)
 		}
 		lines = append(lines, jobLines...)
 	case beTabSecurity:
 		if be.secEnabled {
-			lines = append(lines, renderFormFields(w, be.securityFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)...)
+			fl := renderFormFields(w, be.securityFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, be.activeField, h-beOuterH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case beTabAuth:
 		authLines := be.viewAuth(w)
 		switch be.authSubView {
+		case beAuthViewConfig:
+			authLines = appendViewport(authLines, 0, be.activeField, h-beOuterH)
 		case beAuthViewPermList:
-			authLines = appendViewport(authLines, 2, be.authPermsIdx, h-4)
+			authLines = appendViewport(authLines, 2, be.authPermsIdx, h-beOuterH)
+		case beAuthViewPermForm:
+			authLines = appendViewport(authLines, 2, be.authPermFormIdx, h-beOuterH)
 		case beAuthViewRoleList:
-			authLines = appendViewport(authLines, 2, be.authRolesIdx, h-4)
+			authLines = appendViewport(authLines, 2, be.authRolesIdx, h-beOuterH)
+		case beAuthViewRoleForm:
+			authLines = appendViewport(authLines, 2, be.authRoleFormIdx, h-beOuterH)
 		}
 		lines = append(lines, authLines...)
 	}

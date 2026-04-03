@@ -66,6 +66,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 			editor: func(m *Model) Editor { return m.dataTabEditor },
 			update: func(m *Model, msg tea.Msg) tea.Cmd {
 				m.dataTabEditor.SetMigrationContext(m.backendEditor.Languages())
+				m.dataTabEditor.SetServiceNames(m.backendEditor.ServiceNames())
 				m.dataTabEditor.SetEnvironmentNames(m.infraEditor.EnvironmentNames())
 				var cmd tea.Cmd
 				m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)

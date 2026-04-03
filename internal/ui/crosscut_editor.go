@@ -468,22 +468,26 @@ func (cc CrossCutEditor) View(w, h int) string {
 		"",
 	)
 
+	const ccHeaderH = 4
 	switch cc.activeTab {
 	case ccTabTesting:
 		if cc.testingEnabled {
-			lines = append(lines, renderFormFields(w, cc.testingFields, cc.testFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)...)
+			fl := renderFormFields(w, cc.testingFields, cc.testFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, cc.testFormIdx, h-ccHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case ccTabDocs:
 		if cc.docsEnabled {
-			lines = append(lines, renderFormFields(w, cc.docsFields, cc.docsFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)...)
+			fl := renderFormFields(w, cc.docsFields, cc.docsFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, cc.docsFormIdx, h-ccHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case ccTabStandards:
 		if cc.standardsEnabled {
-			lines = append(lines, renderFormFields(w, cc.standardsFields, cc.standardsFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)...)
+			fl := renderFormFields(w, cc.standardsFields, cc.standardsFormIdx, cc.internalMode == ModeInsert, cc.formInput, cc.dd.Open, cc.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, cc.standardsFormIdx, h-ccHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}

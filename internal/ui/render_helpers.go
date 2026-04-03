@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -527,6 +528,24 @@ func newFormInput() textinput.Model {
 	fi.CursorStyle = StyleCursor
 	fi.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim))
 	return fi
+}
+
+// newFormTextArea creates a styled multi-line textarea for use in form editors.
+func newFormTextArea() textarea.Model {
+	ta := textarea.New()
+	ta.Prompt = ""
+	ta.ShowLineNumbers = false
+	ta.SetHeight(8)
+	ta.FocusedStyle.Base = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrFg)).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(clrFgDim))
+	ta.BlurredStyle.Base = ta.FocusedStyle.Base
+	ta.FocusedStyle.Text = lipgloss.NewStyle().Foreground(lipgloss.Color(clrFg))
+	ta.BlurredStyle.Text = ta.FocusedStyle.Text
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color(clrBgHL))
+	ta.CharLimit = 0
+	return ta
 }
 
 // placeOverlay paints fg on top of bg at position (x, y), where x and y are

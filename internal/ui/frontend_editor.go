@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vibe-menu/internal/manifest"
@@ -89,17 +90,20 @@ type FrontendEditor struct {
 	// Shared
 	internalMode Mode
 	formInput    textinput.Model
+	formTextArea textarea.Model
+	inTextArea   bool
 	width        int
 }
 
 func newFrontendEditor() FrontendEditor {
 	return FrontendEditor{
-		techFields:  defaultFETechFields(),
-		themeFields: defaultFEThemeFields(),
-		navFields:   defaultNavFields(),
-		i18nFields:  defaultI18nFields(),
-		a11yFields:  defaultA11ySEOFields(),
-		formInput:   newFormInput(),
+		techFields:   defaultFETechFields(),
+		themeFields:  defaultFEThemeFields(),
+		navFields:    defaultNavFields(),
+		i18nFields:   defaultI18nFields(),
+		a11yFields:   defaultA11ySEOFields(),
+		formInput:    newFormInput(),
+		formTextArea: newFormTextArea(),
 	}
 }
 
@@ -195,6 +199,7 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 			Elevation:    fieldGet(fe.themeFields, "elevation"),
 			Motion:       fieldGet(fe.themeFields, "motion"),
 			Vibe:         fieldGet(fe.themeFields, "vibe"),
+			Font:         fieldGet(fe.themeFields, "font"),
 			Colors:       fieldGet(fe.themeFields, "colors"),
 			Description:  fieldGet(fe.themeFields, "description"),
 		}
@@ -265,6 +270,7 @@ func (fe FrontendEditor) FromFrontendPillar(fp manifest.FrontendPillar) Frontend
 		fe.themeFields = setFieldValue(fe.themeFields, "elevation", th.Elevation)
 		fe.themeFields = setFieldValue(fe.themeFields, "motion", th.Motion)
 		fe.themeFields = setFieldValue(fe.themeFields, "vibe", th.Vibe)
+		fe.themeFields = setFieldValue(fe.themeFields, "font", th.Font)
 		fe.themeFields = restoreMultiSelectValue(fe.themeFields, "colors", th.Colors)
 		fe.themeFields = setFieldValue(fe.themeFields, "description", th.Description)
 	}
@@ -421,6 +427,19 @@ func (fe *FrontendEditor) resetIdx() {
 }
 
 func (fe FrontendEditor) updateInsert(msg tea.Msg) (FrontendEditor, tea.Cmd) {
+	if fe.inTextArea {
+		key, ok := msg.(tea.KeyMsg)
+		if ok && key.String() == "esc" {
+			fe.saveInput()
+			fe.internalMode = ModeNormal
+			fe.inTextArea = false
+			fe.formTextArea.Blur()
+			return fe, nil
+		}
+		var cmd tea.Cmd
+		fe.formTextArea, cmd = fe.formTextArea.Update(msg)
+		return fe, cmd
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if ok {
 		switch key.String() {
@@ -494,6 +513,13 @@ func (fe *FrontendEditor) advanceField(delta int) {
 }
 
 func (fe *FrontendEditor) saveInput() {
+	if fe.inTextArea {
+		val := fe.formTextArea.Value()
+		if fe.activeTab == feTabTheme && fe.themeFormIdx < len(fe.themeFields) {
+			fe.themeFields[fe.themeFormIdx].Value = val
+		}
+		return
+	}
 	val := fe.formInput.Value()
 	switch fe.activeTab {
 	case feTabTech:
@@ -592,6 +618,12 @@ func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
 		}
 		if f.CanEditAsText() {
 			fe.internalMode = ModeInsert
+			if f.Kind == KindTextArea {
+				fe.inTextArea = true
+				fe.formTextArea.SetValue(f.Value)
+				fe.formTextArea.SetWidth(fe.width - 4)
+				return fe, fe.formTextArea.Focus()
+			}
 			fe.formInput.SetValue(f.TextInputValue())
 			fe.formInput.Width = fe.width - 22
 			fe.formInput.CursorEnd()

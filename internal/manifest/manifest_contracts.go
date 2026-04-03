@@ -82,6 +82,7 @@ type APIVersioning struct {
 // ExternalAPIDef describes a third-party API that the system consumes.
 type ExternalAPIDef struct {
 	Provider        string `json:"provider"`
+	Responsibility  string `json:"responsibility,omitempty"`
 	Protocol        string `json:"protocol,omitempty"`
 	AuthMechanism   string `json:"auth_mechanism"`
 	FailureStrategy string `json:"failure_strategy"`

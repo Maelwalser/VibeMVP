@@ -409,15 +409,23 @@ func (r RealizeEditor) View(w, h int) string {
 		sectionFields = r.fields[6:]
 	}
 
-	lines = append(lines, renderFormFields(w, baseFields, r.activeIdx, r.mode == ModeInsert, r.formInput, r.dd.Open, r.dd.OptIdx)...)
-	lines = append(lines, "")
+	// Build scrollable content block, tracking the active field's line position.
+	var content []string
+	activeLine := r.activeIdx // line index within content for the active field
+
+	content = append(content, renderFormFields(w, baseFields, r.activeIdx, r.mode == ModeInsert, r.formInput, r.dd.Open, r.dd.OptIdx)...)
+	content = append(content, "")
 
 	if len(sectionFields) > 0 {
-		lines = append(lines, StyleSectionDesc.Render("  # Section model overrides — set per-pillar model (default = use global model above)"))
-		lines = append(lines, "")
-		adjIdx := r.activeIdx - 6 // adjust active index for the section fields group
-		lines = append(lines, renderFormFields(w, sectionFields, adjIdx, r.mode == ModeInsert, r.formInput, r.dd.Open, r.dd.OptIdx)...)
-		lines = append(lines, "")
+		content = append(content, StyleSectionDesc.Render("  # Section model overrides — set per-pillar model (default = use global model above)"))
+		content = append(content, "")
+		adjIdx := r.activeIdx - 6
+		// Active field is in the section group: offset by base lines + empty + 2 section header lines.
+		if r.activeIdx >= 6 {
+			activeLine = len(baseFields) + 1 + 2 + adjIdx
+		}
+		content = append(content, renderFormFields(w, sectionFields, adjIdx, r.mode == ModeInsert, r.formInput, r.dd.Open, r.dd.OptIdx)...)
+		content = append(content, "")
 	}
 
 	// Start button row
@@ -428,7 +436,10 @@ func (r RealizeEditor) View(w, h int) string {
 	if pad > 0 {
 		btnLine += strings.Repeat(" ", pad)
 	}
-	lines = append(lines, btnLine)
+	content = append(content, btnLine)
+
+	const realizeHeaderH = 2
+	lines = append(lines, appendViewport(content, 0, activeLine, h-realizeHeaderH)...)
 
 	return fillTildes(lines, h)
 }

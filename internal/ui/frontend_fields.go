@@ -167,8 +167,18 @@ func defaultFEThemeFields() []Field {
 			Options: []string{
 				"Professional", "Playful", "Minimal", "Bold",
 				"Elegant", "Technical", "Creative", "Friendly", "Serious", "Modern",
+				"Custom",
 			},
 			Value: "Professional",
+		},
+		{
+			Key: "font", Label: "font          ", Kind: KindSelect,
+			Options: []string{
+				"Inter", "Roboto", "Open Sans", "Lato", "Poppins", "Nunito",
+				"Source Sans Pro", "Raleway", "Montserrat", "Playfair Display",
+				"Merriweather", "Fira Code", "JetBrains Mono", "System default", "Custom",
+			},
+			Value: "Inter",
 		},
 		{
 			Key: "colors", Label: "colors        ", Kind: KindMultiSelect,

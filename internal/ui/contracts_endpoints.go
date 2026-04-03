@@ -268,6 +268,7 @@ func (ce ContractsEditor) updateExtList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 			api := ce.externalAPIs[ce.extIdx]
 			ce.extForm = defaultExternalAPIFormFields(ce.dtoNames())
 			ce.extForm = setFieldValue(ce.extForm, "provider", api.Provider)
+			ce.extForm = setFieldValue(ce.extForm, "responsibility", api.Responsibility)
 			if api.Protocol != "" {
 				ce.extForm = setFieldValue(ce.extForm, "protocol", api.Protocol)
 			}
@@ -375,6 +376,7 @@ func (ce *ContractsEditor) saveExtForm() {
 	}
 	api := &ce.externalAPIs[ce.extIdx]
 	api.Provider = fieldGet(ce.extForm, "provider")
+	api.Responsibility = fieldGet(ce.extForm, "responsibility")
 	api.Protocol = fieldGet(ce.extForm, "protocol")
 	api.AuthMechanism = fieldGet(ce.extForm, "auth_mechanism")
 	api.FailureStrategy = fieldGet(ce.extForm, "failure_strategy")
@@ -461,22 +463,39 @@ func (ce ContractsEditor) View(w, h int) string {
 	switch ce.activeTab {
 	case contractsTabDTOs:
 		dtoLines := ce.viewDTOs(w)
-		if ce.dtoSubView == ceViewList {
+		switch ce.dtoSubView {
+		case ceViewList:
 			dtoLines = appendViewport(dtoLines, 2, ce.dtoIdx, h-ceHeaderH)
+		case ceViewForm:
+			dtoLines = appendViewport(dtoLines, 2, ce.dtoFormIdx, h-ceHeaderH)
+		case ceViewSubList:
+			dtoLines = appendViewport(dtoLines, 2, ce.dtoFieldIdx, h-ceHeaderH)
+		case ceViewSubForm:
+			dtoLines = appendViewport(dtoLines, 2, ce.dtoFieldFormIdx, h-ceHeaderH)
 		}
 		lines = append(lines, dtoLines...)
 	case contractsTabEndpoints:
 		epLines := ce.viewEndpoints(w)
-		if ce.epSubView == ceViewList {
+		switch ce.epSubView {
+		case ceViewList:
 			epLines = appendViewport(epLines, 2, ce.epIdx, h-ceHeaderH)
+		case ceViewForm:
+			epLines = appendViewport(epLines, 2, ce.epFormIdx, h-ceHeaderH)
 		}
 		lines = append(lines, epLines...)
 	case contractsTabVersioning:
-		lines = append(lines, ce.viewVersioning(w)...)
+		verLines := ce.viewVersioning(w)
+		if ce.versioningEnabled {
+			verLines = appendViewport(verLines, 2, ce.verFormIdx, h-ceHeaderH)
+		}
+		lines = append(lines, verLines...)
 	case contractsTabExternal:
 		extLines := ce.viewExternal(w)
-		if ce.extSubView == ceViewList {
+		switch ce.extSubView {
+		case ceViewList:
 			extLines = appendViewport(extLines, 2, ce.extIdx, h-ceHeaderH)
+		case ceViewForm:
+			extLines = appendViewport(extLines, 2, ce.extFormIdx, h-ceHeaderH)
 		}
 		lines = append(lines, extLines...)
 	}

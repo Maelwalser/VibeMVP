@@ -569,22 +569,26 @@ func (ie InfraEditor) View(w, h int) string {
 		"",
 	)
 
+	const infraHeaderH = 4
 	switch ie.activeTab {
 	case infraTabNetworking:
 		if ie.netEnabled {
-			lines = append(lines, renderFormFields(w, ie.networkingFields, ie.netFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)...)
+			fl := renderFormFields(w, ie.networkingFields, ie.netFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, ie.netFormIdx, h-infraHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case infraTabCICD:
 		if ie.cicdEnabled {
-			lines = append(lines, renderFormFields(w, ie.cicdFields, ie.cicdFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)...)
+			fl := renderFormFields(w, ie.cicdFields, ie.cicdFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, ie.cicdFormIdx, h-infraHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case infraTabObservability:
 		if ie.obsEnabled {
-			lines = append(lines, renderFormFields(w, ie.obsFields, ie.obsFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)...)
+			fl := renderFormFields(w, ie.obsFields, ie.obsFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)
+			lines = append(lines, appendViewport(fl, 0, ie.obsFormIdx, h-infraHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}

@@ -34,6 +34,7 @@ type FrontendTheme struct {
 	Elevation    string `json:"elevation"`
 	Motion       string `json:"motion"`
 	Vibe         string `json:"vibe,omitempty"`
+	Font         string `json:"font,omitempty"`
 	Colors       string `json:"colors,omitempty"`
 	Description  string `json:"description,omitempty"`
 }

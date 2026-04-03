@@ -330,6 +330,7 @@ func defaultExternalAPIFormFields(dtoOptions []string) []Field {
 	return []Field{
 		// ── Common ──────────────────────────────────────────────────────────────
 		{Key: "provider", Label: "provider      ", Kind: KindText},
+		{Key: "responsibility", Label: "responsibility", Kind: KindText},
 		{
 			Key: "protocol", Label: "protocol      ", Kind: KindSelect,
 			Options: []string{"REST", "GraphQL", "gRPC", "WebSocket", "Webhook", "SOAP"},
