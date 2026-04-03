@@ -109,6 +109,9 @@ type DataTabEditor struct {
 	govFormIdx       int
 	govEnabled       bool
 
+	// Context from backend — used to filter migration tool options.
+	backendLangs []string
+
 	// Shared
 	internalMode dtMode
 	formInput    textinput.Model
@@ -438,11 +441,87 @@ func cachingDefFromForm(fields []Field) manifest.CachingConfig {
 	}
 }
 
+// migrationToolsByLang lists compatible migration handlers per backend language.
+var migrationToolsByLang = map[string][]string{
+	"Go":              {"golang-migrate", "Atlas", "goose", "None"},
+	"TypeScript/Node": {"Prisma Migrate", "TypeORM Migrations", "Knex.js Migrations", "db-migrate", "None"},
+	"Python":          {"Alembic", "Django Migrations", "Flyway", "None"},
+	"Java":            {"Flyway", "Liquibase", "None"},
+	"Kotlin":          {"Flyway", "Liquibase", "Exposed Migrations", "None"},
+	"C#/.NET":         {"EF Core Migrations", "Flyway", "Liquibase", "None"},
+	"Ruby":            {"Active Record Migrations", "Sequel Migrations", "None"},
+	"PHP":             {"Doctrine Migrations", "Phinx", "Laravel Migrations", "None"},
+	"Rust":            {"SQLx Migrations", "Diesel Migrations", "refinery", "None"},
+	"Elixir":          {"Ecto Migrations", "None"},
+	"Other":           {"Flyway", "Liquibase", "Atlas", "golang-migrate", "Alembic", "Prisma Migrate", "None"},
+}
+
+// allMigrationTools is the fallback shown before any backend language is configured.
+var allMigrationTools = []string{
+	"golang-migrate", "Atlas", "Flyway", "Liquibase", "Prisma Migrate", "Alembic", "None",
+}
+
+// migrationToolsForLangs returns the union of compatible migration tools for the
+// given languages, with "None" always last. Falls back to allMigrationTools when empty.
+func migrationToolsForLangs(langs []string) []string {
+	if len(langs) == 0 {
+		return allMigrationTools
+	}
+	seen := make(map[string]bool)
+	var result []string
+	for _, lang := range langs {
+		for _, tool := range migrationToolsByLang[lang] {
+			if tool == "None" {
+				continue
+			}
+			if !seen[tool] {
+				seen[tool] = true
+				result = append(result, tool)
+			}
+		}
+	}
+	result = append(result, "None")
+	return result
+}
+
+// SetMigrationContext updates the backend languages used to filter migration tool
+// options. Recomputes the governance field options immediately, preserving the
+// current selection when it remains valid.
+func (dt *DataTabEditor) SetMigrationContext(langs []string) {
+	if stringSlicesEqual(dt.backendLangs, langs) {
+		return
+	}
+	dt.backendLangs = langs
+	opts := migrationToolsForLangs(langs)
+	for i := range dt.governanceFields {
+		if dt.governanceFields[i].Key != "migration_tool" {
+			continue
+		}
+		current := dt.governanceFields[i].DisplayValue()
+		dt.governanceFields[i].Options = opts
+		found := false
+		for j, opt := range opts {
+			if opt == current {
+				dt.governanceFields[i].SelIdx = j
+				dt.governanceFields[i].Value = opt
+				found = true
+				break
+			}
+		}
+		if !found {
+			last := len(opts) - 1
+			dt.governanceFields[i].SelIdx = last
+			dt.governanceFields[i].Value = opts[last]
+		}
+		break
+	}
+}
+
 func defaultGovernanceFields() []Field {
 	return []Field{
 		{
 			Key: "migration_tool", Label: "Migration     ", Kind: KindSelect,
-			Options: []string{"golang-migrate", "Atlas", "Flyway", "Liquibase", "Prisma Migrate", "Alembic", "None"},
+			Options: allMigrationTools,
 			Value:   "None", SelIdx: 6,
 		},
 		{

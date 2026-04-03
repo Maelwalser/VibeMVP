@@ -350,6 +350,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
 		m.backendEditor, cmd = m.backendEditor.Update(msg)
 	case "data":
+		m.dataTabEditor.SetMigrationContext(m.backendEditor.Languages())
 		m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)
 	case "contracts":
 		m.contractsEditor.SetDomains(m.dataTabEditor.domainNames())

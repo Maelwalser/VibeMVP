@@ -2,15 +2,15 @@
 
 ## 1. Project Overview
 
-**VibeMenu** is an interactive Terminal User Interface (TUI) CLI tool for declaratively specifying a complete software system architecture. It implements a vim-inspired editor that lets developers and architects define comprehensive system manifests across 6 architectural pillars — backend, data, contracts, frontend, infrastructure, and cross-cutting concerns.
+**VibeMenu** is an interactive Terminal User Interface (TUI) CLI tool for declaratively specifying a complete software system architecture. It implements a vim-inspired editor that lets developers and architects define comprehensive system manifests across 7 pillars — backend, data, contracts, frontend, infrastructure, cross-cutting concerns, and code generation configuration.
 
-The resulting manifest is serialized to `manifest.json` and intended for downstream consumption by code-generation agents or tooling.
+The resulting manifest is serialized to `manifest.json` and intended for downstream consumption by code-generation agents or tooling via the `cmd/realize` pipeline.
 
 **Key design principles:**
 - Vim-modal editing (Normal / Insert / Command modes)
 - Tokyo Night dark theme throughout
 - Non-linear editing — users can fill any tab in any order
-- Pillar-based dependency graph: Data → Backend → Contracts → Frontend → Infrastructure → Cross-Cutting
+- Pillar-based dependency graph: Data → Backend → Contracts → Frontend → Infrastructure → Cross-Cutting → Realize
 
 ---
 
@@ -25,7 +25,7 @@ The resulting manifest is serialized to `manifest.json` and intended for downstr
 | TUI entry point | `cmd/agent/main.go` |
 | Realize entry point | `cmd/realize/main.go` |
 | Manifest types | `internal/manifest/` (8 files, split by pillar) |
-| UI components | `internal/ui/` (14 files, ~11,700 lines) |
+| UI components | `internal/ui/` (22 files, ~17,800 lines) |
 | Code generation engine | `internal/realize/` (DAG, agent, skills, verifiers, orchestrator) |
 | Claude model | `claude-opus-4-6` (realize default) |
 
@@ -42,29 +42,38 @@ VibeMenu/
 │       └── main.go              # Code-gen entry point — CLI flags, runs orchestrator
 ├── internal/
 │   ├── manifest/
-│   │   ├── manifest.go          # Root Manifest struct + Save(); legacy pillar types (~98 lines)
-│   │   ├── manifest_enums.go    # All enum type declarations (~60 lines)
-│   │   ├── manifest_data.go     # DataPillar, DBSourceDef, DomainDef, caching types (~180 lines)
-│   │   ├── manifest_backend.go  # BackendPillar, ServiceDef, CommLink, AuthConfig (~200 lines)
-│   │   ├── manifest_contracts.go # ContractsPillar, DTODef, EndpointDef (~100 lines)
-│   │   ├── manifest_frontend.go  # FrontendPillar, FrontendTech, PageDef (~120 lines)
-│   │   ├── manifest_infra.go     # InfraPillar, NetworkingConfig, CICDConfig (~110 lines)
-│   │   └── manifest_crosscut.go  # CrossCutPillar, TestingConfig, DocsConfig (~60 lines)
+│   │   ├── manifest.go          # Root Manifest struct + Save(); legacy pillar types (112 lines)
+│   │   ├── manifest_enums.go    # All enum type declarations (154 lines)
+│   │   ├── manifest_data.go     # DataPillar, DBSourceDef, DomainDef, caching types (168 lines)
+│   │   ├── manifest_backend.go  # BackendPillar, ServiceDef, CommLink, AuthConfig, RoleDef, PermissionDef (155 lines)
+│   │   ├── manifest_contracts.go # ContractsPillar, DTODef, EndpointDef, ExternalAPIDef (123 lines)
+│   │   ├── manifest_frontend.go  # FrontendPillar, FrontendTech, PageDef (116 lines)
+│   │   ├── manifest_infra.go     # InfraPillar, NetworkingConfig, CICDConfig (55 lines)
+│   │   ├── manifest_crosscut.go  # CrossCutPillar, TestingConfig, DocsConfig (32 lines)
+│   │   └── recent.go            # Recent manifest tracking (64 lines)
 │   ├── ui/
-│   │   ├── model.go             # Root TUI model, vim modes, tab routing (~758 lines)
-│   │   ├── editor.go            # Editor interface (Mode, HintLine, View) (~28 lines)
-│   │   ├── nav.go               # NavigateTab(), VimNav struct — shared navigation helpers (~100 lines)
-│   │   ├── styles.go            # Tokyo Night palette, all lipgloss styles (~145 lines)
-│   │   ├── sections.go          # Section/field definitions, FieldKind enum (~189 lines)
-│   │   ├── render_helpers.go    # Shared rendering utilities (~328 lines)
-│   │   ├── backend_editor.go    # Backend tab — env, services, comm, messaging, gateway, auth (~2,418 lines)
-│   │   ├── data_tab_editor.go   # Data tab — databases, domains, caching, file storage (~1,561 lines)
-│   │   ├── data_editor.go       # Entity/column schema editor (~1,179 lines)
-│   │   ├── db_editor.go         # Database source editor (~533 lines)
-│   │   ├── contracts_editor.go  # DTOs, endpoints, versioning (~1,492 lines)
-│   │   ├── frontend_editor.go   # Tech stack, theming, pages, navigation (~1,256 lines)
-│   │   ├── infra_editor.go      # Networking, CI/CD, observability (~585 lines)
-│   │   └── crosscut_editor.go   # Testing, documentation (~520 lines)
+│   │   ├── model.go             # Root TUI model, vim modes, tab routing (888 lines)
+│   │   ├── editor.go            # Editor interface (Mode, HintLine, View) (22 lines)
+│   │   ├── nav.go               # NavigateTab(), VimNav struct — shared navigation helpers (126 lines)
+│   │   ├── styles.go            # Tokyo Night palette, all lipgloss styles (196 lines)
+│   │   ├── sections.go          # Section/field definitions, FieldKind enum (303 lines)
+│   │   ├── render_helpers.go    # Shared rendering utilities (516 lines)
+│   │   ├── animation.go         # Animation utilities (32 lines)
+│   │   ├── app.go               # App initialization and setup (105 lines)
+│   │   ├── backend_editor.go    # Backend tab — env, services, comm, messaging, gateway, auth, jobs, security (3,474 lines)
+│   │   ├── data_tab_editor.go   # Data tab — databases, domains, caching, file storage (2,055 lines)
+│   │   ├── data_editor.go       # Entity/column schema editor (1,311 lines)
+│   │   ├── db_editor.go         # Database source editor (665 lines)
+│   │   ├── contracts_editor.go  # DTOs, endpoints, versioning, external APIs (2,240 lines)
+│   │   ├── frontend_editor.go   # Tech stack, theming, pages, navigation (1,802 lines)
+│   │   ├── infra_editor.go      # Networking, CI/CD, observability (787 lines)
+│   │   ├── crosscut_editor.go   # Testing, documentation (751 lines)
+│   │   ├── realize_editor.go    # Code generation configuration (450 lines)
+│   │   ├── provider_menu.go     # Provider selection modal (1,253 lines)
+│   │   ├── realization_screen.go # Code generation output screen (317 lines)
+│   │   ├── frontend_assets.go   # Frontend asset management (220 lines)
+│   │   ├── welcome.go           # Welcome/initialization screen (265 lines)
+│   │   └── open_file_modal.go   # File open dialog (1 line)
 │   └── realize/
 │       ├── agent/
 │       │   ├── agent.go         # Claude API client, tool-use loop (~134 lines)
@@ -183,18 +192,37 @@ All form fields use a consistent vim-style layout via `renderFormFields()`:
 
 Tab bars use `renderSubTabBar()`. Bottom hints use `hintBar()`.
 
+### 4.8 New UI Components
+
+Several new UI modules support the expanded functionality:
+
+- **RealizeEditor** (`realize_editor.go`): Configuration form for code generation with per-section LLM model overrides, concurrency, and verification settings.
+- **ProviderMenu** (`provider_menu.go`): Interactive modal for selecting and configuring LLM providers (Claude, ChatGPT, Gemini, Mistral, Llama, Custom) with tier selection.
+- **RealizationScreen** (`realization_screen.go`): Display for code generation progress and output status.
+- **WelcomeScreen** (`welcome.go`): Initial welcome/tutorial screen and manifest initialization.
+- **FrontendAssets** (`frontend_assets.go`): Asset management utilities for frontend design assets.
+- **Animation** (`animation.go`): Reusable animation primitives for TUI effects.
+- **App** (`app.go`): High-level app initialization and lifecycle management.
+
+These components follow the same polymorphic dispatch pattern via the `Editor` interface.
+
 ---
 
-## 5. The 6 Architectural Pillars
+## 5. The 7 Architectural Pillars
 
 ### Pillar 1 — Backend (`BackendEditor`)
-Sub-tabs: **Env** · **Services** · **Communication** · **Messaging** · **API Gateway** · **Auth**
+Sub-tabs: **Env** · **Services** · **Communication** · **Messaging** · **API Gateway** · **Jobs** · **Security** · **Auth**
 
 - Architecture pattern selector (Monolith / Modular Monolith / Microservices / Event-Driven / Hybrid) conditionally shows/hides sub-tabs
 - Services list with per-service: name, responsibility, language, framework (dynamically filtered by language), pattern tag
 - Communication links: from/to service, protocol, direction, trigger, sync/async, resilience patterns
 - Messaging: broker config + repeatable event catalog
-- Auth: strategy, identity provider, authorization model, token storage, MFA
+- API Gateway: technology, routing, features
+- Jobs: background job queues and cron jobs configuration
+- Security: WAF configuration, CORS settings, session management
+- Auth: strategy, identity provider (with RoleDef list for authorization roles), permission definitions, authorization model, token storage, MFA
+  - Supports role-based access control (RBAC) with role inheritance
+  - Roles can be referenced in endpoint auth_required fields and frontend page access control
 
 ### Pillar 2 — Data (`DataTabEditor` + `DBEditor` + `DataEditor`)
 Sub-tabs: **Databases** · **Domains** · **Caching** · **File Storage**
@@ -205,19 +233,26 @@ Sub-tabs: **Databases** · **Domains** · **Caching** · **File Storage**
 - Caching layer config; File/object storage config
 
 ### Pillar 3 — Contracts (`ContractsEditor`)
-Sub-tabs: **DTOs** · **Endpoints** · **Versioning**
+Sub-tabs: **DTOs** · **Endpoints** · **API Versioning** · **External APIs**
 
-- DTOs: name, category (Request/Response/Event Payload/Shared), source domain, nested fields list with per-field type/validation
-- Endpoints: protocol-specific forms — REST (method, path params, query params, pagination), GraphQL (operation type), gRPC (service, method, stream type), WebSocket (channel, client/server events)
-- Versioning: strategy, current version, deprecation policy
+- DTOs: name, category (Request/Response/Event Payload/Shared), source domain, protocol (REST/JSON, Protobuf, Avro, MessagePack, Thrift, FlatBuffers, Cap'n Proto), nested fields with protocol-specific types and validation
+  - Protocol-specific fields: Protobuf (package, syntax, options), Avro (namespace, schema registry), Thrift (namespace, language), FlatBuffers/Cap'n Proto (namespace)
+- Endpoints: service unit, name/path, protocol (REST/GraphQL/gRPC/WebSocket/Event), auth_required, auth_roles (multi-select from backend roles), request/response DTOs
+  - Protocol-specific: HTTP method + pagination strategy (REST), operation type (GraphQL), stream type (gRPC), direction (WebSocket)
+- API Versioning: strategy (URL path, header, query param, none), current version, deprecation policy
+- External APIs: integration with third-party services with protocol-specific configurations
+  - Provider, protocol (REST/GraphQL/gRPC/WebSocket/Webhook/SOAP), auth mechanism (API Key, OAuth2, Bearer, Basic, mTLS, None), failure strategy
+  - Protocol-conditional fields: REST (base URL, HTTP method, content type, rate limit, webhook endpoint), GraphQL (operation type), gRPC (stream type, TLS mode), WebSocket (subprotocol, message format), Webhook (HMAC header, retry policy), SOAP (version)
+  - Request/response DTOs filtered by protocol (backwards compatible with untagged DTOs)
 
 ### Pillar 4 — Frontend (`FrontendEditor`)
 Sub-tabs: **Tech** · **Theme** · **Pages** · **Navigation**
 
-- Tech: language, platform, framework (filtered by language+platform), meta-framework, styling, component library, state management, data fetching, form handling, validation
-- Theme: dark mode strategy, border radius, spacing scale, elevation, motion
-- Pages: route, auth required, layout, core actions, loading/error strategy
-- Navigation: nav type, breadcrumbs, auth-aware toggle
+- Tech: language, platform, framework (filtered by language+platform), meta-framework, package manager, styling, component library, state management, data fetching, form handling, validation, PWA support, realtime strategy, image optimization, auth flow type, error boundary, bundle optimization, frontend testing, frontend linter
+- Theme: dark mode strategy, border radius, spacing scale, elevation, motion, vibe, colors, description
+- Pages: route, auth_required, layout, core actions, loading strategy, error handling, auth_roles (multi-select from backend roles for role-based page access), linked pages
+- Navigation: nav type (sidebar, top bar, etc.), breadcrumbs toggle, auth-aware navigation toggle
+- Assets: frontend design assets (images, icons, fonts, videos, mockups, etc.) with usage classification (project or inspiration)
 
 ### Pillar 5 — Infrastructure (`InfraEditor`)
 Sub-tabs: **Networking** · **CI/CD** · **Observability**
@@ -229,8 +264,25 @@ Sub-tabs: **Networking** · **CI/CD** · **Observability**
 ### Pillar 6 — Cross-Cutting (`CrosscutEditor`)
 Sub-tabs: **Testing** · **Docs**
 
-- Testing: unit, integration, E2E, API, load, contract testing tool selections
-- Docs: API doc format, auto-generation toggle, changelog strategy
+- Testing: testing framework selections dynamically filtered by backend languages and frontend tech choices
+  - Unit: language-specific test framework (Jest, Vitest for JavaScript/TypeScript; pytest, Go testing, JUnit, xUnit for others)
+  - Integration: integration test framework
+  - E2E: end-to-end test tool (Playwright, Cypress, Nightwatch, Selenium, etc.)
+  - API: API testing tool (REST, GraphQL, gRPC specific)
+  - Load: load testing tool (k6, Locust, Apache JMeter, etc.)
+  - Contract: contract testing tool (Pact, Spring Cloud Contract)
+- Docs: API doc format (OpenAPI/Swagger, GraphQL schema doc, AsyncAPI, etc.), auto-generation toggle, changelog strategy
+
+### Pillar 7 — Realize (`RealizeEditor`)
+Configuration tab for downstream code generation pipeline:
+
+- app_name: application name for generated code
+- output_dir: destination directory for generated files
+- model: LLM model selection (claude-haiku-4-5-20251001, claude-sonnet-4-6, claude-opus-4-6) — controls intelligence level for code generation
+- concurrency: parallel task execution limit (1, 2, 4, 8)
+- verify: enable/disable code verification after generation (default: true)
+- dry_run: print task plan without executing agent calls
+- Per-section model overrides: allow different LLM models for each pillar (backend, data, contracts, frontend, infra, crosscut)
 
 ---
 
@@ -302,20 +354,33 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 ```json
 {
   "created_at": "2026-...",
-  "backend":    { "arch_pattern": "...", "services": [...], ... },
+  "backend":    { "arch_pattern": "...", "services": [...], "auth": { "roles": [...], ... }, ... },
   "data":       { "databases": [...], "domains": [...], ... },
-  "contracts":  { "dtos": [...], "endpoints": [...], ... },
-  "frontend":   { "tech": {...}, "pages": [...], ... },
+  "contracts":  { "dtos": [...], "endpoints": [...], "external_apis": [...], ... },
+  "frontend":   { "tech": {...}, "pages": [...], "assets": [...], ... },
   "infrastructure": { "networking": {...}, "cicd": {...}, ... },
   "cross_cutting":  { "testing": {...}, "docs": {...} },
-  "entities":   [...],
-  "databases":  [...]
+  "realize":    { "app_name": "...", "output_dir": "...", "model": "...", ... },
+  "configured_providers": { ... }
 }
 ```
 
 ---
 
-## 8. Key Bindings Reference
+## 8. Key Recent Additions (v2.0)
+
+- **Auth Roles (Backend Pillar):** Auth tab now supports defining RoleDef entries with hierarchical role inheritance. Roles are made available to Contracts (endpoint auth_required filter) and Frontend (page access control).
+- **External APIs (Contracts Pillar):** New fourth sub-tab for configuring third-party API integrations with protocol-specific configuration options (REST, GraphQL, gRPC, WebSocket, Webhook, SOAP).
+- **Protocol-Tagged DTOs:** DTOs now have a protocol field allowing filtering by serialization format. External API DTOs are filtered to match the selected protocol.
+- **Testing Framework Filtering (Cross-Cutting Pillar):** Testing tool options are dynamically filtered based on selected backend languages and frontend framework/language.
+- **Realize Tab (7th Pillar):** New configuration tab for code generation pipeline with per-section LLM model overrides and concurrency/verification settings.
+- **Provider Modal:** Interactive provider selection menu for configuring LLM providers and tiers for the Realize pipeline.
+- **Frontend Assets:** Pages now support asset definitions (images, icons, fonts, videos, mockups) with usage classification.
+- **Job Queues & Security Tab:** Backend now includes job scheduling (cron jobs, worker queues) and security configuration (WAF, CORS, session management) as dedicated sub-tabs.
+
+---
+
+## 9. Key Bindings Reference
 
 ### Global (Normal Mode)
 | Key | Action |
@@ -336,7 +401,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 | `:wq` / `:x` | Save and quit |
 | `:tabn` / `:bn` | Next section |
 | `:tabp` / `:bp` | Previous section |
-| `:1`–`:6` | Jump to section N |
+| `:1`–`:7` | Jump to section N |
 
 ### Sub-Editor (varies by tab)
 | Key | Action |
@@ -351,7 +416,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
 ---
 
-## 9. Go Engineering Standards
+## 10. Go Engineering Standards
 
 - **Error handling:** Never swallow errors. Use `fmt.Errorf("context: %w", err)` for wrapping.
 - **Immutability:** Favor passing structs by value. Return new copies rather than mutating in place.
@@ -370,23 +435,25 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
 
 ---
 
-## 10. Specification Reference
+## 11. Specification Reference
 
-`system-declaration-menu.md` is the canonical specification for all menu options, field names, and valid values across all 6 pillars. When adding or modifying any editor field, cross-reference this document to ensure alignment.
+`system-declaration-menu.md` is the canonical specification for all menu options, field names, and valid values across all 7 pillars. When adding or modifying any editor field, cross-reference this document to ensure alignment.
 
 The dependency graph for non-linear resolution:
 ```
 Data (Domains, Databases)
     ↓
-Backend (Service Units reference Domains)
+Backend (Service Units reference Domains; defines Auth Roles)
     ↓
-Contracts (DTOs reference Domains; Endpoints reference Service Units)
+Contracts (DTOs reference Domains; Endpoints reference Service Units + Auth Roles; External APIs)
     ↓
-Frontend (Pages reference Endpoints + DTOs)
+Frontend (Pages reference Endpoints + DTOs + Auth Roles from Backend)
     ↓
 Infrastructure (references all deployable units)
     ↓
-Cross-Cutting (references everything)
+Cross-Cutting (Testing frameworks filtered by Backend languages + Frontend tech; Docs formats)
+    ↓
+Realize (Code generation config — orchestrates generation for all pillars)
 ```
 
 Empty references show as "unlinked" placeholders — the UI must allow editing in any order.
