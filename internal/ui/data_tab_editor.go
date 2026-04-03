@@ -131,6 +131,18 @@ func newDataTabEditor() DataTabEditor {
 	}
 }
 
+// CacheAliases returns the aliases of all database sources marked as cache
+// (IsCache == true), for use by the backend rate_limit_backend dropdown.
+func (dt DataTabEditor) CacheAliases() []string {
+	var out []string
+	for _, src := range dt.dbEditor.Sources {
+		if src.IsCache && src.Alias != "" {
+			out = append(out, src.Alias)
+		}
+	}
+	return out
+}
+
 // dbNames returns the aliases of all created databases for use as dropdown options.
 func (dt DataTabEditor) dbNames() []string {
 	names := make([]string, 0, len(dt.dbEditor.Sources))

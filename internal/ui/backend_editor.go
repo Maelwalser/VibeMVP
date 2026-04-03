@@ -678,6 +678,7 @@ type BackendEditor struct {
 	// Cross-tab references (injected from model.go)
 	DomainNames   []string
 	availableDTOs []string
+	cacheAliases  []string // IsCache DB aliases from the Data pillar
 
 	// Vim motion state
 	countBuf string
@@ -702,6 +703,22 @@ func newBackendEditor() BackendEditor {
 // SetDomainNames injects domain names from the data tab for event domain dropdowns.
 func (be *BackendEditor) SetDomainNames(names []string) {
 	be.DomainNames = names
+}
+
+// SetCacheAliases stores the IsCache DB aliases from the Data pillar.
+// Options are applied lazily when the rate_limit_backend dropdown is opened,
+// not on every keypress, to avoid corrupting SelIdx during dropdown navigation.
+func (be *BackendEditor) SetCacheAliases(aliases []string) {
+	be.cacheAliases = aliases
+}
+
+// rateBackendOptions returns the current options for the rate_limit_backend
+// dropdown: configured cache aliases followed by the provider-agnostic options.
+func (be BackendEditor) rateBackendOptions() []string {
+	opts := make([]string, 0, len(be.cacheAliases)+2)
+	opts = append(opts, be.cacheAliases...)
+	opts = append(opts, "In-memory", "None")
+	return opts
 }
 
 // SetDTONames injects DTO names from the contracts tab for job payload dropdowns.
@@ -3410,6 +3427,24 @@ func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		if be.activeField < n {
 			f := &be.securityFields[be.activeField]
 			if f.Kind == KindSelect {
+				// Refresh options for cache-dependent fields just before opening.
+				if f.Key == "rate_limit_backend" {
+					opts := be.rateBackendOptions()
+					f.Options = opts
+					// Reconcile SelIdx: keep if still valid, else reset to "None".
+					found := false
+					for j, o := range opts {
+						if o == f.Value {
+							f.SelIdx = j
+							found = true
+							break
+						}
+					}
+					if !found {
+						f.SelIdx = len(opts) - 1
+						f.Value = opts[len(opts)-1]
+					}
+				}
 				be.ddOpen = true
 				be.ddOptIdx = f.SelIdx
 			}
@@ -3420,6 +3455,14 @@ func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		if be.activeField < n {
 			f := &be.securityFields[be.activeField]
 			if f.Kind == KindSelect {
+				if f.Key == "rate_limit_backend" {
+					opts := be.rateBackendOptions()
+					if len(f.Options) != len(opts) {
+						f.Options = opts
+						f.SelIdx = len(opts) - 1
+						f.Value = opts[f.SelIdx]
+					}
+				}
 				f.CyclePrev()
 			}
 		}
