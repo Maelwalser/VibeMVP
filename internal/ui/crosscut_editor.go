@@ -116,12 +116,13 @@ func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
 	var p manifest.CrossCutPillar
 	if cc.testingEnabled {
 		p.Testing = manifest.TestingConfig{
-			Unit:        fieldGet(cc.testingFields, "unit"),
-			Integration: fieldGet(cc.testingFields, "integration"),
-			E2E:         fieldGet(cc.testingFields, "e2e"),
-			API:         fieldGet(cc.testingFields, "api"),
-			Load:        fieldGet(cc.testingFields, "load"),
-			Contract:    fieldGet(cc.testingFields, "contract"),
+			Unit:            fieldGet(cc.testingFields, "unit"),
+			Integration:     fieldGet(cc.testingFields, "integration"),
+			E2E:             fieldGet(cc.testingFields, "e2e"),
+			FrontendTesting: fieldGet(cc.testingFields, "fe_testing"),
+			API:             fieldGet(cc.testingFields, "api"),
+			Load:            fieldGet(cc.testingFields, "load"),
+			Contract:        fieldGet(cc.testingFields, "contract"),
 		}
 	}
 	if cc.docsEnabled {
@@ -151,6 +152,7 @@ func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutE
 		cc.testingFields = setFieldValue(cc.testingFields, "unit", t.Unit)
 		cc.testingFields = setFieldValue(cc.testingFields, "integration", t.Integration)
 		cc.testingFields = setFieldValue(cc.testingFields, "e2e", t.E2E)
+		cc.testingFields = setFieldValue(cc.testingFields, "fe_testing", t.FrontendTesting)
 		cc.testingFields = setFieldValue(cc.testingFields, "api", t.API)
 		cc.testingFields = setFieldValue(cc.testingFields, "load", t.Load)
 		cc.testingFields = setFieldValue(cc.testingFields, "contract", t.Contract)

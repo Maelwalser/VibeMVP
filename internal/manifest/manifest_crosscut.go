@@ -4,12 +4,13 @@ package manifest
 
 // TestingConfig describes testing strategy and tool choices.
 type TestingConfig struct {
-	Unit        string `json:"unit"`
-	Integration string `json:"integration"`
-	E2E         string `json:"e2e"`
-	API         string `json:"api"`
-	Load        string `json:"load"`
-	Contract    string `json:"contract"`
+	Unit              string `json:"unit"`
+	Integration       string `json:"integration"`
+	E2E               string `json:"e2e"`
+	API               string `json:"api"`
+	Load              string `json:"load"`
+	Contract          string `json:"contract"`
+	FrontendTesting   string `json:"frontend_testing,omitempty"`
 }
 
 // DocsConfig describes documentation tooling.

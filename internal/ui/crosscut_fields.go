@@ -142,6 +142,16 @@ func contractOptionsForArchPattern(archPattern string) []string {
 	}
 }
 
+// feTestingOptionsForLang returns frontend unit/component testing framework
+// options for the given frontend language. Used when populating the fe_testing
+// field in the CrossCut > Testing sub-tab.
+func feTestingOptionsForLang(lang string) []string {
+	if opts, ok := feTestingByLanguage[lang]; ok {
+		return opts
+	}
+	return []string{"Vitest", "Jest", "Testing Library", "Storybook", "None"}
+}
+
 // computeTestingFields builds testing Field definitions filtered to the given
 // backend languages, protocols, arch pattern, and frontend tech. Existing values
 // are preserved when the option is still available; otherwise the first option is selected.
@@ -152,6 +162,8 @@ func computeTestingFields(backendLangs, backendProtocols []string, backendArchPa
 	apiOpts := apiOptionsForProtocols(backendProtocols)
 	contractOpts := contractOptionsForArchPattern(backendArchPattern)
 
+	feTestOpts := feTestingOptionsForLang(frontendLang)
+
 	template := []struct {
 		key, label string
 		opts       []string
@@ -159,6 +171,7 @@ func computeTestingFields(backendLangs, backendProtocols []string, backendArchPa
 		{"unit", "unit          ", unitOpts},
 		{"integration", "integration   ", []string{"Testcontainers", "Docker Compose", "In-memory fakes", "None"}},
 		{"e2e", "e2e           ", e2eOpts},
+		{"fe_testing", "fe_testing    ", feTestOpts},
 		{"api", "api           ", apiOpts},
 		{"load", "load          ", loadOpts},
 		{"contract", "contract      ", contractOpts},

@@ -205,6 +205,9 @@ func (fe FrontendEditor) updatePageList(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 			fe.pageForm = defaultPageFormFields(fe.availableAuthRoles, otherRoutes)
 			fe.pageForm = setFieldValue(fe.pageForm, "name", p.Name)
 			fe.pageForm = setFieldValue(fe.pageForm, "route", p.Route)
+			if p.Purpose != "" {
+				fe.pageForm = setFieldValue(fe.pageForm, "purpose", p.Purpose)
+			}
 			fe.pageForm = setFieldValue(fe.pageForm, "auth_required", p.AuthRequired)
 			if p.Layout != "" {
 				fe.pageForm = setFieldValue(fe.pageForm, "layout", p.Layout)
@@ -359,6 +362,7 @@ func (fe *FrontendEditor) savePageForm() {
 	p := &fe.pages[fe.pageIdx]
 	p.Name = fieldGet(fe.pageForm, "name")
 	p.Route = fieldGet(fe.pageForm, "route")
+	p.Purpose = fieldGet(fe.pageForm, "purpose")
 	p.AuthRequired = fieldGet(fe.pageForm, "auth_required")
 	p.Layout = fieldGet(fe.pageForm, "layout")
 	p.Description = fieldGet(fe.pageForm, "description")

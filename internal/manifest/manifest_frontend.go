@@ -21,7 +21,6 @@ type FrontendTechConfig struct {
 	AuthFlowType       string `json:"auth_flow_type,omitempty"`
 	ErrorBoundary      string `json:"error_boundary,omitempty"`
 	BundleOptimization string `json:"bundle_optimization,omitempty"`
-	FrontendTesting    string `json:"frontend_testing,omitempty"`
 	FrontendLinter     string `json:"frontend_linter,omitempty"`
 }
 
@@ -53,6 +52,7 @@ type PageDef struct {
 	Route         string             `json:"route"`
 	AuthRequired  string             `json:"auth_required"`
 	Layout        string             `json:"layout"`
+	Purpose       string             `json:"purpose,omitempty"`
 	Description   string             `json:"description,omitempty"`
 	CoreActions   string             `json:"core_actions,omitempty"`
 	Loading       string             `json:"loading"`
@@ -104,6 +104,7 @@ type AssetDef struct {
 	AssetType   string     `json:"asset_type"`          // image, icon, font, video, mockup, moodboard
 	Format      string     `json:"format"`              // png, jpg, svg, gif, mp4, pdf, figma, sketch, other
 	Usage       AssetUsage `json:"usage"`               // project | inspiration
+	Pages       string     `json:"pages,omitempty"`     // comma-separated page routes this asset is used on
 	Description string     `json:"description,omitempty"`
 }
 

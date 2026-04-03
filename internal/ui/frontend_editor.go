@@ -178,7 +178,6 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 			AuthFlowType:       fieldGet(fe.techFields, "auth_flow"),
 			ErrorBoundary:      fieldGet(fe.techFields, "error_boundary"),
 			BundleOptimization: fieldGet(fe.techFields, "bundle_opt"),
-			FrontendTesting:    fieldGet(fe.techFields, "fe_testing"),
 			FrontendLinter:     fieldGet(fe.techFields, "fe_linter"),
 		}
 		// Legacy compatibility
@@ -250,7 +249,6 @@ func (fe FrontendEditor) FromFrontendPillar(fp manifest.FrontendPillar) Frontend
 		fe.techFields = setFieldValue(fe.techFields, "auth_flow", t.AuthFlowType)
 		fe.techFields = setFieldValue(fe.techFields, "error_boundary", t.ErrorBoundary)
 		fe.techFields = setFieldValue(fe.techFields, "bundle_opt", t.BundleOptimization)
-		fe.techFields = setFieldValue(fe.techFields, "fe_testing", t.FrontendTesting)
 		fe.techFields = setFieldValue(fe.techFields, "fe_linter", t.FrontendLinter)
 	}
 
