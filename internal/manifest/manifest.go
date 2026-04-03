@@ -63,7 +63,8 @@ type TelemetryPillar struct {
 
 // Manifest is the root document holding all configuration.
 type Manifest struct {
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt   time.Time `json:"created_at"`
+	Description string    `json:"description,omitempty"`
 
 	// Structured pillars
 	Data      DataPillar      `json:"data"`

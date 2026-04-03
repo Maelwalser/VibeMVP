@@ -67,13 +67,14 @@ type Model struct {
 	textArea  textarea.Model
 
 	// ── Main tab editors (one per section) ───────────────────────────────────
-	backendEditor   BackendEditor
-	dataTabEditor   DataTabEditor
-	contractsEditor ContractsEditor
-	frontendEditor  FrontendEditor
-	infraEditor     InfraEditor
-	crossCutEditor  CrossCutEditor
-	realizeEditor   RealizeEditor
+	descriptionEditor DescriptionEditor
+	backendEditor     BackendEditor
+	dataTabEditor     DataTabEditor
+	contractsEditor   ContractsEditor
+	frontendEditor    FrontendEditor
+	infraEditor       InfraEditor
+	crossCutEditor    CrossCutEditor
+	realizeEditor     RealizeEditor
 
 	cmd    cmdState
 	modal  modalState
@@ -106,10 +107,11 @@ func NewModel(onSave SaveFunc) Model {
 		Background(lipgloss.Color(clrBgHL))
 
 	return Model{
-		sections:        initSections(),
-		textInput:       ti,
-		textArea:        ta,
-		backendEditor:   newBackendEditor(),
+		sections:          initSections(),
+		textInput:         ti,
+		textArea:          ta,
+		descriptionEditor: newDescriptionEditor(),
+		backendEditor:     newBackendEditor(),
 		dataTabEditor:   newDataTabEditor(),
 		contractsEditor: newContractsEditor(),
 		frontendEditor:  newFrontendEditor(),
@@ -147,6 +149,8 @@ func (m Model) activeSectionID() string {
 // Returns nil when no delegated editor is active (fallback generic renderer).
 func (m Model) activeEditor() Editor {
 	switch m.activeSectionID() {
+	case "describe":
+		return m.descriptionEditor
 	case "backend":
 		return m.backendEditor
 	case "data":
@@ -185,6 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textArea.SetWidth(m.width - 4)
 		m.textArea.SetHeight(m.contentHeight() - 4)
 		// Propagate to all sub-editors so insert-mode inputs resize immediately.
+		m.descriptionEditor, _ = m.descriptionEditor.Update(wsz)
 		m.backendEditor, _ = m.backendEditor.Update(wsz)
 		m.dataTabEditor, _ = m.dataTabEditor.Update(wsz)
 		m.contractsEditor, _ = m.contractsEditor.Update(wsz)
@@ -314,6 +319,7 @@ func (m Model) LoadManifestIntoModel(path string) (Model, error) {
 	if err != nil {
 		return m, err
 	}
+	m.descriptionEditor.SetValue(mf.Description)
 	m.backendEditor = m.backendEditor.FromBackendPillar(mf.Backend)
 	m.dataTabEditor = m.dataTabEditor.FromDataPillar(mf.Data)
 	m.contractsEditor = m.contractsEditor.FromContractsPillar(mf.Contracts)
@@ -345,6 +351,8 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch m.activeSectionID() {
+	case "describe":
+		m.descriptionEditor, cmd = m.descriptionEditor.Update(msg)
 	case "backend":
 		m.backendEditor.SetDomainNames(m.dataTabEditor.domainNames())
 		m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
@@ -545,7 +553,8 @@ func (m Model) execSave() (tea.Model, tea.Cmd) {
 func (m Model) BuildManifest() *manifest.Manifest {
 	dataPillar := m.dataTabEditor.ToManifestDataPillar()
 	return &manifest.Manifest{
-		Data:      dataPillar,
+		Description: m.descriptionEditor.Value(),
+		Data:        dataPillar,
 		Backend:   m.backendEditor.ToManifest(),
 		Contracts: m.contractsEditor.ToManifestContractsPillar(),
 		Frontend:  m.frontendEditor.ToManifestFrontendPillar(),

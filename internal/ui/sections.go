@@ -193,9 +193,18 @@ type Section struct {
 	Fields []Field
 }
 
-// initSections returns the 6 main tab section definitions.
+// initSections returns the main tab section definitions.
 func initSections() []Section {
 	return []Section{
+		{
+			ID:    "describe",
+			Abbr:  "✦ DESCRIBE",
+			Title: "Describe",
+			Desc:  "Describe your project in natural language.",
+			Fields: []Field{
+				{Key: "_describe", Kind: KindDataModel},
+			},
+		},
 		{
 			ID:    "backend",
 			Abbr:  "⚡ BACKEND",
