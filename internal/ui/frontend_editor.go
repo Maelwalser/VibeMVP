@@ -401,8 +401,29 @@ func defaultI18nFields() []Field {
 			Key: "enabled", Label: "enabled       ", Kind: KindSelect,
 			Options: []string{"false", "true"}, Value: "false",
 		},
-		{Key: "default_locale", Label: "default_locale", Kind: KindText, Value: "en"},
-		{Key: "supported_locales", Label: "locales       ", Kind: KindText, Value: "en"},
+		{
+			Key: "default_locale", Label: "default_locale", Kind: KindSelect,
+			Options: []string{
+				"en", "en-US", "en-GB", "en-AU", "en-CA",
+				"fr", "fr-FR", "fr-CA", "de", "de-DE", "de-AT",
+				"es", "es-ES", "es-MX", "es-AR", "pt", "pt-BR", "pt-PT",
+				"it", "nl", "nl-NL", "pl", "ru", "ja", "zh", "zh-CN", "zh-TW",
+				"ko", "ar", "hi", "tr", "sv", "da", "fi", "nb", "cs", "hu",
+				"ro", "vi", "th", "id", "ms", "uk", "he",
+			},
+			Value: "en",
+		},
+		{
+			Key: "supported_locales", Label: "locales       ", Kind: KindMultiSelect,
+			Options: []string{
+				"en", "en-US", "en-GB", "en-AU", "en-CA",
+				"fr", "fr-FR", "fr-CA", "de", "de-DE", "de-AT",
+				"es", "es-ES", "es-MX", "es-AR", "pt", "pt-BR", "pt-PT",
+				"it", "nl", "nl-NL", "pl", "ru", "ja", "zh", "zh-CN", "zh-TW",
+				"ko", "ar", "hi", "tr", "sv", "da", "fi", "nb", "cs", "hu",
+				"ro", "vi", "th", "id", "ms", "uk", "he",
+			},
+		},
 		{
 			Key: "translation_strategy", Label: "i18n_library  ", Kind: KindSelect,
 			Options: []string{"i18next", "next-intl", "react-i18next", "LinguiJS", "vue-i18n", "Custom", "None"},
@@ -624,7 +645,7 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 		p.I18n = manifest.I18nConfig{
 			Enabled:             fieldGet(fe.i18nFields, "enabled"),
 			DefaultLocale:       fieldGet(fe.i18nFields, "default_locale"),
-			SupportedLocales:    fieldGet(fe.i18nFields, "supported_locales"),
+			SupportedLocales:    fieldGetMulti(fe.i18nFields, "supported_locales"),
 			TranslationStrategy: fieldGet(fe.i18nFields, "translation_strategy"),
 			TimezoneHandling:    fieldGet(fe.i18nFields, "timezone_handling"),
 		}
@@ -705,7 +726,7 @@ func (fe FrontendEditor) FromFrontendPillar(fp manifest.FrontendPillar) Frontend
 		fe.i18nEnabled = true
 		fe.i18nFields = setFieldValue(fe.i18nFields, "enabled", i.Enabled)
 		fe.i18nFields = setFieldValue(fe.i18nFields, "default_locale", i.DefaultLocale)
-		fe.i18nFields = setFieldValue(fe.i18nFields, "supported_locales", i.SupportedLocales)
+		fe.i18nFields = restoreMultiSelectValue(fe.i18nFields, "supported_locales", i.SupportedLocales)
 		fe.i18nFields = setFieldValue(fe.i18nFields, "translation_strategy", i.TranslationStrategy)
 		fe.i18nFields = setFieldValue(fe.i18nFields, "timezone_handling", i.TimezoneHandling)
 	}
@@ -1652,10 +1673,14 @@ func (fe FrontendEditor) updateI18n(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &fe.i18nFields[fe.i18nFormIdx]
-		if f.Kind == KindSelect {
+		switch f.Kind {
+		case KindSelect:
 			fe.ddOpen = true
 			fe.ddOptIdx = f.SelIdx
-		} else {
+		case KindMultiSelect:
+			fe.ddOpen = true
+			fe.ddOptIdx = f.DDCursor
+		default:
 			return fe.tryEnterInsert()
 		}
 	case "H", "shift+left":
@@ -1688,13 +1713,37 @@ func (fe FrontendEditor) updateI18nDropdown(key tea.KeyMsg) (FrontendEditor, tea
 		if fe.ddOptIdx > 0 {
 			fe.ddOptIdx--
 		}
-	case " ", "enter":
-		f.SelIdx = fe.ddOptIdx
-		if fe.ddOptIdx < len(f.Options) {
-			f.Value = f.Options[fe.ddOptIdx]
+	case " ":
+		if f.Kind == KindMultiSelect {
+			f.ToggleMultiSelect(fe.ddOptIdx)
+			f.DDCursor = fe.ddOptIdx
+		} else if f.Kind == KindSelect {
+			f.SelIdx = fe.ddOptIdx
+			if fe.ddOptIdx < len(f.Options) {
+				f.Value = f.Options[fe.ddOptIdx]
+			}
+			fe.ddOpen = false
+			if f.PrepareCustomEntry() {
+				return fe.tryEnterInsert()
+			}
+		}
+	case "enter":
+		if f.Kind == KindMultiSelect {
+			f.DDCursor = fe.ddOptIdx
+		} else if f.Kind == KindSelect {
+			f.SelIdx = fe.ddOptIdx
+			if fe.ddOptIdx < len(f.Options) {
+				f.Value = f.Options[fe.ddOptIdx]
+			}
 		}
 		fe.ddOpen = false
+		if f.Kind == KindSelect && f.PrepareCustomEntry() {
+			return fe.tryEnterInsert()
+		}
 	case "esc", "b":
+		if f.Kind == KindMultiSelect {
+			f.DDCursor = fe.ddOptIdx
+		}
 		fe.ddOpen = false
 	}
 	return fe, nil
