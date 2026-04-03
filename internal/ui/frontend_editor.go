@@ -159,7 +159,29 @@ func (fe FrontendEditor) componentNames() []string {
 	return names
 }
 
-// pageRoutes returns routes of all existing pages.
+// formComponentNames returns names of components with type "Form".
+func (fe FrontendEditor) formComponentNames() []string {
+	var names []string
+	for _, c := range fe.components {
+		if c.ComponentType == "Form" && c.Name != "" {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// modalComponentNames returns names of components with type "Modal".
+func (fe FrontendEditor) modalComponentNames() []string {
+	var names []string
+	for _, c := range fe.components {
+		if c.ComponentType == "Modal" && c.Name != "" {
+			names = append(names, c.Name)
+		}
+	}
+	return names
+}
+
+// pageRoutes returns routes of all existing pages (for linked_pages options).
 func (fe FrontendEditor) pageRoutes() []string {
 	routes := make([]string, 0, len(fe.pages))
 	for _, p := range fe.pages {

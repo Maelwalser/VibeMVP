@@ -196,13 +196,13 @@ func applyCloudProviderToFields(fields []Field, provider string) []Field {
 type infraTabIdx int
 
 const (
-	infraTabNetworking infraTabIdx = iota
-	infraTabCICD
+	infraTabEnvironments infraTabIdx = iota
+	infraTabNetworking
 	infraTabObservability
-	infraTabEnvironments
+	infraTabCICD
 )
 
-var infraTabLabels = []string{"NETWORKING", "CI/CD", "OBSERVABILITY", "ENVIRONMENTS"}
+var infraTabLabels = []string{"ENVIRONMENTS", "NETWORKING", "OBSERVABILITY", "CI/CD"}
 
 // ── field definitions ─────────────────────────────────────────────────────────
 
