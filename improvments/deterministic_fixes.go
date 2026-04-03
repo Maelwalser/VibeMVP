@@ -1,3 +1,5 @@
+//go:build ignore
+
 package verify
 
 import (
@@ -76,7 +78,8 @@ func rewriteInvalidEscapes(src string) string {
 		}
 		// Skip // comments.
 		if i+1 < len(src) && src[i] == '/' && src[i+1] == '/' {
-			end := strings.IndexByte(src[i:], '\n')
+			end := strings.IndexByte(src[i:], '
+')
 			if end >= 0 {
 				out.WriteString(src[i : i+end])
 				i += end
@@ -107,7 +110,8 @@ func rewriteInvalidEscapes(src string) string {
 				continue
 			}
 			inner := src[i+1 : strEnd]
-			if hasInvalidGoEscape(inner) && !strings.Contains(inner, "`") && !strings.Contains(inner, "\n") {
+			if hasInvalidGoEscape(inner) && !strings.Contains(inner, "`") && !strings.Contains(inner, "
+") {
 				rawInner := interpretedToRaw(inner)
 				out.WriteByte('`')
 				out.WriteString(rawInner)
@@ -131,14 +135,15 @@ func findQuoteEnd(s string, start int) int {
 			escaped = false
 			continue
 		}
-		if s[i] == '\\' {
+		if s[i] == '\' {
 			escaped = true
 			continue
 		}
 		if s[i] == '"' {
 			return i
 		}
-		if s[i] == '\n' {
+		if s[i] == '
+' {
 			return -1
 		}
 	}
@@ -147,10 +152,10 @@ func findQuoteEnd(s string, start int) int {
 
 func hasInvalidGoEscape(inner string) bool {
 	for i := 0; i < len(inner)-1; i++ {
-		if inner[i] == '\\' {
+		if inner[i] == '\' {
 			next := inner[i+1]
 			switch next {
-			case 'a', 'b', 'f', 'n', 'r', 't', 'v', '\\', '"', '\'',
+			case 'a', 'b', 'f', 'n', 'r', 't', 'v', '\', '"', '\'',
 				'0', '1', '2', '3', '4', '5', '6', '7',
 				'x', 'u', 'U':
 				// valid
@@ -166,19 +171,20 @@ func hasInvalidGoEscape(inner string) bool {
 func interpretedToRaw(inner string) string {
 	var out strings.Builder
 	for i := 0; i < len(inner); i++ {
-		if inner[i] == '\\' && i+1 < len(inner) {
+		if inner[i] == '\' && i+1 < len(inner) {
 			next := inner[i+1]
 			switch next {
 			case 'n':
-				out.WriteByte('\n')
+				out.WriteByte('
+')
 			case 't':
-				out.WriteByte('\t')
-			case '\\':
-				out.WriteByte('\\')
+				out.WriteByte('	')
+			case '\':
+				out.WriteByte('\')
 			case '"':
 				out.WriteByte('"')
 			default:
-				out.WriteByte('\\')
+				out.WriteByte('\')
 				out.WriteByte(next)
 			}
 			i++
@@ -268,7 +274,8 @@ func removeDuplicateDecls(baseDir string, files []string) bool {
 		content := string(data)
 		for typeName := range typesToRemove {
 			typeRe := regexp.MustCompile(
-				fmt.Sprintf(`(?ms)^type %s\s+(?:struct|interface)\s*\{[^}]*\}\s*\n?`,
+				fmt.Sprintf(`(?ms)^type %s\s+(?:struct|interface)\s*\{[^}]*\}\s*
+?`,
 					regexp.QuoteMeta(typeName)))
 			content = typeRe.ReplaceAllString(content, "")
 		}

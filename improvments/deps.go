@@ -1,3 +1,5 @@
+//go:build ignore
+
 package deps
 
 import (
@@ -221,12 +223,12 @@ func GoModForService(modulePath, framework string, technologies []string) string
 	addModule := func(info ModuleInfo) {
 		if !seen[info.Module] {
 			seen[info.Module] = true
-			requires = append(requires, fmt.Sprintf("\t%s %s", info.Module, info.Version))
+			requires = append(requires, fmt.Sprintf("	%s %s", info.Module, info.Version))
 		}
 		for _, td := range info.TestDeps {
 			if !seen[td.Module] {
 				seen[td.Module] = true
-				requires = append(requires, fmt.Sprintf("\t%s %s", td.Module, td.Version))
+				requires = append(requires, fmt.Sprintf("	%s %s", td.Module, td.Version))
 			}
 		}
 	}
@@ -251,13 +253,20 @@ func GoModForService(modulePath, framework string, technologies []string) string
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("module %s\n\ngo 1.22\n\n", modulePath))
+	b.WriteString(fmt.Sprintf("module %s
+
+go 1.22
+
+", modulePath))
 	if len(requires) > 0 {
-		b.WriteString("require (\n")
+		b.WriteString("require (
+")
 		for _, r := range requires {
-			b.WriteString(r + "\n")
+			b.WriteString(r + "
+")
 		}
-		b.WriteString(")\n")
+		b.WriteString(")
+")
 	}
 	return b.String()
 }
@@ -283,7 +292,8 @@ func ValidateGoMod(ctx context.Context, goModContent string, goFiles map[string]
 	cmd.Dir = tmpDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("go mod tidy: %s\n%s", err, string(out))
+		return nil, fmt.Errorf("go mod tidy: %s
+%s", err, string(out))
 	}
 
 	modData, _ := os.ReadFile(filepath.Join(tmpDir, "go.mod"))
@@ -299,7 +309,8 @@ func ValidateGoMod(ctx context.Context, goModContent string, goFiles map[string]
 func parseRequires(gomod string) map[string]string {
 	versions := make(map[string]string)
 	inRequire := false
-	for _, line := range strings.Split(gomod, "\n") {
+	for _, line := range strings.Split(gomod, "
+") {
 		line = strings.TrimSpace(line)
 		if line == "require (" {
 			inRequire = true
@@ -324,8 +335,13 @@ func parseRequires(gomod string) map[string]string {
 func PromptContext(framework string, technologies []string) string {
 	var b strings.Builder
 
-	b.WriteString("\n## Dependency & API Reference\n\n")
-	b.WriteString("Use EXACTLY these module paths and versions in go.mod. Do NOT invent versions.\n\n")
+	b.WriteString("
+## Dependency & API Reference
+
+")
+	b.WriteString("Use EXACTLY these module paths and versions in go.mod. Do NOT invent versions.
+
+")
 
 	// List relevant modules with their exact versions.
 	seen := make(map[string]bool)
@@ -343,14 +359,21 @@ func PromptContext(framework string, technologies []string) string {
 	}
 
 	if len(modules) > 0 {
-		b.WriteString("### Exact Module Versions\n\n| Module | Version |\n|--------|--------|\n")
+		b.WriteString("### Exact Module Versions
+
+| Module | Version |
+|--------|--------|
+")
 		for _, m := range modules {
-			b.WriteString(fmt.Sprintf("| `%s` | `%s` |\n", m.Module, m.Version))
+			b.WriteString(fmt.Sprintf("| `%s` | `%s` |
+", m.Module, m.Version))
 			for _, td := range m.TestDeps {
-				b.WriteString(fmt.Sprintf("| `%s` | `%s` |\n", td.Module, td.Version))
+				b.WriteString(fmt.Sprintf("| `%s` | `%s` |
+", td.Module, td.Version))
 			}
 		}
-		b.WriteString("\n")
+		b.WriteString("
+")
 	}
 
 	// Inject library API docs for relevant technologies.
@@ -364,7 +387,8 @@ func PromptContext(framework string, technologies []string) string {
 			}
 			if strings.Contains(lower, key) || strings.Contains(key, lower) {
 				b.WriteString(doc)
-				b.WriteString("\n")
+				b.WriteString("
+")
 				injected[key] = true
 			}
 		}
