@@ -3440,6 +3440,26 @@ func (be BackendEditor) ServiceDefs() []manifest.ServiceDef {
 	return defs
 }
 
+// Languages returns the unique set of programming languages configured across
+// all backend services (and the monolith language when applicable).
+func (be BackendEditor) Languages() []string {
+	seen := make(map[string]bool)
+	var langs []string
+	add := func(l string) {
+		if l != "" && !seen[l] {
+			seen[l] = true
+			langs = append(langs, l)
+		}
+	}
+	if be.currentArch() == "monolith" {
+		add(fieldGet(be.EnvFields, "monolith_lang"))
+	}
+	for _, item := range be.serviceEditor.items {
+		add(fieldGet(item, "language"))
+	}
+	return langs
+}
+
 // copyFields makes a deep copy of a field slice.
 func copyFields(src []Field) []Field {
 	dst := make([]Field, len(src))

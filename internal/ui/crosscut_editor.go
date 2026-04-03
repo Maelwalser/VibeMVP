@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vibe-menu/internal/manifest"
@@ -29,44 +31,155 @@ const (
 
 // ── field definitions ─────────────────────────────────────────────────────────
 
-func defaultTestingFields() []Field {
-	return []Field{
-		{
-			Key: "unit", Label: "unit          ", Kind: KindSelect,
-			Options: []string{
-				"Jest", "Vitest", "pytest", "Go testing",
-				"JUnit", "xUnit", "Other",
-			},
-			Value: "Go testing", SelIdx: 3,
-		},
-		{
-			Key: "integration", Label: "integration   ", Kind: KindSelect,
-			Options: []string{
-				"Testcontainers", "Docker Compose", "In-memory fakes", "None",
-			},
-			Value: "Testcontainers",
-		},
-		{
-			Key: "e2e", Label: "e2e           ", Kind: KindSelect,
-			Options: []string{"Playwright", "Cypress", "Selenium", "None"},
-			Value:   "Playwright",
-		},
-		{
-			Key: "api", Label: "api           ", Kind: KindSelect,
-			Options: []string{"Bruno", "Hurl", "Postman/Newman", "REST Client", "None"},
-			Value:   "Hurl", SelIdx: 1,
-		},
-		{
-			Key: "load", Label: "load          ", Kind: KindSelect,
-			Options: []string{"k6", "Locust", "Artillery", "JMeter", "None"},
-			Value:   "k6",
-		},
-		{
-			Key: "contract", Label: "contract      ", Kind: KindSelect,
-			Options: []string{"Pact", "Schemathesis", "Dredd", "None"},
-			Value:   "None", SelIdx: 3,
-		},
+// unitOptionsForLanguages returns unit-testing framework options relevant to
+// the given set of backend languages. Falls back to all options when empty.
+func unitOptionsForLanguages(langs []string) []string {
+	if len(langs) == 0 {
+		return []string{"Jest", "Vitest", "pytest", "Go testing", "JUnit", "xUnit", "Other"}
 	}
+	seen := make(map[string]bool)
+	var opts []string
+	add := func(o string) {
+		if !seen[o] {
+			seen[o] = true
+			opts = append(opts, o)
+		}
+	}
+	for _, lang := range langs {
+		switch strings.ToLower(lang) {
+		case "go", "golang":
+			add("Go testing")
+			add("Testify")
+		case "typescript", "javascript", "ts", "js":
+			add("Jest")
+			add("Vitest")
+		case "python":
+			add("pytest")
+			add("unittest")
+		case "java":
+			add("JUnit")
+			add("TestNG")
+		case "kotlin":
+			add("JUnit")
+			add("Kotest")
+		case "c#", "csharp", "dotnet", ".net":
+			add("xUnit")
+			add("NUnit")
+			add("MSTest")
+		case "rust":
+			add("cargo test")
+		case "ruby":
+			add("RSpec")
+			add("minitest")
+		case "php":
+			add("PHPUnit")
+			add("Pest")
+		default:
+			add("Jest")
+			add("pytest")
+			add("Go testing")
+			add("JUnit")
+		}
+	}
+	add("Other")
+	return opts
+}
+
+// e2eOptionsForFrontend returns E2E framework options suitable for the given
+// frontend language and framework.
+func e2eOptionsForFrontend(frontendLang, frontendFramework string) []string {
+	lang := strings.ToLower(frontendLang)
+	fw := strings.ToLower(frontendFramework)
+	switch {
+	case lang == "dart" || fw == "flutter":
+		return []string{"Flutter Driver", "Integration Test", "None"}
+	case lang == "kotlin" || fw == "compose multiplatform" || fw == "jetpack compose":
+		return []string{"Espresso", "UI Automator", "None"}
+	case lang == "swift" || fw == "swiftui" || fw == "uikit":
+		return []string{"XCUITest", "EarlGrey", "None"}
+	case lang == "" && fw == "":
+		return []string{"None"}
+	default:
+		// Web frameworks
+		return []string{"Playwright", "Cypress", "Selenium", "None"}
+	}
+}
+
+// loadOptionsForLanguages returns load-testing tools relevant to the backend langs.
+func loadOptionsForLanguages(langs []string) []string {
+	base := []string{"k6", "Artillery", "JMeter", "None"}
+	for _, lang := range langs {
+		if strings.ToLower(lang) == "python" {
+			return []string{"k6", "Locust", "Artillery", "JMeter", "None"}
+		}
+	}
+	return base
+}
+
+// computeTestingFields builds testing Field definitions filtered to the given
+// backend languages and frontend tech. Existing values are preserved when
+// the option is still available; otherwise the first option is selected.
+func computeTestingFields(backendLangs []string, frontendLang, frontendFramework string, existing []Field) []Field {
+	unitOpts := unitOptionsForLanguages(backendLangs)
+	e2eOpts := e2eOptionsForFrontend(frontendLang, frontendFramework)
+	loadOpts := loadOptionsForLanguages(backendLangs)
+
+	template := []struct {
+		key, label string
+		opts       []string
+	}{
+		{"unit", "unit          ", unitOpts},
+		{"integration", "integration   ", []string{"Testcontainers", "Docker Compose", "In-memory fakes", "None"}},
+		{"e2e", "e2e           ", e2eOpts},
+		{"api", "api           ", []string{"Bruno", "Hurl", "Postman/Newman", "REST Client", "None"}},
+		{"load", "load          ", loadOpts},
+		{"contract", "contract      ", []string{"Pact", "Schemathesis", "Dredd", "None"}},
+	}
+
+	// Build lookup of existing values.
+	existingVals := make(map[string]string, len(existing))
+	for _, f := range existing {
+		existingVals[f.Key] = f.Value
+	}
+
+	fields := make([]Field, 0, len(template))
+	for _, t := range template {
+		selIdx := 0
+		val := t.opts[0]
+		// Preserve current value when still valid.
+		if prev, ok := existingVals[t.key]; ok {
+			for i, o := range t.opts {
+				if o == prev {
+					selIdx = i
+					val = o
+					break
+				}
+			}
+		}
+		// Default contract to "None".
+		if t.key == "contract" && val == t.opts[0] && existingVals[t.key] == "" {
+			for i, o := range t.opts {
+				if o == "None" {
+					selIdx = i
+					val = o
+					break
+				}
+			}
+		}
+		fields = append(fields, Field{
+			Key:    t.key,
+			Label:  t.label,
+			Kind:   KindSelect,
+			Options: t.opts,
+			Value:  val,
+			SelIdx: selIdx,
+		})
+	}
+	return fields
+}
+
+func defaultTestingFields() []Field {
+	return computeTestingFields(nil, "", "", nil)
 }
 
 func defaultStandardsFields() []Field {
@@ -154,6 +267,11 @@ type CrossCutEditor struct {
 
 	// Vim motion state
 	nav VimNav
+
+	// Context from other editors — used to filter testing options.
+	backendLangs      []string
+	frontendLang      string
+	frontendFramework string
 }
 
 func (cc CrossCutEditor) activeTabEnabled() bool {
@@ -186,7 +304,7 @@ func (cc *CrossCutEditor) disableActiveTab() {
 	switch cc.activeTab {
 	case ccTabTesting:
 		cc.testingEnabled = false
-		cc.testingFields = defaultTestingFields()
+		cc.testingFields = computeTestingFields(cc.backendLangs, cc.frontendLang, cc.frontendFramework, nil)
 		cc.testFormIdx = 0
 	case ccTabDocs:
 		cc.docsEnabled = false
@@ -206,6 +324,34 @@ func newCrossCutEditor() CrossCutEditor {
 		standardsFields: defaultStandardsFields(),
 		formInput:       newFormInput(),
 	}
+}
+
+// SetTestingContext updates the backend languages and frontend tech context used
+// to filter testing framework options. If the testing tab is already enabled,
+// the field options are recomputed immediately (preserving current selections).
+func (cc *CrossCutEditor) SetTestingContext(backendLangs []string, frontendLang, frontendFramework string) {
+	// Nothing changed — skip expensive recompute.
+	if stringSlicesEqual(cc.backendLangs, backendLangs) &&
+		cc.frontendLang == frontendLang &&
+		cc.frontendFramework == frontendFramework {
+		return
+	}
+	cc.backendLangs = backendLangs
+	cc.frontendLang = frontendLang
+	cc.frontendFramework = frontendFramework
+	cc.testingFields = computeTestingFields(backendLangs, frontendLang, frontendFramework, cc.testingFields)
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // ── ToManifest ────────────────────────────────────────────────────────────────

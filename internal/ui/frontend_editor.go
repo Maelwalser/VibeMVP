@@ -545,6 +545,15 @@ func (fe *FrontendEditor) SetAuthRoles(roles []string) {
 	fe.availableAuthRoles = roles
 }
 
+// Language returns the frontend language selected in the Tech sub-tab.
+func (fe FrontendEditor) Language() string { return fieldGet(fe.techFields, "language") }
+
+// Framework returns the frontend framework selected in the Tech sub-tab.
+func (fe FrontendEditor) Framework() string { return fieldGet(fe.techFields, "framework") }
+
+// Platform returns the frontend platform selected in the Tech sub-tab.
+func (fe FrontendEditor) Platform() string { return fieldGet(fe.techFields, "platform") }
+
 // pageRoutes returns routes of all existing pages (for linked_pages options).
 func (fe FrontendEditor) pageRoutes() []string {
 	routes := make([]string, 0, len(fe.pages))
