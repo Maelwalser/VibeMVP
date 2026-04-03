@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -27,18 +28,42 @@ type WelcomeCompleteMsg struct {
 
 // WelcomeModel is the initial screen presented on startup.
 type WelcomeModel struct {
-	phase  welcomePhase
-	cursor int // 0 = Open Existing, 1 = New Project
-	input  textinput.Model
-	errMsg string
-	width  int
-	height int
+	phase      welcomePhase
+	cursor     int    // menu index
+	recentPath string // most recently used manifest path, or ""
+	input      textinput.Model
+	errMsg     string
+	width      int
+	height     int
 }
 
 func newWelcomeModel() WelcomeModel {
 	inp := newFormInput()
 	inp.Width = 48
-	return WelcomeModel{input: inp}
+	recent := manifest.LoadRecentPaths()
+	var recentPath string
+	if len(recent) > 0 {
+		recentPath = recent[0]
+	}
+	return WelcomeModel{input: inp, recentPath: recentPath}
+}
+
+// numMenuOptions returns how many options appear in the main menu.
+func (w WelcomeModel) numMenuOptions() int {
+	if w.recentPath != "" {
+		return 3
+	}
+	return 2
+}
+
+// shortPath returns up to the last two path components for display.
+func shortPath(p string) string {
+	dir, file := filepath.Split(filepath.Clean(p))
+	parent := filepath.Base(filepath.Clean(dir))
+	if parent == "." || parent == "" {
+		return file
+	}
+	return filepath.Join(parent, file)
 }
 
 // Init satisfies tea.Model — starts the animation ticker.
@@ -71,24 +96,46 @@ func (w WelcomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (w WelcomeModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch w.phase {
 	case welcomePhaseMenu:
+		n := w.numMenuOptions()
 		switch key.String() {
 		case "j", "down":
-			w.cursor = (w.cursor + 1) % 2
+			w.cursor = (w.cursor + 1) % n
 		case "k", "up":
-			w.cursor = (w.cursor - 1 + 2) % 2
+			w.cursor = (w.cursor - 1 + n) % n
 		case "enter", " ":
-			if w.cursor == 0 {
+			// When a recent path is shown it occupies index 0;
+			// Open Existing and New Project shift down by one.
+			openIdx := 0
+			newIdx := 1
+			if w.recentPath != "" {
+				openIdx = 1
+				newIdx = 2
+			}
+			switch {
+			case w.recentPath != "" && w.cursor == 0:
+				// Load the most recent manifest directly.
+				mf, err := manifest.Load(w.recentPath)
+				if err != nil {
+					w.errMsg = fmt.Sprintf("error: %v", err)
+					return w, nil
+				}
+				path := w.recentPath
+				return w, func() tea.Msg {
+					return WelcomeCompleteMsg{Path: path, IsNew: false, Manifest: mf}
+				}
+			case w.cursor == openIdx:
 				w.phase = welcomePhaseOpenPath
 				w.input.Placeholder = "e.g. ./project/manifest.json"
 				w.input.SetValue("")
 				w.errMsg = ""
 				return w, w.input.Focus()
+			case w.cursor == newIdx:
+				w.phase = welcomePhaseNewName
+				w.input.Placeholder = "e.g. my-app"
+				w.input.SetValue("")
+				w.errMsg = ""
+				return w, w.input.Focus()
 			}
-			w.phase = welcomePhaseNewName
-			w.input.Placeholder = "e.g. my-app"
-			w.input.SetValue("")
-			w.errMsg = ""
-			return w, w.input.Focus()
 		case "ctrl+c", "q":
 			return w, tea.Quit
 		}
@@ -169,13 +216,22 @@ func (w WelcomeModel) View() string {
 
 	switch w.phase {
 	case welcomePhaseMenu:
-		options := []string{"Open Existing Manifest", "New Project"}
+		var options []string
+		if w.recentPath != "" {
+			options = append(options, "Continue: "+shortPath(w.recentPath))
+		}
+		options = append(options, "Open Existing Manifest", "New Project")
 		for i, opt := range options {
 			if i == w.cursor {
 				b.WriteString(StyleNeonViolet.Render("❯ ") + StyleFieldValActive.Render(opt))
 			} else {
 				b.WriteString(StyleHelpDesc.Render("  ") + StyleFieldVal.Render(opt))
 			}
+			b.WriteString("\n")
+		}
+		if w.errMsg != "" {
+			b.WriteString("\n")
+			b.WriteString(StyleMsgErr.Render(w.errMsg))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")

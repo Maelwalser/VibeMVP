@@ -49,6 +49,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Welcome complete: build save func and transition to main editor.
 	if wc, ok := msg.(WelcomeCompleteMsg); ok {
+		manifest.RecordRecentPath(wc.Path)
 		saveFn := func(mf *manifest.Manifest) error {
 			return mf.Save(wc.Path)
 		}
