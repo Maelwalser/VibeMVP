@@ -138,6 +138,12 @@ func (be *BackendEditor) saveMultiSelectCursor() {
 
 // dropdownOptions returns the options of the currently active KindSelect or KindMultiSelect field.
 func (be BackendEditor) dropdownOptions() []string {
+	if be.stackConfigEditor.itemView == beListViewForm {
+		ed := &be.stackConfigEditor
+		if ed.formIdx < len(ed.form) && (ed.form[ed.formIdx].Kind == KindSelect || ed.form[ed.formIdx].Kind == KindMultiSelect) {
+			return ed.form[ed.formIdx].Options
+		}
+	}
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
 		if ed.formIdx < len(ed.form) && (ed.form[ed.formIdx].Kind == KindSelect || ed.form[ed.formIdx].Kind == KindMultiSelect) {
@@ -183,6 +189,20 @@ func (be *BackendEditor) applyDropdown() bool {
 		f.SelIdx = be.dd.OptIdx
 		f.Value = f.Options[be.dd.OptIdx]
 		return f.PrepareCustomEntry()
+	}
+	if be.stackConfigEditor.itemView == beListViewForm {
+		ed := &be.stackConfigEditor
+		if ed.formIdx < len(ed.form) {
+			f := &ed.form[ed.formIdx]
+			custom := applyTo(f)
+			if f.Key == "language" {
+				be.updateStackConfigFrameworkOptions(ed)
+			} else if f.Key == "language_version" || f.Key == "framework" {
+				be.updateStackConfigVersionOptions(ed)
+			}
+			return custom
+		}
+		return false
 	}
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
@@ -259,6 +279,13 @@ func (be BackendEditor) updateInsert(msg tea.Msg) (BackendEditor, tea.Cmd) {
 			return be, nil
 		case "tab":
 			be.saveInput()
+			if be.stackConfigEditor.itemView == beListViewForm {
+				n := len(be.stackConfigEditor.form)
+				if n > 0 {
+					be.stackConfigEditor.formIdx = (be.stackConfigEditor.formIdx + 1) % n
+				}
+				return be.enterStackConfigFormInsert()
+			}
 			if be.authSubView == beAuthViewPermForm {
 				n := len(be.authPermForm)
 				if n > 0 {
@@ -290,6 +317,13 @@ func (be BackendEditor) updateInsert(msg tea.Msg) (BackendEditor, tea.Cmd) {
 			}
 		case "shift+tab":
 			be.saveInput()
+			if be.stackConfigEditor.itemView == beListViewForm {
+				n := len(be.stackConfigEditor.form)
+				if n > 0 {
+					be.stackConfigEditor.formIdx = (be.stackConfigEditor.formIdx - 1 + n) % n
+				}
+				return be.enterStackConfigFormInsert()
+			}
 			if be.authSubView == beAuthViewPermForm {
 				n := len(be.authPermForm)
 				if n > 0 {
@@ -337,6 +371,13 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 
 	// Delegate list editors
 	switch tab {
+	case beTabEnv:
+		if be.currentArch() != "monolith" {
+			if be.stackConfigEditor.itemView == beListViewList {
+				return be.updateStackConfigList(key)
+			}
+			return be.updateStackConfigForm(key)
+		}
 	case beTabServices:
 		if be.serviceEditor.itemView == beListViewList {
 			return be.updateServiceList(key)

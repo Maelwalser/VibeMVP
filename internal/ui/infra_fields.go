@@ -231,6 +231,12 @@ func defaultNetworkingFields() []Field {
 			Value:   "Application-level", SelIdx: 1,
 		},
 		{
+			Key: "cors_strategy", Label: "CORS Strategy ", Kind: KindSelect,
+			Options: []string{"Permissive", "Strict allowlist", "Same-origin"},
+			Value:   "Permissive",
+		},
+		{Key: "cors_origins", Label: "CORS Origins  ", Kind: KindText},
+		{
 			Key: "ssl_cert", Label: "SSL Cert Mgmt ", Kind: KindSelect,
 			Options: infraAllOptions["ssl_cert"],
 			Value:   "Auto-renew (certbot/ACME)",

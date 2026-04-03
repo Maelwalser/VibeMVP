@@ -69,12 +69,23 @@ func (be BackendEditor) HintLine() string {
 			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
 		}
 		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "a/Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "h/l", "sub-tab")
+	case beTabEnv:
+		if be.currentArch() != "monolith" {
+			ed := be.stackConfigEditor
+			if ed.itemView == beListViewList {
+				return hintBar("j/k", "navigate", "a", "add config", "d", "delete", "Enter", "edit", "h/l", "sub-tab", "b", "change arch")
+			}
+			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "H", "cycle back", "b/Esc", "back", "Tab", "next field")
+		}
+		configEnabled := be.envEnabled
+		if !configEnabled {
+			return hintBar("a", "configure", "h/l", "sub-tab", "b", "change arch")
+		}
+		return hintBar("j/k", "navigate", "gg/G", "top/bottom", "[n]j/k", "jump", "a/i/Enter", "edit", "Space", "cycle", "H", "cycle back", "D", "delete config", "h/l", "sub-tab", "b", "change arch")
 	default:
 		t := be.activeTab()
 		configEnabled := true
 		switch t {
-		case beTabEnv:
-			configEnabled = be.envEnabled
 		case beTabAPIGW:
 			configEnabled = be.apiGWEnabled
 		}
@@ -85,20 +96,10 @@ func (be BackendEditor) HintLine() string {
 	}
 }
 
+// visibleEnvFields returns the env fields appropriate for the current arch.
+// The env tab only appears for monolith, so all fields here are always shown.
 func (be BackendEditor) visibleEnvFields() []Field {
-	arch := be.currentArch()
-	corsStrategy := fieldGet(be.EnvFields, "cors_strategy")
-	var out []Field
-	for _, f := range be.EnvFields {
-		if (f.Key == "monolith_lang" || f.Key == "monolith_lang_ver" || f.Key == "monolith_fw" || f.Key == "monolith_fw_ver" || f.Key == "environment") && arch != "monolith" {
-			continue
-		}
-		if f.Key == "cors_origins" && corsStrategy != "Strict allowlist" {
-			continue
-		}
-		out = append(out, f)
-	}
-	return out
+	return be.EnvFields
 }
 
 // currentEditableFields returns a pointer to the current tab's field slice.
@@ -107,6 +108,9 @@ func (be BackendEditor) visibleEnvFields() []Field {
 func (be *BackendEditor) currentEditableFields() *[]Field {
 	switch be.activeTab() {
 	case beTabEnv:
+		if be.currentArch() != "monolith" && be.stackConfigEditor.itemView == beListViewForm {
+			return &be.stackConfigEditor.form
+		}
 		return &be.EnvFields
 	case beTabMessaging:
 		return &be.MessagingFields
@@ -176,6 +180,14 @@ func (be BackendEditor) tryEnterInsert() (BackendEditor, tea.Cmd) {
 func (be *BackendEditor) saveInput() {
 	val := be.formInput.Value()
 
+	// Check if we're in a stack config form
+	if be.stackConfigEditor.itemView == beListViewForm {
+		ed := &be.stackConfigEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
+		}
+		return
+	}
 	// Check if we're in a service form
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
@@ -309,7 +321,17 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 	tab := be.activeTab()
 	switch tab {
 	case beTabEnv:
-		if be.envEnabled {
+		if be.currentArch() != "monolith" {
+			// Non-monolith: list+form stack config editor.
+			cfgLines := be.viewStackConfigEditor(w)
+			switch be.stackConfigEditor.itemView {
+			case beListViewList:
+				cfgLines = appendViewport(cfgLines, 2, be.stackConfigEditor.itemIdx, h-beOuterH)
+			case beListViewForm:
+				cfgLines = appendViewport(cfgLines, 2, be.stackConfigEditor.formIdx, h-beOuterH)
+			}
+			lines = append(lines, cfgLines...)
+		} else if be.envEnabled {
 			envFields := be.visibleEnvFields()
 			fl := renderFormFields(w, envFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
 			lines = append(lines, appendViewport(fl, 0, be.activeField, h-beOuterH)...)
@@ -390,6 +412,7 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 func (be BackendEditor) viewServiceEditor(w int) []string {
 	ed := be.serviceEditor
 	if ed.itemView == beListViewList {
+		arch := be.currentArch()
 		var lines []string
 		lines = append(lines, StyleSectionDesc.Render("  # Service Units — a: add  d: delete  Enter: edit"), "")
 		if len(ed.items) == 0 {
@@ -400,18 +423,13 @@ func (be BackendEditor) viewServiceEditor(w int) []string {
 				if name == "" {
 					name = fmt.Sprintf("(service #%d)", i+1)
 				}
-				lang := fieldGet(item, "language")
-				langVer := fieldGet(item, "language_version")
-				fw := fieldGet(item, "framework")
-				fwVer := fieldGet(item, "framework_version")
-				extra := lang
-				if langVer != "" {
-					extra += " " + langVer
-				}
-				if fw != "" {
-					extra += " / " + fw
-					if fwVer != "" {
-						extra += " " + fwVer
+				var extra string
+				if arch == "monolith" {
+					// Stack defined globally in CONFIG tab — show nothing per-service.
+				} else {
+					cfg := fieldGet(item, "config_ref")
+					if cfg != "" && cfg != "(no configs defined)" {
+						extra = cfg
 					}
 				}
 				lines = append(lines, renderListItem(w, i == ed.itemIdx, "  ▶ ", name, extra))
@@ -429,20 +447,11 @@ func (be BackendEditor) viewServiceEditor(w int) []string {
 		}
 	}
 
-	arch := be.currentArch()
 	var fields []Field
 	filteredActiveIdx := ed.formIdx
 	skippedBefore := 0
 	for i, f := range ed.form {
-		// For monolith: language, framework, service_discovery and environment are defined at top level (ENV tab)
-		if arch == "monolith" && (f.Key == "language" || f.Key == "framework" || f.Key == "service_discovery" || f.Key == "environment") {
-			if i < ed.formIdx {
-				skippedBefore++
-			}
-			continue
-		}
-		// Hide pattern_tag for non-hybrid arches
-		if arch != "hybrid" && f.Key == "pattern_tag" {
+		if be.isServiceFieldHidden(f.Key) {
 			if i < ed.formIdx {
 				skippedBefore++
 			}
@@ -457,6 +466,20 @@ func (be BackendEditor) viewServiceEditor(w int) []string {
 
 	var lines []string
 	lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(name), "")
+	// For monolith: show which global stack config is in use.
+	if be.currentArch() == "monolith" {
+		if be.envEnabled {
+			lang := fieldGet(be.EnvFields, "monolith_lang")
+			fw := fieldGet(be.EnvFields, "monolith_fw")
+			info := "  stack: " + lang
+			if fw != "" {
+				info += " / " + fw
+			}
+			lines = append(lines, StyleSectionDesc.Render(info), "")
+		} else {
+			lines = append(lines, StyleSectionDesc.Render("  ⚠  Configure the global stack in the CONFIG tab"), "")
+		}
+	}
 	lines = append(lines, renderFormFields(w, fields, filteredActiveIdx, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)...)
 	return lines
 }

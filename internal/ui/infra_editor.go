@@ -158,6 +158,8 @@ func (ie InfraEditor) ToManifestInfraPillar() manifest.InfraPillar {
 			PrimaryDomain:   fieldGet(ie.networkingFields, "primary_domain"),
 			DomainStrategy:  fieldGet(ie.networkingFields, "domain_strategy"),
 			CORSEnforcement: fieldGet(ie.networkingFields, "cors_infra"),
+			CORSStrategy:    fieldGet(ie.networkingFields, "cors_strategy"),
+			CORSOrigins:     fieldGet(ie.networkingFields, "cors_origins"),
 			SSLCertMgmt:     fieldGet(ie.networkingFields, "ssl_cert"),
 		}
 	}
@@ -200,6 +202,8 @@ func (ie InfraEditor) FromInfraPillar(ip manifest.InfraPillar) InfraEditor {
 		ie.networkingFields = setFieldValue(ie.networkingFields, "primary_domain", n.PrimaryDomain)
 		ie.networkingFields = setFieldValue(ie.networkingFields, "domain_strategy", n.DomainStrategy)
 		ie.networkingFields = setFieldValue(ie.networkingFields, "cors_infra", n.CORSEnforcement)
+		ie.networkingFields = setFieldValue(ie.networkingFields, "cors_strategy", n.CORSStrategy)
+		ie.networkingFields = setFieldValue(ie.networkingFields, "cors_origins", n.CORSOrigins)
 		ie.networkingFields = setFieldValue(ie.networkingFields, "ssl_cert", n.SSLCertMgmt)
 	}
 
@@ -556,6 +560,19 @@ func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {
 	return ie, nil
 }
 
+// visibleNetworkingFields hides cors_origins unless cors_strategy is "Strict allowlist".
+func (ie InfraEditor) visibleNetworkingFields() []Field {
+	corsStrategy := fieldGet(ie.networkingFields, "cors_strategy")
+	var out []Field
+	for _, f := range ie.networkingFields {
+		if f.Key == "cors_origins" && corsStrategy != "Strict allowlist" {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 // ── View ──────────────────────────────────────────────────────────────────────
 
 func (ie InfraEditor) View(w, h int) string {
@@ -573,7 +590,7 @@ func (ie InfraEditor) View(w, h int) string {
 	switch ie.activeTab {
 	case infraTabNetworking:
 		if ie.netEnabled {
-			fl := renderFormFields(w, ie.networkingFields, ie.netFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)
+			fl := renderFormFields(w, ie.visibleNetworkingFields(), ie.netFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)
 			lines = append(lines, appendViewport(fl, 0, ie.netFormIdx, h-infraHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))

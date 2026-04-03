@@ -11,6 +11,8 @@ type NetworkingConfig struct {
 	PrimaryDomain   string `json:"primary_domain,omitempty"`
 	DomainStrategy  string `json:"domain_strategy,omitempty"`
 	CORSEnforcement string `json:"cors_enforcement,omitempty"`
+	CORSStrategy    string `json:"cors_strategy,omitempty"`
+	CORSOrigins     string `json:"cors_origins,omitempty"`
 	SSLCertMgmt     string `json:"ssl_cert_mgmt,omitempty"`
 }
 

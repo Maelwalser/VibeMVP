@@ -2,13 +2,23 @@ package manifest
 
 // ── Backend types ─────────────────────────────────────────────────────────────
 
+// StackConfig defines a reusable language/framework combination that services can reference.
+type StackConfig struct {
+	Name             string `json:"name"`
+	Language         string `json:"language"`
+	LanguageVersion  string `json:"language_version,omitempty"`
+	Framework        string `json:"framework"`
+	FrameworkVersion string `json:"framework_version,omitempty"`
+}
+
 // ServiceDef represents one backend module or microservice.
 type ServiceDef struct {
 	Name             string             `json:"name"`
 	Responsibility   string             `json:"responsibility"`
-	Language         string             `json:"language"`
+	ConfigRef        string             `json:"config_ref,omitempty"` // references a StackConfig.Name (non-monolith)
+	Language         string             `json:"language,omitempty"`
 	LanguageVersion  string             `json:"language_version,omitempty"`
-	Framework        string             `json:"framework"`
+	Framework        string             `json:"framework,omitempty"`
 	FrameworkVersion string             `json:"framework_version,omitempty"`
 	PatternTag       PatternTag         `json:"pattern_tag,omitempty"` // hybrid only
 	Technologies     []string           `json:"technologies,omitempty"`
@@ -92,6 +102,7 @@ type AuthConfig struct {
 	ServiceUnit  string       `json:"service_unit,omitempty"` // service responsible for auth (self-managed / Keycloak)
 	AuthzModel   string       `json:"authz_model"`
 	TokenStorage string       `json:"token_storage"`
+	SessionMgmt  string       `json:"session_mgmt,omitempty"`
 	MFA          string       `json:"mfa"`
 	RefreshToken string       `json:"refresh_token,omitempty"`
 	Permissions  []PermissionDef `json:"permissions,omitempty"`
@@ -140,20 +151,17 @@ type EnvConfig struct {
 
 // BackendPillar covers the full backend configuration.
 type BackendPillar struct {
-	ArchPattern   ArchPattern       `json:"arch_pattern"`
-	Env           EnvConfig         `json:"env"`
-	Services      []ServiceDef      `json:"services,omitempty"`
-	CommLinks     []CommLink        `json:"comm_links,omitempty"`
-	Messaging     *MessagingConfig  `json:"messaging,omitempty"`
-	Events        []EventDef        `json:"events,omitempty"`
-	APIGateway    *APIGatewayConfig `json:"api_gateway,omitempty"`
-	Auth          AuthConfig        `json:"auth"`
-	JobQueues     []JobQueueDef     `json:"job_queues,omitempty"`
-	WAF           WAFConfig         `json:"waf,omitempty"`
-	CORSStrategy  string            `json:"cors_strategy,omitempty"`
-	CORSOrigins   string            `json:"cors_origins,omitempty"`
-	SessionMgmt   string            `json:"session_mgmt,omitempty"`
-	BackendLinter string            `json:"backend_linter,omitempty"`
+	ArchPattern  ArchPattern       `json:"arch_pattern"`
+	Env          EnvConfig         `json:"env"`
+	StackConfigs []StackConfig     `json:"stack_configs,omitempty"`
+	Services     []ServiceDef      `json:"services,omitempty"`
+	CommLinks    []CommLink        `json:"comm_links,omitempty"`
+	Messaging    *MessagingConfig  `json:"messaging,omitempty"`
+	Events       []EventDef        `json:"events,omitempty"`
+	APIGateway   *APIGatewayConfig `json:"api_gateway,omitempty"`
+	Auth         AuthConfig        `json:"auth"`
+	JobQueues    []JobQueueDef     `json:"job_queues,omitempty"`
+	WAF          WAFConfig         `json:"waf,omitempty"`
 
 	// Monolith shared environment (selected from InfraPillar.Environments).
 	MonolithEnvironment string `json:"monolith_environment,omitempty"`

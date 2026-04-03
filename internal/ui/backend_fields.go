@@ -67,24 +67,6 @@ func defaultEnvFields() []Field {
 			Options: compatibleFrameworkVersions("Go", langVersions["Go"][0], "Fiber"),
 			Value:   compatibleFrameworkVersions("Go", langVersions["Go"][0], "Fiber")[0],
 		},
-		{
-			Key: "cors_strategy", Label: "CORS Strategy ", Kind: KindSelect,
-			Options: []string{"Permissive", "Strict allowlist", "Same-origin"},
-			Value:   "Permissive",
-		},
-		{Key: "cors_origins", Label: "CORS Origins  ", Kind: KindText},
-		{
-			Key: "session_mgmt", Label: "Session Mgmt  ", Kind: KindSelect,
-			Options: []string{"Stateless (JWT only)", "Server-side sessions (Redis)", "Database sessions", "None"},
-			Value:   "None", SelIdx: 3,
-		},
-		{
-			Key:     "be_linter",
-			Label:   "Linter        ",
-			Kind:    KindSelect,
-			Options: backendLintersByLang["Go"],
-			Value:   "None", SelIdx: len(backendLintersByLang["Go"]) - 1,
-		},
 		// Monolith-only: shared environment for all services.
 		{
 			Key:     "environment",
@@ -96,10 +78,41 @@ func defaultEnvFields() []Field {
 	}
 }
 
+func defaultStackConfigFields() []Field {
+	return []Field{
+		{Key: "name", Label: "name          ", Kind: KindText},
+		{
+			Key: "language", Label: "language      ", Kind: KindSelect,
+			Options: backendLanguages, Value: "Go",
+		},
+		{
+			Key: "language_version", Label: "lang version  ", Kind: KindSelect,
+			Options: langVersions["Go"], Value: langVersions["Go"][0],
+		},
+		{
+			Key: "framework", Label: "framework     ", Kind: KindSelect,
+			Options: backendFrameworksByLang["Go"], Value: "Fiber",
+		},
+		{
+			Key: "framework_version", Label: "fw version    ", Kind: KindSelect,
+			Options: compatibleFrameworkVersions("Go", langVersions["Go"][0], "Fiber"),
+			Value:   compatibleFrameworkVersions("Go", langVersions["Go"][0], "Fiber")[0],
+		},
+	}
+}
+
 func defaultServiceFields() []Field {
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "responsibility", Label: "responsibility", Kind: KindText},
+		// config_ref: picks a StackConfig from the CONFIG tab (non-monolith arches only).
+		{
+			Key:     "config_ref",
+			Label:   "stack config  ",
+			Kind:    KindSelect,
+			Options: []string{"(no configs defined)"},
+			Value:   "(no configs defined)",
+		},
 		{
 			Key: "language", Label: "language      ", Kind: KindSelect,
 			Options: backendLanguages,
@@ -156,6 +169,9 @@ func serviceFieldsFromDef(s manifest.ServiceDef) []Field {
 	f := defaultServiceFields()
 	f = setFieldValue(f, "name", s.Name)
 	f = setFieldValue(f, "responsibility", s.Responsibility)
+	if s.ConfigRef != "" {
+		f = setFieldValue(f, "config_ref", s.ConfigRef)
+	}
 	if s.Language != "" {
 		f = setFieldValue(f, "language", s.Language)
 		// Update language_version options for this language.
@@ -234,9 +250,14 @@ func serviceDefFromFields(fields []Field) manifest.ServiceDef {
 	if env == "(no environments configured)" {
 		env = ""
 	}
+	cfgRef := fieldGet(fields, "config_ref")
+	if cfgRef == "(no configs defined)" {
+		cfgRef = ""
+	}
 	return manifest.ServiceDef{
 		Name:             fieldGet(fields, "name"),
 		Responsibility:   fieldGet(fields, "responsibility"),
+		ConfigRef:        cfgRef,
 		Language:         fieldGet(fields, "language"),
 		LanguageVersion:  fieldGet(fields, "language_version"),
 		Framework:        fieldGet(fields, "framework"),
@@ -510,6 +531,11 @@ func defaultAuthFields() []Field {
 				"HttpOnly cookie", "Authorization header (Bearer)",
 				"WebSocket protocol header", "Other",
 			},
+		},
+		{
+			Key: "session_mgmt", Label: "Session Mgmt  ", Kind: KindSelect,
+			Options: []string{"Stateless (JWT only)", "Server-side sessions (Redis)", "Database sessions", "None"},
+			Value:   "None", SelIdx: 3,
 		},
 		{
 			Key: "refresh_token", Label: "refresh_token ", Kind: KindSelect,

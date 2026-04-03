@@ -64,7 +64,7 @@ func subTabsForArch(arch string) []backendSubTab {
 func subTabLabel(t backendSubTab) string {
 	switch t {
 	case beTabEnv:
-		return "ENV"
+		return "CONFIG"
 	case beTabServices:
 		return "SERVICES"
 	case beTabComm:
@@ -170,9 +170,13 @@ type BackendEditor struct {
 	authRoleFormIdx int
 
 	// List editors
-	serviceEditor beListEditor
-	commEditor    beListEditor
-	eventEditor   beListEditor // event catalog within messaging
+	serviceEditor     beListEditor
+	commEditor        beListEditor
+	eventEditor       beListEditor // event catalog within messaging
+	stackConfigEditor beListEditor // CONFIG tab stack configs (non-monolith)
+
+	// Stack configs for non-monolith arches (serialized to manifest).
+	StackConfigs []manifest.StackConfig
 
 	// Internal mode
 	internalMode Mode
@@ -202,16 +206,17 @@ type BackendEditor struct {
 
 func newBackendEditor() BackendEditor {
 	return BackendEditor{
-		EnvFields:       defaultEnvFields(),
-		MessagingFields: defaultMessagingFields(),
-		APIGWFields:     defaultAPIGWFields(),
-		AuthFields:      defaultAuthFields(),
-		securityFields:  defaultSecurityFields(),
-		serviceEditor:   newBeListEditor(),
-		commEditor:      newBeListEditor(),
-		eventEditor:     newBeListEditor(),
-		formInput:       newFormInput(),
-		dropdownOpen:    true,
+		EnvFields:         defaultEnvFields(),
+		MessagingFields:   defaultMessagingFields(),
+		APIGWFields:       defaultAPIGWFields(),
+		AuthFields:        defaultAuthFields(),
+		securityFields:    defaultSecurityFields(),
+		serviceEditor:     newBeListEditor(),
+		commEditor:        newBeListEditor(),
+		eventEditor:       newBeListEditor(),
+		stackConfigEditor: newBeListEditor(),
+		formInput:         newFormInput(),
+		dropdownOpen:      true,
 	}
 }
 
@@ -263,6 +268,44 @@ func (be *BackendEditor) SetEndpointNames(names []string) {
 			}
 		}
 		break
+	}
+}
+
+// applyStackConfigNamesToServices updates the config_ref dropdown in all service
+// forms to reflect the current set of stack config names. Called whenever stack
+// configs are added, renamed, or deleted.
+func (be *BackendEditor) applyStackConfigNamesToServices() {
+	var names []string
+	for _, item := range be.stackConfigEditor.items {
+		if n := fieldGet(item, "name"); n != "" {
+			names = append(names, n)
+		}
+	}
+	opts, placeholder := noneOrPlaceholder(names, "(no configs defined)")
+	applyOpts := func(fields []Field) {
+		for i := range fields {
+			if fields[i].Key != "config_ref" {
+				continue
+			}
+			fields[i].Options = opts
+			found := false
+			for j, o := range opts {
+				if o == fields[i].Value {
+					fields[i].SelIdx = j
+					found = true
+					break
+				}
+			}
+			if !found {
+				fields[i].Value = placeholder
+				fields[i].SelIdx = 0
+			}
+			break
+		}
+	}
+	applyOpts(be.serviceEditor.form)
+	for _, item := range be.serviceEditor.items {
+		applyOpts(item)
 	}
 }
 
@@ -364,6 +407,7 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 			Provider:     fieldGet(be.AuthFields, "provider"),
 			ServiceUnit:  svcUnit,
 			AuthzModel:   fieldGet(be.AuthFields, "authz_model"),
+			SessionMgmt:  fieldGet(be.AuthFields, "session_mgmt"),
 			Permissions:  be.authPerms,
 			Roles:        be.authRoles,
 			TokenStorage: fieldGetMulti(be.AuthFields, "token_storage"),
@@ -372,13 +416,29 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		}
 	}
 
+	// Derive stack configs from the list editor items.
+	var stackConfigs []manifest.StackConfig
+	for _, item := range be.stackConfigEditor.items {
+		sc := manifest.StackConfig{
+			Name:             fieldGet(item, "name"),
+			Language:         fieldGet(item, "language"),
+			LanguageVersion:  fieldGet(item, "language_version"),
+			Framework:        fieldGet(item, "framework"),
+			FrameworkVersion: fieldGet(item, "framework_version"),
+		}
+		if sc.Name != "" {
+			stackConfigs = append(stackConfigs, sc)
+		}
+	}
+
 	bp := manifest.BackendPillar{
-		ArchPattern: manifest.ArchPattern(arch),
-		Env:         env,
-		Services:    be.Services,
-		CommLinks:   be.CommLinks,
-		Auth:        auth,
-		JobQueues:   be.jobQueues,
+		ArchPattern:  manifest.ArchPattern(arch),
+		Env:          env,
+		StackConfigs: stackConfigs,
+		Services:     be.Services,
+		CommLinks:    be.CommLinks,
+		Auth:         auth,
+		JobQueues:    be.jobQueues,
 	}
 	if be.secEnabled {
 		bp.WAF = manifest.WAFConfig{
@@ -390,12 +450,6 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 			RateLimitBackend:  fieldGet(be.securityFields, "rate_limit_backend"),
 			DDoSProtection:    fieldGet(be.securityFields, "ddos_protection"),
 		}
-	}
-	if be.envEnabled {
-		bp.CORSStrategy = fieldGet(be.EnvFields, "cors_strategy")
-		bp.CORSOrigins = fieldGet(be.EnvFields, "cors_origins")
-		bp.SessionMgmt = fieldGet(be.EnvFields, "session_mgmt")
-		bp.BackendLinter = fieldGet(be.EnvFields, "be_linter")
 	}
 
 	tabs := subTabsForArch(arch)
@@ -457,15 +511,9 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.dropdownOpen = false
 	}
 
-	// Env fields.
-	// Env fields (server configs now in InfraPillar.Environments).
-	if bp.CORSStrategy != "" || bp.BackendLinter != "" || bp.SessionMgmt != "" ||
-		bp.Language != "" {
+	// Env fields (monolith language/framework/environment only).
+	if bp.Language != "" {
 		be.envEnabled = true
-		be.EnvFields = setFieldValue(be.EnvFields, "cors_strategy", bp.CORSStrategy)
-		be.EnvFields = setFieldValue(be.EnvFields, "cors_origins", bp.CORSOrigins)
-		be.EnvFields = setFieldValue(be.EnvFields, "session_mgmt", bp.SessionMgmt)
-		be.EnvFields = setFieldValue(be.EnvFields, "be_linter", bp.BackendLinter)
 		if arch == "monolith" {
 			be.EnvFields = setFieldValue(be.EnvFields, "monolith_lang", bp.Language)
 			be.updateEnvMonolithOptions()
@@ -477,6 +525,66 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 				be.EnvFields = setFieldValue(be.EnvFields, "environment", bp.MonolithEnvironment)
 			}
 		}
+	}
+
+	// Stack configs for non-monolith arches.
+	if len(bp.StackConfigs) > 0 {
+		be.envEnabled = true
+		be.stackConfigEditor.items = make([][]Field, len(bp.StackConfigs))
+		for i, sc := range bp.StackConfigs {
+			f := defaultStackConfigFields()
+			f = setFieldValue(f, "name", sc.Name)
+			if sc.Language != "" {
+				f = setFieldValue(f, "language", sc.Language)
+				if vers, ok := langVersions[sc.Language]; ok {
+					for j := range f {
+						if f[j].Key == "language_version" {
+							f[j].Options = vers
+							f[j].SelIdx = 0
+							f[j].Value = vers[0]
+							break
+						}
+					}
+					if sc.LanguageVersion != "" {
+						f = setFieldValue(f, "language_version", sc.LanguageVersion)
+					}
+				}
+				if opts, ok := backendFrameworksByLang[sc.Language]; ok {
+					for j := range f {
+						if f[j].Key == "framework" {
+							f[j].Options = opts
+							f[j].SelIdx = 0
+							f[j].Value = opts[0]
+							break
+						}
+					}
+					if sc.Framework != "" {
+						f = setFieldValue(f, "framework", sc.Framework)
+					}
+				}
+				fw := sc.Framework
+				if fw == "" {
+					if opts, ok := backendFrameworksByLang[sc.Language]; ok && len(opts) > 0 {
+						fw = opts[0]
+					}
+				}
+				fwVers := compatibleFrameworkVersions(sc.Language, sc.LanguageVersion, fw)
+				for j := range f {
+					if f[j].Key == "framework_version" {
+						f[j].Options = fwVers
+						f[j].SelIdx = 0
+						f[j].Value = fwVers[0]
+						if sc.FrameworkVersion != "" {
+							f = setFieldValue(f, "framework_version", sc.FrameworkVersion)
+						}
+						break
+					}
+				}
+			}
+			be.stackConfigEditor.items[i] = f
+		}
+		be.StackConfigs = bp.StackConfigs
+		be.applyStackConfigNamesToServices()
 	}
 
 	// Auth fields.
@@ -499,6 +607,7 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.authPerms = bp.Auth.Permissions
 		be.authRoles = bp.Auth.Roles
 		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "token_storage", bp.Auth.TokenStorage)
+		be.AuthFields = setFieldValue(be.AuthFields, "session_mgmt", bp.Auth.SessionMgmt)
 		be.AuthFields = setFieldValue(be.AuthFields, "refresh_token", bp.Auth.RefreshToken)
 		be.AuthFields = setFieldValue(be.AuthFields, "mfa", bp.Auth.MFA)
 	}
@@ -682,7 +791,7 @@ func (be BackendEditor) ServiceDefs() []manifest.ServiceDef {
 }
 
 // Languages returns the unique set of programming languages configured across
-// all backend services (and the monolith language when applicable).
+// all stack configs (non-monolith) or the monolith language.
 func (be BackendEditor) Languages() []string {
 	seen := make(map[string]bool)
 	var langs []string
@@ -694,9 +803,10 @@ func (be BackendEditor) Languages() []string {
 	}
 	if be.currentArch() == "monolith" {
 		add(fieldGet(be.EnvFields, "monolith_lang"))
-	}
-	for _, item := range be.serviceEditor.items {
-		add(fieldGet(item, "language"))
+	} else {
+		for _, item := range be.stackConfigEditor.items {
+			add(fieldGet(item, "language"))
+		}
 	}
 	return langs
 }
@@ -707,8 +817,7 @@ func (be BackendEditor) ArchPattern() string {
 }
 
 // ServiceFrameworks returns the unique set of frameworks used across all configured
-// backend services (e.g. "tRPC", "NestJS"). For monolith arch the monolith framework
-// is included instead of the service list.
+// stack configs (non-monolith) or the monolith framework.
 func (be BackendEditor) ServiceFrameworks() []string {
 	seen := make(map[string]bool)
 	var fws []string
@@ -720,9 +829,10 @@ func (be BackendEditor) ServiceFrameworks() []string {
 	}
 	if be.currentArch() == "monolith" {
 		add(fieldGet(be.EnvFields, "monolith_fw"))
-	}
-	for _, item := range be.serviceEditor.items {
-		add(fieldGet(item, "framework"))
+	} else {
+		for _, item := range be.stackConfigEditor.items {
+			add(fieldGet(item, "framework"))
+		}
 	}
 	return fws
 }

@@ -223,7 +223,34 @@ func defaultTestingFields() []Field {
 	return computeTestingFields(nil, nil, "", "", "", nil)
 }
 
+// linterOptionsForLanguages returns the deduplicated set of linter options for
+// the given backend languages. Falls back to a comprehensive union when empty.
+func linterOptionsForLanguages(langs []string) []string {
+	if len(langs) == 0 {
+		// Return a representative union as default.
+		return []string{"golangci-lint", "ESLint", "Ruff", "Checkstyle", "Clippy", "None"}
+	}
+	seen := make(map[string]bool)
+	var out []string
+	add := func(o string) {
+		if !seen[o] {
+			seen[o] = true
+			out = append(out, o)
+		}
+	}
+	for _, lang := range langs {
+		for _, opt := range backendLintersByLang[lang] {
+			add(opt)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"None"}
+	}
+	return out
+}
+
 func defaultStandardsFields() []Field {
+	linterOpts := linterOptionsForLanguages(nil)
 	return []Field{
 		{
 			Key: "dep_updates", Label: "Dep. Updates  ", Kind: KindSelect,
@@ -234,6 +261,13 @@ func defaultStandardsFields() []Field {
 			Key: "feature_flags", Label: "Feature Flags ", Kind: KindSelect,
 			Options: []string{"LaunchDarkly", "Unleash", "Flagsmith", "Custom (env vars)", "None"},
 			Value:   "None", SelIdx: 4,
+		},
+		{
+			Key:     "be_linter",
+			Label:   "Backend Linter",
+			Kind:    KindSelect,
+			Options: linterOpts,
+			Value:   "None", SelIdx: len(linterOpts) - 1,
 		},
 	}
 }
@@ -273,5 +307,32 @@ func (cc *CrossCutEditor) SetTestingContext(backendLangs, backendProtocols []str
 	cc.frontendLang = frontendLang
 	cc.frontendFramework = frontendFramework
 	cc.testingFields = computeTestingFields(backendLangs, backendProtocols, backendArchPattern, frontendLang, frontendFramework, cc.testingFields)
+	cc.updateLinterOptions(backendLangs)
+}
+
+// updateLinterOptions narrows the be_linter select options in standardsFields
+// to match the configured backend languages.
+func (cc *CrossCutEditor) updateLinterOptions(langs []string) {
+	opts := linterOptionsForLanguages(langs)
+	for i := range cc.standardsFields {
+		if cc.standardsFields[i].Key != "be_linter" {
+			continue
+		}
+		cc.standardsFields[i].Options = opts
+		// Keep current value when still valid; otherwise reset to None.
+		found := false
+		for j, o := range opts {
+			if o == cc.standardsFields[i].Value {
+				cc.standardsFields[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found && len(opts) > 0 {
+			cc.standardsFields[i].Value = opts[len(opts)-1] // last option is always "None"
+			cc.standardsFields[i].SelIdx = len(opts) - 1
+		}
+		break
+	}
 }
 

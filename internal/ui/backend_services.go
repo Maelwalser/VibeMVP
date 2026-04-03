@@ -72,7 +72,12 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 // isServiceFieldHidden returns true when a service form field should be hidden for the current arch.
 func (be BackendEditor) isServiceFieldHidden(key string) bool {
 	arch := be.currentArch()
-	if arch == "monolith" && (key == "language" || key == "language_version" || key == "framework" || key == "framework_version" || key == "service_discovery" || key == "environment") {
+	// Language/framework/version are always defined via the CONFIG tab — never edited per-service.
+	if key == "language" || key == "language_version" || key == "framework" || key == "framework_version" {
+		return true
+	}
+	// Monolith uses a single global config; no per-service config reference or discovery.
+	if arch == "monolith" && (key == "config_ref" || key == "service_discovery" || key == "environment") {
 		return true
 	}
 	if arch != "hybrid" && key == "pattern_tag" {
@@ -278,10 +283,6 @@ func (be *BackendEditor) updateEnvMonolithOptions() {
 		fwOpts = []string{"Other"}
 	}
 	langVers, hasVers := langVersions[lang]
-	lintOpts, ok := backendLintersByLang[lang]
-	if !ok {
-		lintOpts = []string{"Custom", "None"}
-	}
 	for i := range be.EnvFields {
 		switch be.EnvFields[i].Key {
 		case "monolith_lang_ver":
@@ -294,10 +295,6 @@ func (be *BackendEditor) updateEnvMonolithOptions() {
 			be.EnvFields[i].Options = fwOpts
 			be.EnvFields[i].SelIdx = 0
 			be.EnvFields[i].Value = fwOpts[0]
-		case "be_linter":
-			be.EnvFields[i].Options = lintOpts
-			be.EnvFields[i].SelIdx = len(lintOpts) - 1
-			be.EnvFields[i].Value = lintOpts[len(lintOpts)-1]
 		}
 	}
 	be.updateEnvMonolithVersionOptions()
