@@ -376,6 +376,7 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.crossCutEditor.SetTestingContext(
 			m.backendEditor.Languages(),
 			m.backendEditor.CommProtocols(),
+			m.backendEditor.ArchPattern(),
 			m.frontendEditor.Language(),
 			m.frontendEditor.Framework(),
 		)

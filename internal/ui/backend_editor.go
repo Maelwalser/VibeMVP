@@ -3460,6 +3460,11 @@ func (be BackendEditor) Languages() []string {
 	return langs
 }
 
+// ArchPattern returns the currently selected architecture pattern value (e.g. "monolith", "microservices").
+func (be BackendEditor) ArchPattern() string {
+	return be.currentArch()
+}
+
 // CommProtocols returns the unique set of protocols used across all communication links.
 func (be BackendEditor) CommProtocols() []string {
 	seen := make(map[string]bool)
