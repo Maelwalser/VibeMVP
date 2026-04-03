@@ -41,11 +41,30 @@ type FrontendTheme struct {
 
 // ComponentActionDef describes a user interaction action wired to a component.
 type ComponentActionDef struct {
-	Trigger     string `json:"trigger"`
-	ActionType  string `json:"action_type"`
-	Endpoint    string `json:"endpoint,omitempty"`
-	TargetPage  string `json:"target_page,omitempty"`
-	Description string `json:"description,omitempty"`
+	Trigger    string `json:"trigger"`
+	ActionType string `json:"action_type"`
+	// API request fields (Fetch Data, Submit Form, Download, Upload, Delete, Refresh, Export)
+	Endpoint      string `json:"endpoint,omitempty"`
+	HttpMethod    string `json:"http_method,omitempty"`
+	RequestBody   string `json:"request_body,omitempty"`
+	SuccessAction string `json:"success_action,omitempty"`
+	ErrorAction   string `json:"error_action,omitempty"`
+	// Component targets
+	FormTarget  string `json:"form_target,omitempty"`  // Submit Form, Reset Form
+	ModalTarget string `json:"modal_target,omitempty"` // Open Modal, Close Modal
+	// Navigation
+	TargetPage string `json:"target_page,omitempty"`
+	// Toast
+	ToastMessage string `json:"toast_message,omitempty"`
+	ToastType    string `json:"toast_type,omitempty"`
+	// Delete confirmation
+	ConfirmDialog string `json:"confirm_dialog,omitempty"`
+	// State management
+	StateKey   string `json:"state_key,omitempty"`
+	StateValue string `json:"state_value,omitempty"`
+	// Custom
+	CustomHandler string `json:"custom_handler,omitempty"`
+	Description   string `json:"description,omitempty"`
 }
 
 // PageComponentDef describes a UI component within a page.
