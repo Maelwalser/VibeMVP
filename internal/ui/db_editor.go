@@ -36,7 +36,15 @@ type DBEditor struct {
 
 	dd DropdownState
 
-	width int
+	width        int
+	envNames     []string // injected from InfraPillar.Environments
+}
+
+// SetEnvironmentNames injects environment names for the environment selector field
+// in the database form. A no-op when unchanged.
+func (db *DBEditor) SetEnvironmentNames(names []string) {
+	db.envNames = names
+	applyEnvNamesToDBForm(db.dbForm, names)
 }
 
 func newDBEditor() DBEditor {
@@ -206,7 +214,7 @@ func (db DBEditor) updateNormalList(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 			Type: manifest.DBPostgres,
 		})
 		db.srcIdx = len(db.Sources) - 1
-		db.dbForm = dbFormFromSource(db.Sources[db.srcIdx])
+		db.dbForm = dbFormFromSourceWithEnvs(db.Sources[db.srcIdx], db.envNames)
 		existing := make([]string, 0, len(db.Sources)-1)
 		for i, s := range db.Sources {
 			if i != db.srcIdx {
@@ -221,7 +229,7 @@ func (db DBEditor) updateNormalList(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 
 	case "enter", "l", "right":
 		if n > 0 {
-			db.dbForm = dbFormFromSource(db.Sources[db.srcIdx])
+			db.dbForm = dbFormFromSourceWithEnvs(db.Sources[db.srcIdx], db.envNames)
 			db.formIdx = 0
 			db.view = dbeViewForm
 		}

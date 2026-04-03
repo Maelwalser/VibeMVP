@@ -225,6 +225,12 @@ func (dt *DataTabEditor) SetMigrationContext(langs []string) {
 	}
 }
 
+// SetEnvironmentNames injects environment names from the infra tab so that
+// database forms show an environment selector dropdown.
+func (dt *DataTabEditor) SetEnvironmentNames(names []string) {
+	dt.dbEditor.SetEnvironmentNames(names)
+}
+
 func defaultGovernanceFields() []Field {
 	return []Field{
 		{

@@ -15,6 +15,7 @@ type ServiceDef struct {
 	HealthcheckPath  string             `json:"healthcheck_path,omitempty"`
 	ErrorFormat      string             `json:"error_format,omitempty"`
 	ServiceDiscovery string             `json:"service_discovery,omitempty"`
+	Environment      string             `json:"environment,omitempty"`
 	Interfaces       []ExposedInterface `json:"interfaces,omitempty"`
 }
 
@@ -128,13 +129,10 @@ type JobQueueDef struct {
 	CronJobs      []CronJobDef `json:"cron_jobs,omitempty"`
 }
 
-// EnvConfig describes the deployment environment configuration.
+// EnvConfig describes backend-level configuration (CORS, sessions, linter).
+// Server deployment settings (compute, cloud, orchestrator) live in InfraPillar.Environments.
 type EnvConfig struct {
-	ComputeEnv    string `json:"compute_env"`
-	CloudProvider string `json:"cloud_provider"`
-	Orchestrator  string `json:"orchestrator"`
-	Regions       string `json:"regions,omitempty"`
-	Stages        string `json:"stages,omitempty"`
+	Stages string `json:"stages,omitempty"`
 }
 
 // BackendPillar covers the full backend configuration.

@@ -36,20 +36,19 @@ type ObservabilityConfig struct {
 	LogRetention  string `json:"log_retention,omitempty"`
 }
 
-// EnvTopologyConfig describes environment staging, promotion, and secret topology.
-type EnvTopologyConfig struct {
-	Stages            string `json:"stages,omitempty"`
-	PromotionPipeline string `json:"promotion_pipeline,omitempty"`
-	SecretKeyStrategy string `json:"secret_key_strategy,omitempty"`
-	MigrationStrategy string `json:"migration_strategy,omitempty"`
-	DBSeeding         string `json:"db_seeding,omitempty"`
-	PreviewEnvs       string `json:"preview_envs,omitempty"`
+// ServerEnvironmentDef describes one named deployment environment (e.g. dev, staging, prod).
+type ServerEnvironmentDef struct {
+	Name          string `json:"name"`
+	ComputeEnv    string `json:"compute_env"`
+	CloudProvider string `json:"cloud_provider"`
+	Orchestrator  string `json:"orchestrator"`
+	Regions       string `json:"regions,omitempty"`
 }
 
 // InfraPillar groups infrastructure configuration.
 type InfraPillar struct {
-	Networking    NetworkingConfig    `json:"networking"`
-	CICD          CICDConfig          `json:"cicd"`
-	Observability ObservabilityConfig `json:"observability"`
-	EnvTopology   EnvTopologyConfig   `json:"env_topology,omitempty"`
+	Networking    NetworkingConfig       `json:"networking"`
+	CICD          CICDConfig             `json:"cicd"`
+	Observability ObservabilityConfig    `json:"observability"`
+	Environments  []ServerEnvironmentDef `json:"environments,omitempty"`
 }

@@ -1,6 +1,10 @@
 package ui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/vibe-menu/internal/manifest"
+)
 
 // containerRuntimeByLang maps backend language → preferred container base images.
 var containerRuntimeByLang = map[string][]string{
@@ -279,47 +283,94 @@ func defaultInfraCICDFields() []Field {
 	}
 }
 
-func defaultEnvTopologyFields() []Field {
+// orchestratorByComputeEnv maps compute_env values to valid orchestrator options.
+var orchestratorByComputeEnv = map[string][]string{
+	"Bare Metal":          {"Docker Compose", "K3s", "Nomad", "None"},
+	"VM":                  {"Docker Compose", "K3s", "Nomad", "None"},
+	"Containers (Docker)": {"Docker Compose", "K3s", "K8s (managed)", "Nomad", "ECS", "None"},
+	"Kubernetes":          {"K3s", "K8s (managed)"},
+	"Serverless (FaaS)":   {"Cloud Run", "None"},
+}
+
+// allOrchestratorOptions is the full set shown when compute_env is unknown or PaaS.
+var allOrchestratorOptions = []string{
+	"Docker Compose", "K3s", "K8s (managed)", "Nomad", "ECS", "Cloud Run", "None",
+}
+
+// defaultServerEnvFormFields returns the fields for one server environment definition.
+func defaultServerEnvFormFields() []Field {
 	return []Field{
+		{Key: "name", Label: "name          ", Kind: KindText},
 		{
-			Key: "stages", Label: "stages        ", Kind: KindSelect,
+			Key: "compute_env", Label: "compute_env   ", Kind: KindSelect,
 			Options: []string{
-				"dev + prod", "dev + staging + prod",
-				"dev + qa + staging + prod", "dev + staging + qa + preview + prod", "Custom",
+				"Bare Metal", "VM", "Containers (Docker)", "Kubernetes",
+				"Serverless (FaaS)", "PaaS",
 			},
-			Value: "dev + staging + prod", SelIdx: 1,
+			Value: "Containers (Docker)", SelIdx: 2,
 		},
 		{
-			Key: "promotion_pipeline", Label: "promotion     ", Kind: KindSelect,
+			Key: "cloud_provider", Label: "cloud_provider", Kind: KindSelect,
 			Options: []string{
-				"Dev → Staging → Prod", "Dev → QA → Staging → Prod",
-				"Dev → Prod (direct)", "Manual", "None",
+				"AWS", "GCP", "Azure", "Cloudflare", "Hetzner",
+				"Self-hosted", "Other (specify)",
 			},
-			Value: "Dev → Staging → Prod",
+			Value: "AWS",
 		},
 		{
-			Key: "secret_key_strategy", Label: "secret_keys   ", Kind: KindSelect,
-			Options: []string{"Per-environment", "Shared base + overrides", "Fully shared", "None"},
-			Value:   "Per-environment",
+			Key: "orchestrator", Label: "orchestrator  ", Kind: KindSelect,
+			Options: allOrchestratorOptions,
+			Value:   "Docker Compose",
 		},
 		{
-			Key: "migration_strategy", Label: "db_migrations ", Kind: KindSelect,
+			Key: "regions", Label: "regions       ", Kind: KindMultiSelect,
 			Options: []string{
-				"Auto on deploy", "Manual CI step", "Flyway", "Liquibase",
-				"Atlas", "golang-migrate", "None",
+				"us-east-1", "us-east-2", "us-west-1", "us-west-2",
+				"eu-west-1", "eu-west-2", "eu-central-1",
+				"ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
+				"sa-east-1", "ca-central-1", "af-south-1",
 			},
-			Value: "Manual CI step", SelIdx: 1,
-		},
-		{
-			Key: "db_seeding", Label: "db_seeding    ", Kind: KindSelect,
-			Options: []string{"Automatic (fixtures)", "Manual", "None"},
-			Value:   "None", SelIdx: 2,
-		},
-		{
-			Key: "preview_envs", Label: "preview_envs  ", Kind: KindSelect,
-			Options: OptionsOffOn, Value: "false",
 		},
 	}
+}
+
+// serverEnvFormFromDef populates a form from a saved ServerEnvironmentDef.
+func serverEnvFormFromDef(def manifest.ServerEnvironmentDef) []Field {
+	f := defaultServerEnvFormFields()
+	f = setFieldValue(f, "name", def.Name)
+	if def.ComputeEnv != "" {
+		f = setFieldValue(f, "compute_env", def.ComputeEnv)
+	}
+	if def.CloudProvider != "" {
+		f = setFieldValue(f, "cloud_provider", def.CloudProvider)
+	}
+	if def.Orchestrator != "" {
+		f = setFieldValue(f, "orchestrator", def.Orchestrator)
+	}
+	if def.Regions != "" {
+		f = restoreMultiSelectValue(f, "regions", def.Regions)
+	}
+	return f
+}
+
+// serverEnvDefFromForm reads a ServerEnvironmentDef back from form fields.
+func serverEnvDefFromForm(fields []Field) manifest.ServerEnvironmentDef {
+	return manifest.ServerEnvironmentDef{
+		Name:          fieldGet(fields, "name"),
+		ComputeEnv:    fieldGet(fields, "compute_env"),
+		CloudProvider: fieldGet(fields, "cloud_provider"),
+		Orchestrator:  fieldGet(fields, "orchestrator"),
+		Regions:       fieldGetMulti(fields, "regions"),
+	}
+}
+
+// narrowOrchestratorOptions returns the orchestrator options appropriate for the
+// given compute_env value.
+func narrowOrchestratorOptions(computeEnv string) []string {
+	if opts, ok := orchestratorByComputeEnv[computeEnv]; ok {
+		return opts
+	}
+	return allOrchestratorOptions
 }
 
 func defaultObservabilityFields() []Field {
@@ -372,13 +423,23 @@ func defaultObservabilityFields() []Field {
 
 // ── Runtime field population ──────────────────────────────────────────────────
 
-// SetOrchestrator narrows the deploy_strategy options to those supported by
-// the given orchestrator. A no-op when the orchestrator has not changed.
-func (ie *InfraEditor) SetOrchestrator(orch string) {
-	if ie.orchestrator == orch {
+// SetCloudProvider narrows cloud-aware option lists (networking, CI/CD, observability)
+// to the given cloud provider. It is called internally whenever the primary
+// environment's cloud_provider changes. A no-op when the provider is unchanged.
+func (ie *InfraEditor) SetCloudProvider(cp string) {
+	if ie.cloudProvider == cp {
 		return
 	}
-	ie.orchestrator = orch
+	ie.cloudProvider = cp
+	ie.networkingFields = applyCloudProviderToFields(ie.networkingFields, cp)
+	ie.cicdFields = applyCloudProviderToFields(ie.cicdFields, cp)
+	ie.obsFields = applyCloudProviderToFields(ie.obsFields, cp)
+}
+
+// applyOrchestratorToCICD narrows the deploy_strategy options in the CI/CD tab
+// to those supported by the given orchestrator. Called internally when a
+// saved environment's orchestrator is applied.
+func (ie *InfraEditor) applyOrchestratorToCICD(orch string) {
 	opts, ok := deployStrategiesByOrchestrator[orch]
 	if !ok {
 		opts = deployStrategyAllOptions
@@ -402,18 +463,6 @@ func (ie *InfraEditor) SetOrchestrator(orch string) {
 		}
 		break
 	}
-}
-
-// SetCloudProvider narrows cloud-aware field options to those appropriate for
-// the given provider. A no-op when the provider has not changed.
-func (ie *InfraEditor) SetCloudProvider(cp string) {
-	if ie.cloudProvider == cp {
-		return
-	}
-	ie.cloudProvider = cp
-	ie.networkingFields = applyCloudProviderToFields(ie.networkingFields, cp)
-	ie.cicdFields = applyCloudProviderToFields(ie.cicdFields, cp)
-	ie.obsFields = applyCloudProviderToFields(ie.obsFields, cp)
 }
 
 // SetBackendLanguages narrows the container_runtime options to images that are

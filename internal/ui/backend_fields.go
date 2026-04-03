@@ -46,47 +46,6 @@ var backendLintersByLang = map[string][]string{
 
 func defaultEnvFields() []Field {
 	return []Field{
-		{
-			Key: "compute_env", Label: "compute_env   ", Kind: KindSelect,
-			Options: []string{
-				"Bare Metal", "VM", "Containers (Docker)", "Kubernetes",
-				"Serverless (FaaS)", "PaaS",
-			},
-			Value: "Containers (Docker)", SelIdx: 2,
-		},
-		{
-			Key: "cloud_provider", Label: "cloud_provider", Kind: KindSelect,
-			Options: []string{
-				"AWS", "GCP", "Azure", "Cloudflare", "Hetzner",
-				"Self-hosted", "Other (specify)",
-			},
-			Value: "AWS",
-		},
-		{
-			Key: "orchestrator", Label: "orchestrator  ", Kind: KindSelect,
-			Options: []string{
-				"Docker Compose", "K3s", "K8s (managed)", "Nomad",
-				"ECS", "Cloud Run", "None",
-			},
-			Value: "Docker Compose",
-		},
-		{
-			Key: "regions", Label: "regions       ", Kind: KindMultiSelect,
-			Options: []string{
-				"us-east-1", "us-east-2", "us-west-1", "us-west-2",
-				"eu-west-1", "eu-west-2", "eu-central-1",
-				"ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
-				"sa-east-1", "ca-central-1", "af-south-1",
-			},
-		},
-		{
-			Key: "stages", Label: "stages        ", Kind: KindSelect,
-			Options: []string{
-				"Development", "Development + Staging", "Development + Staging + Production",
-				"Staging + Production", "Production only",
-			},
-			Value: "Development + Staging + Production", SelIdx: 2,
-		},
 		// Monolith-only: language and framework defined once at top level
 		{
 			Key: "monolith_lang", Label: "language      ", Kind: KindSelect,
@@ -176,6 +135,12 @@ func defaultServiceFields() []Field {
 			Options: []string{"DNS-based", "Consul", "Kubernetes DNS", "Eureka", "Static config", "None"},
 			Value:   "None", SelIdx: 5,
 		},
+		// environment is a KindSelect populated dynamically from InfraPillar.Environments.
+		{
+			Key: "environment", Label: "environment   ", Kind: KindSelect,
+			Options: []string{"(no environments configured)"},
+			Value:   "(no environments configured)",
+		},
 	}
 }
 
@@ -238,6 +203,9 @@ func serviceFieldsFromDef(s manifest.ServiceDef) []Field {
 	if s.PatternTag != "" {
 		f = setFieldValue(f, "pattern_tag", s.PatternTag)
 	}
+	if s.Environment != "" {
+		f = setFieldValue(f, "environment", s.Environment)
+	}
 	return f
 }
 
@@ -254,6 +222,10 @@ func serviceDefFromFields(fields []Field) manifest.ServiceDef {
 			break
 		}
 	}
+	env := fieldGet(fields, "environment")
+	if env == "(no environments configured)" {
+		env = ""
+	}
 	return manifest.ServiceDef{
 		Name:             fieldGet(fields, "name"),
 		Responsibility:   fieldGet(fields, "responsibility"),
@@ -266,6 +238,7 @@ func serviceDefFromFields(fields []Field) manifest.ServiceDef {
 		HealthcheckPath:  fieldGet(fields, "healthcheck_path"),
 		ErrorFormat:      fieldGet(fields, "error_format"),
 		ServiceDiscovery: fieldGet(fields, "service_discovery"),
+		Environment:      env,
 	}
 }
 

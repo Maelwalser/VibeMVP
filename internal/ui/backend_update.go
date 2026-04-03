@@ -226,10 +226,9 @@ func (be *BackendEditor) applyDropdown() bool {
 				be.updateEnvMonolithVersionOptions()
 			case "compute_env":
 				be.updateEnvOrchestratorOptions()
+			case "orchestrator":
+				be.updateServiceDiscoveryOptions()
 			}
-		}
-		if be.activeTab() == beTabEnv && f.Key == "orchestrator" {
-			be.updateServiceDiscoveryOptions()
 		}
 	}
 	return applyTo(be.mutableFieldPtr())
@@ -516,10 +515,9 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 					be.updateEnvMonolithVersionOptions()
 				case "compute_env":
 					be.updateEnvOrchestratorOptions()
+				case "orchestrator":
+					be.updateServiceDiscoveryOptions()
 				}
-			}
-			if be.activeTab() == beTabEnv && f.Key == "orchestrator" {
-				be.updateServiceDiscoveryOptions()
 			}
 		}
 	case "i", "a":

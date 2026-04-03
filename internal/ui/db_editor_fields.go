@@ -44,6 +44,12 @@ func defaultDBForm() []Field {
 		// Connection pooling
 		{Key: "pool_min", Label: "  pool_min    ", Kind: KindText},
 		{Key: "pool_max", Label: "  pool_max    ", Kind: KindText},
+		// environment is a KindSelect populated dynamically from InfraPillar.Environments.
+		{
+			Key: "environment", Label: "environment   ", Kind: KindSelect,
+			Options: []string{"(no environments configured)"},
+			Value:   "(no environments configured)",
+		},
 		{Key: "notes", Label: "notes         ", Kind: KindText},
 	}
 }
@@ -77,6 +83,38 @@ func isDBFormFieldDisabled(form []Field, idx int) bool {
 
 func nextDBFormIdx(form []Field, cur int) int { return nextFormIdx(form, cur, isDBFormFieldDisabled) }
 func prevDBFormIdx(form []Field, cur int) int { return prevFormIdx(form, cur, isDBFormFieldDisabled) }
+
+func dbFormFromSourceWithEnvs(src manifest.DBSourceDef, envNames []string) []Field {
+	f := dbFormFromSource(src)
+	applyEnvNamesToDBForm(f, envNames)
+	if src.Environment != "" {
+		f = setFieldValue(f, "environment", src.Environment)
+	}
+	return f
+}
+
+func applyEnvNamesToDBForm(fields []Field, envNames []string) {
+	opts, val := noneOrPlaceholder(envNames, "(no environments configured)")
+	for i := range fields {
+		if fields[i].Key != "environment" {
+			continue
+		}
+		fields[i].Options = opts
+		found := false
+		for j, o := range opts {
+			if o == fields[i].Value {
+				fields[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			fields[i].Value = val
+			fields[i].SelIdx = 0
+		}
+		break
+	}
+}
 
 func dbFormFromSource(src manifest.DBSourceDef) []Field {
 	f := defaultDBForm()
@@ -137,6 +175,10 @@ func dbFormToSource(form []Field) manifest.DBSourceDef {
 		fmt.Sscanf(v, "%d", &n)
 		return n
 	}
+	env := get("environment")
+	if env == "(no environments configured)" {
+		env = ""
+	}
 	src := manifest.DBSourceDef{
 		Alias:       get("alias"),
 		Type:        manifest.DatabaseType(get("type")),
@@ -148,6 +190,7 @@ func dbFormToSource(form []Field) manifest.DBSourceDef {
 		Replication: get("replication"),
 		PoolMinSize: getInt("pool_min"),
 		PoolMaxSize: getInt("pool_max"),
+		Environment: env,
 		Notes:       get("notes"),
 	}
 	return src

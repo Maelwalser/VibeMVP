@@ -11,7 +11,7 @@ type DBSourceDef struct {
 	IsCache   bool         `json:"is_cache"`
 
 	// Security / network integrity
-	SSLMode     string `json:"ssl_mode,omitempty"`     // disable | require | verify-ca | verify-full
+	SSLMode     string `json:"ssl_mode,omitempty"`    // disable | require | verify-ca | verify-full
 	Consistency string `json:"consistency,omitempty"` // strong | eventual | LOCAL_QUORUM | ONE | QUORUM | ALL | LOCAL_ONE
 
 	// Connection pooling
@@ -20,6 +20,9 @@ type DBSourceDef struct {
 
 	// Availability topology
 	Replication string `json:"replication,omitempty"` // single-node | primary-replica | multi-region
+
+	// Deployment environment (references InfraPillar.Environments[*].Name)
+	Environment string `json:"environment,omitempty"`
 
 	Notes string `json:"notes,omitempty"`
 }

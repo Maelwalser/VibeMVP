@@ -6,6 +6,14 @@ import (
 	"github.com/vibe-menu/internal/manifest"
 )
 
+// envView is the sub-view state for the Environments list+form.
+type envView int
+
+const (
+	envViewList envView = iota
+	envViewForm
+)
+
 // ── InfraEditor ───────────────────────────────────────────────────────────────
 
 // InfraEditor manages the INFRASTRUCTURE main-tab.
@@ -24,9 +32,12 @@ type InfraEditor struct {
 	obsFormIdx int
 	obsEnabled bool
 
-	envTopoFields  []Field
-	envTopoFormIdx int
-	envEnabled     bool
+	// Environments list+form (replaces the old flat env-topology form).
+	envs      []manifest.ServerEnvironmentDef
+	envIdx    int
+	envView   envView
+	envForm   []Field
+	envFormIdx int
 
 	internalMode Mode
 	formInput    textinput.Model
@@ -37,17 +48,13 @@ type InfraEditor struct {
 
 	dd DropdownState
 
-	// cloudProvider mirrors the backend Env cloud_provider selection so that
-	// provider-specific option lists stay consistent across pillars.
-	cloudProvider string
-
 	// backendLanguages mirrors the languages from the backend services/monolith
 	// so that container_runtime options reflect what is actually being built.
 	backendLanguages string // joined with "," for cheap equality checks
 
-	// orchestrator mirrors the backend Env orchestrator so that deploy_strategy
-	// options stay consistent with what the chosen orchestrator supports.
-	orchestrator string
+	// cloudProvider caches the last provider used to narrow networking/cicd/obs
+	// option lists, to avoid redundant field-slice rebuilds.
+	cloudProvider string
 }
 
 func (ie InfraEditor) activeTabEnabled() bool {
@@ -59,7 +66,7 @@ func (ie InfraEditor) activeTabEnabled() bool {
 	case infraTabObservability:
 		return ie.obsEnabled
 	case infraTabEnvironments:
-		return ie.envEnabled
+		return true // environments list is always accessible
 	}
 	return false
 }
@@ -75,9 +82,6 @@ func (ie *InfraEditor) enableActiveTab() {
 	case infraTabObservability:
 		ie.obsEnabled = true
 		ie.obsFormIdx = 0
-	case infraTabEnvironments:
-		ie.envEnabled = true
-		ie.envTopoFormIdx = 0
 	}
 }
 
@@ -95,10 +99,6 @@ func (ie *InfraEditor) disableActiveTab() {
 		ie.obsEnabled = false
 		ie.obsFields = defaultObservabilityFields()
 		ie.obsFormIdx = 0
-	case infraTabEnvironments:
-		ie.envEnabled = false
-		ie.envTopoFields = defaultEnvTopologyFields()
-		ie.envTopoFormIdx = 0
 	}
 }
 
@@ -107,9 +107,42 @@ func newInfraEditor() InfraEditor {
 		networkingFields: defaultNetworkingFields(),
 		cicdFields:       defaultInfraCICDFields(),
 		obsFields:        defaultObservabilityFields(),
-		envTopoFields:    defaultEnvTopologyFields(),
 		formInput:        newFormInput(),
 	}
+}
+
+// EnvironmentNames returns the names of all configured server environments.
+// Used by backend and data editors to populate environment selector dropdowns.
+func (ie InfraEditor) EnvironmentNames() []string {
+	names := make([]string, 0, len(ie.envs))
+	for _, e := range ie.envs {
+		if e.Name != "" {
+			names = append(names, e.Name)
+		}
+	}
+	return names
+}
+
+// PrimaryOrchestrator returns the orchestrator of the first configured environment,
+// or an empty string when no environments have been defined yet.
+func (ie InfraEditor) PrimaryOrchestrator() string {
+	for _, e := range ie.envs {
+		if e.Orchestrator != "" {
+			return e.Orchestrator
+		}
+	}
+	return ""
+}
+
+// primaryCloudProvider returns the cloud_provider of the first environment for
+// narrowing networking/cicd/obs option lists.
+func (ie InfraEditor) primaryCloudProvider() string {
+	for _, e := range ie.envs {
+		if e.CloudProvider != "" {
+			return e.CloudProvider
+		}
+	}
+	return ""
 }
 
 // ── ToManifest ────────────────────────────────────────────────────────────────
@@ -150,16 +183,7 @@ func (ie InfraEditor) ToManifestInfraPillar() manifest.InfraPillar {
 			LogRetention:  fieldGet(ie.obsFields, "log_retention"),
 		}
 	}
-	if ie.envEnabled {
-		p.EnvTopology = manifest.EnvTopologyConfig{
-			Stages:            fieldGet(ie.envTopoFields, "stages"),
-			PromotionPipeline: fieldGet(ie.envTopoFields, "promotion_pipeline"),
-			SecretKeyStrategy: fieldGet(ie.envTopoFields, "secret_key_strategy"),
-			MigrationStrategy: fieldGet(ie.envTopoFields, "migration_strategy"),
-			DBSeeding:         fieldGet(ie.envTopoFields, "db_seeding"),
-			PreviewEnvs:       fieldGet(ie.envTopoFields, "preview_envs"),
-		}
-	}
+	p.Environments = ie.envs
 	return p
 }
 
@@ -209,15 +233,10 @@ func (ie InfraEditor) FromInfraPillar(ip manifest.InfraPillar) InfraEditor {
 		ie.obsFields = setFieldValue(ie.obsFields, "log_retention", o.LogRetention)
 	}
 
-	e := ip.EnvTopology
-	if e.Stages != "" || e.PromotionPipeline != "" {
-		ie.envEnabled = true
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "stages", e.Stages)
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "promotion_pipeline", e.PromotionPipeline)
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "secret_key_strategy", e.SecretKeyStrategy)
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "migration_strategy", e.MigrationStrategy)
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "db_seeding", e.DBSeeding)
-		ie.envTopoFields = setFieldValue(ie.envTopoFields, "preview_envs", e.PreviewEnvs)
+	if len(ip.Environments) > 0 {
+		ie.envs = ip.Environments
+		ie.envIdx = 0
+		ie.envView = envViewList
 	}
 
 	return ie
@@ -239,6 +258,14 @@ func (ie InfraEditor) HintLine() string {
 	}
 	if ie.dd.Open {
 		return hintBar("j/k", "navigate", "Enter/Space", "select", "Esc", "cancel")
+	}
+	if ie.activeTab == infraTabEnvironments {
+		switch ie.envView {
+		case envViewForm:
+			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "H", "cycle back", "b/Esc", "save & back", "h/l", "sub-tab")
+		default:
+			return hintBar("j/k", "navigate", "a", "add env", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
+		}
 	}
 	if !ie.activeTabEnabled() {
 		return hintBar("a", "configure", "h/l", "sub-tab")
@@ -281,7 +308,7 @@ func (ie InfraEditor) Update(msg tea.Msg) (InfraEditor, tea.Cmd) {
 	case infraTabObservability:
 		return ie.updateFields(key)
 	case infraTabEnvironments:
-		return ie.updateFields(key)
+		return ie.updateEnvTab(key)
 	}
 	return ie, nil
 }
@@ -302,8 +329,6 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 		fields, idx = ie.cicdFields, ie.cicdFormIdx
 	case infraTabObservability:
 		fields, idx = ie.obsFields, ie.obsFormIdx
-	case infraTabEnvironments:
-		fields, idx = ie.envTopoFields, ie.envTopoFormIdx
 	default:
 		return ie, nil
 	}
@@ -332,9 +357,6 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 					case infraTabObservability:
 						ie.obsFields = fields
 						ie.obsFormIdx = idx
-					case infraTabEnvironments:
-						ie.envTopoFields = fields
-						ie.envTopoFormIdx = idx
 					}
 					return ie.tryEnterInsert()
 				}
@@ -360,9 +382,6 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 			case infraTabObservability:
 				ie.obsFields = fields
 				ie.obsFormIdx = idx
-			case infraTabEnvironments:
-				ie.envTopoFields = fields
-				ie.envTopoFormIdx = idx
 			}
 			return ie.tryEnterInsert()
 		}
@@ -378,9 +397,6 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 	case infraTabObservability:
 		ie.obsFields = fields
 		ie.obsFormIdx = idx
-	case infraTabEnvironments:
-		ie.envTopoFields = fields
-		ie.envTopoFormIdx = idx
 	}
 	return ie, nil
 }
@@ -399,10 +415,6 @@ func (ie InfraEditor) updateInfraDropdown(key tea.KeyMsg) (InfraEditor, tea.Cmd)
 	case infraTabObservability:
 		if ie.obsFormIdx < len(ie.obsFields) {
 			f = &ie.obsFields[ie.obsFormIdx]
-		}
-	case infraTabEnvironments:
-		if ie.envTopoFormIdx < len(ie.envTopoFields) {
-			f = &ie.envTopoFields[ie.envTopoFormIdx]
 		}
 	}
 	if f == nil {
@@ -468,9 +480,9 @@ func (ie *InfraEditor) advanceField(delta int) {
 			ie.obsFormIdx = (ie.obsFormIdx + delta + n) % n
 		}
 	case infraTabEnvironments:
-		n := len(ie.envTopoFields)
+		n := len(ie.envForm)
 		if n > 0 {
-			ie.envTopoFormIdx = (ie.envTopoFormIdx + delta + n) % n
+			ie.envFormIdx = (ie.envFormIdx + delta + n) % n
 		}
 	}
 }
@@ -491,8 +503,8 @@ func (ie *InfraEditor) saveInput() {
 			ie.obsFields[ie.obsFormIdx].SaveTextInput(val)
 		}
 	case infraTabEnvironments:
-		if ie.envTopoFormIdx < len(ie.envTopoFields) && ie.envTopoFields[ie.envTopoFormIdx].CanEditAsText() {
-			ie.envTopoFields[ie.envTopoFormIdx].SaveTextInput(val)
+		if ie.envFormIdx < len(ie.envForm) && ie.envForm[ie.envFormIdx].CanEditAsText() {
+			ie.envForm[ie.envFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -507,7 +519,7 @@ func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {
 	case infraTabObservability:
 		n = len(ie.obsFields)
 	case infraTabEnvironments:
-		n = len(ie.envTopoFields)
+		n = len(ie.envForm)
 	}
 	for range n {
 		var f *Field
@@ -525,8 +537,8 @@ func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {
 				f = &ie.obsFields[ie.obsFormIdx]
 			}
 		case infraTabEnvironments:
-			if ie.envTopoFormIdx < len(ie.envTopoFields) {
-				f = &ie.envTopoFields[ie.envTopoFormIdx]
+			if ie.envFormIdx < len(ie.envForm) {
+				f = &ie.envForm[ie.envFormIdx]
 			}
 		}
 		if f == nil {
@@ -577,12 +589,237 @@ func (ie InfraEditor) View(w, h int) string {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
 		}
 	case infraTabEnvironments:
-		if ie.envEnabled {
-			lines = append(lines, renderFormFields(w, ie.envTopoFields, ie.envTopoFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)...)
-		} else {
-			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
-		}
+		lines = append(lines, ie.viewEnvTab(w)...)
 	}
 
 	return fillTildes(lines, h)
+}
+
+// ── Environments list+form ────────────────────────────────────────────────────
+
+func (ie InfraEditor) updateEnvTab(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
+	switch ie.envView {
+	case envViewList:
+		return ie.updateEnvList(key)
+	case envViewForm:
+		return ie.updateEnvForm(key)
+	}
+	return ie, nil
+}
+
+func (ie InfraEditor) updateEnvList(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
+	n := len(ie.envs)
+	switch key.String() {
+	case "j", "down":
+		if n > 0 && ie.envIdx < n-1 {
+			ie.envIdx++
+		}
+	case "k", "up":
+		if ie.envIdx > 0 {
+			ie.envIdx--
+		}
+	case "a":
+		existing := make([]string, 0, len(ie.envs))
+		for _, e := range ie.envs {
+			existing = append(existing, e.Name)
+		}
+		newDef := manifest.ServerEnvironmentDef{
+			Name:          uniqueName("environment", existing),
+			ComputeEnv:    "Containers (Docker)",
+			CloudProvider: "AWS",
+			Orchestrator:  "Docker Compose",
+		}
+		ie.envs = append(ie.envs, newDef)
+		ie.envIdx = len(ie.envs) - 1
+		ie.envForm = serverEnvFormFromDef(ie.envs[ie.envIdx])
+		ie.envFormIdx = 0
+		ie.envView = envViewForm
+		// apply compute_env narrowing to orchestrator options
+		ie.applyEnvOrchestratorOptions()
+		// propagate first env's cloud_provider to infra networking/cicd/obs
+		ie.SetCloudProvider(ie.primaryCloudProvider())
+	case "d":
+		if n > 0 {
+			ie.envs = append(ie.envs[:ie.envIdx], ie.envs[ie.envIdx+1:]...)
+			if ie.envIdx > 0 && ie.envIdx >= len(ie.envs) {
+				ie.envIdx = len(ie.envs) - 1
+			}
+		}
+	case "enter", "l", "right":
+		if n > 0 {
+			ie.envForm = serverEnvFormFromDef(ie.envs[ie.envIdx])
+			ie.envFormIdx = 0
+			ie.envView = envViewForm
+			ie.applyEnvOrchestratorOptions()
+		}
+	}
+	return ie, nil
+}
+
+func (ie InfraEditor) updateEnvForm(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
+	if ie.dd.Open {
+		return ie.updateEnvFormDropdown(key)
+	}
+	n := len(ie.envForm)
+	switch key.String() {
+	case "j", "down":
+		if n > 0 {
+			ie.envFormIdx = (ie.envFormIdx + 1) % n
+		}
+	case "k", "up":
+		if n > 0 {
+			ie.envFormIdx = (ie.envFormIdx - 1 + n) % n
+		}
+	case "enter", " ":
+		if ie.envFormIdx < n {
+			f := &ie.envForm[ie.envFormIdx]
+			if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+				ie.dd.Open = true
+				ie.dd.OptIdx = f.SelIdx
+			} else {
+				return ie.tryEnterInsert()
+			}
+		}
+	case "H", "shift+left":
+		if ie.envFormIdx < n {
+			f := &ie.envForm[ie.envFormIdx]
+			if f.Kind == KindSelect {
+				f.CyclePrev()
+				ie.onEnvFormFieldChanged(f.Key)
+			}
+		}
+	case "i", "a":
+		if ie.envFormIdx < n && ie.envForm[ie.envFormIdx].CanEditAsText() {
+			return ie.tryEnterInsert()
+		}
+	case "b", "esc":
+		ie.saveEnvForm()
+		ie.envView = envViewList
+	}
+	return ie, nil
+}
+
+func (ie InfraEditor) updateEnvFormDropdown(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
+	if ie.envFormIdx >= len(ie.envForm) {
+		ie.dd.Open = false
+		return ie, nil
+	}
+	f := &ie.envForm[ie.envFormIdx]
+	ie.dd.OptIdx = NavigateDropdown(key.String(), ie.dd.OptIdx, len(f.Options))
+	switch key.String() {
+	case " ", "enter":
+		if f.Kind == KindMultiSelect {
+			f.ToggleMultiSelect(ie.dd.OptIdx)
+			f.DDCursor = ie.dd.OptIdx
+		} else {
+			f.SelIdx = ie.dd.OptIdx
+			if ie.dd.OptIdx < len(f.Options) {
+				f.Value = f.Options[ie.dd.OptIdx]
+			}
+			ie.dd.Open = false
+			ie.onEnvFormFieldChanged(f.Key)
+			if f.PrepareCustomEntry() {
+				return ie.tryEnterInsert()
+			}
+		}
+	case "esc", "b":
+		ie.dd.Open = false
+	}
+	return ie, nil
+}
+
+// onEnvFormFieldChanged reacts to a field value change inside the env form.
+func (ie *InfraEditor) onEnvFormFieldChanged(key string) {
+	switch key {
+	case "compute_env":
+		ie.applyEnvOrchestratorOptions()
+	case "cloud_provider":
+		ie.SetCloudProvider(ie.primaryCloudProvider())
+	}
+}
+
+// applyEnvOrchestratorOptions narrows orchestrator options in envForm
+// based on the current compute_env selection.
+func (ie *InfraEditor) applyEnvOrchestratorOptions() {
+	computeEnv := fieldGet(ie.envForm, "compute_env")
+	opts := narrowOrchestratorOptions(computeEnv)
+	for i := range ie.envForm {
+		if ie.envForm[i].Key != "orchestrator" {
+			continue
+		}
+		ie.envForm[i].Options = opts
+		found := false
+		for j, o := range opts {
+			if o == ie.envForm[i].Value {
+				ie.envForm[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found && len(opts) > 0 {
+			ie.envForm[i].Value = opts[0]
+			ie.envForm[i].SelIdx = 0
+		}
+		break
+	}
+}
+
+// saveEnvForm writes the current envForm back to ie.envs[ie.envIdx].
+func (ie *InfraEditor) saveEnvForm() {
+	if ie.envIdx >= len(ie.envs) {
+		return
+	}
+	ie.envs[ie.envIdx] = serverEnvDefFromForm(ie.envForm)
+	// Keep networking/cicd/obs options in sync with primary env's settings.
+	ie.SetCloudProvider(ie.primaryCloudProvider())
+	ie.applyOrchestratorToCICD(ie.PrimaryOrchestrator())
+}
+
+func (ie InfraEditor) viewEnvTab(w int) []string {
+	switch ie.envView {
+	case envViewForm:
+		return ie.viewEnvForm(w)
+	default:
+		return ie.viewEnvList(w)
+	}
+}
+
+func (ie InfraEditor) viewEnvList(w int) []string {
+	var lines []string
+	lines = append(lines, StyleSectionDesc.Render("  server environments — define deployment targets (dev, staging, prod)"))
+	lines = append(lines, "")
+	if len(ie.envs) == 0 {
+		lines = append(lines, StyleSectionDesc.Render("  (no environments — press 'a' to add one)"))
+		return lines
+	}
+	for i, e := range ie.envs {
+		cursor := "  "
+		style := StyleFieldKey
+		if i == ie.envIdx {
+			cursor = StyleCursor.Render("▶ ")
+			style = StyleFieldKeyActive
+		}
+		summary := e.Name
+		if e.CloudProvider != "" {
+			summary += "  " + StyleHelpDesc.Render(e.CloudProvider)
+		}
+		if e.ComputeEnv != "" {
+			summary += "  " + StyleHelpDesc.Render(e.ComputeEnv)
+		}
+		if e.Orchestrator != "" {
+			summary += "  " + StyleHelpDesc.Render(e.Orchestrator)
+		}
+		lines = append(lines, cursor+style.Render(summary))
+	}
+	return lines
+}
+
+func (ie InfraEditor) viewEnvForm(w int) []string {
+	if ie.envIdx >= len(ie.envs) {
+		return nil
+	}
+	header := StyleSectionDesc.Render("  editing environment: " + ie.envs[ie.envIdx].Name)
+	lines := []string{header, ""}
+	lines = append(lines, renderFormFields(w, ie.envForm, ie.envFormIdx, ie.internalMode == ModeInsert, ie.formInput, ie.dd.Open, ie.dd.OptIdx)...)
+	return lines
 }

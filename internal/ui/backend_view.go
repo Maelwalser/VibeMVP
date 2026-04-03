@@ -88,16 +88,12 @@ func (be BackendEditor) HintLine() string {
 func (be BackendEditor) visibleEnvFields() []Field {
 	arch := be.currentArch()
 	corsStrategy := fieldGet(be.EnvFields, "cors_strategy")
-	computeEnv := fieldGet(be.EnvFields, "compute_env")
 	var out []Field
 	for _, f := range be.EnvFields {
 		if (f.Key == "monolith_lang" || f.Key == "monolith_lang_ver" || f.Key == "monolith_fw" || f.Key == "monolith_fw_ver") && arch != "monolith" {
 			continue
 		}
 		if f.Key == "cors_origins" && corsStrategy != "Strict allowlist" {
-			continue
-		}
-		if f.Key == "orchestrator" && computeEnv == "PaaS" {
 			continue
 		}
 		out = append(out, f)
