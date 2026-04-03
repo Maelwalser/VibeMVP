@@ -8,6 +8,56 @@ import (
 	"github.com/vibe-menu/internal/manifest"
 )
 
+// containerRuntimeByLang maps backend language → preferred container base images.
+var containerRuntimeByLang = map[string][]string{
+	"Go":              {"scratch", "distroless", "alpine"},
+	"TypeScript/Node": {"node:alpine", "node:slim", "distroless/nodejs"},
+	"Python":          {"python:slim", "python:alpine", "distroless/python3"},
+	"Java":            {"eclipse-temurin:alpine", "distroless/java", "amazoncorretto"},
+	"Kotlin":          {"eclipse-temurin:alpine", "distroless/java", "amazoncorretto"},
+	"C#/.NET":         {"mcr.microsoft.com/dotnet/aspnet", "alpine"},
+	"Rust":            {"scratch", "distroless", "alpine"},
+	"Ruby":            {"ruby:slim", "ruby:alpine"},
+	"PHP":             {"php:fpm-alpine", "php:cli-alpine"},
+	"Elixir":          {"elixir:alpine", "elixir:slim"},
+}
+
+// containerRuntimeAllOptions is the union of every language-specific option,
+// shown when no backend languages have been configured yet.
+var containerRuntimeAllOptions = func() []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, opts := range containerRuntimeByLang {
+		for _, o := range opts {
+			if !seen[o] {
+				seen[o] = true
+				out = append(out, o)
+			}
+		}
+	}
+	return out
+}()
+
+// runtimeOptionsForLangs returns the deduplicated set of container base images
+// appropriate for the given backend languages. Falls back to the full set when
+// langs is empty or contains only unrecognised values.
+func runtimeOptionsForLangs(langs []string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, lang := range langs {
+		for _, o := range containerRuntimeByLang[lang] {
+			if !seen[o] {
+				seen[o] = true
+				out = append(out, o)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return containerRuntimeAllOptions
+	}
+	return out
+}
+
 // infraAllOptions is the full (provider-agnostic) option set for each
 // cloud-provider-aware field. Used when no provider is selected.
 var infraAllOptions = map[string][]string{
@@ -215,9 +265,11 @@ func defaultInfraCICDFields() []Field {
 			Value:   "GitHub Secrets",
 		},
 		{
-			Key: "container_runtime", Label: "Container     ", Kind: KindSelect,
-			Options: []string{"Node Alpine", "Go scratch", "Python slim", "Distroless", "Ubuntu", "Custom"},
-			Value:   "Go scratch", SelIdx: 1,
+			Key:     "container_runtime",
+			Label:   "Container     ",
+			Kind:    KindSelect,
+			Options: containerRuntimeAllOptions,
+			Value:   containerRuntimeAllOptions[0],
 		},
 		{
 			Key: "backup_dr", Label: "Backup/DR     ", Kind: KindSelect,
@@ -353,6 +405,10 @@ type InfraEditor struct {
 	// cloudProvider mirrors the backend Env cloud_provider selection so that
 	// provider-specific option lists stay consistent across pillars.
 	cloudProvider string
+
+	// backendLanguages mirrors the languages from the backend services/monolith
+	// so that container_runtime options reflect what is actually being built.
+	backendLanguages string // joined with "," for cheap equality checks
 }
 
 // SetCloudProvider narrows cloud-aware field options to those appropriate for
@@ -365,6 +421,37 @@ func (ie *InfraEditor) SetCloudProvider(cp string) {
 	ie.networkingFields = applyCloudProviderToFields(ie.networkingFields, cp)
 	ie.cicdFields = applyCloudProviderToFields(ie.cicdFields, cp)
 	ie.obsFields = applyCloudProviderToFields(ie.obsFields, cp)
+}
+
+// SetBackendLanguages narrows the container_runtime options to images that are
+// appropriate for the given backend languages. A no-op when languages are unchanged.
+func (ie *InfraEditor) SetBackendLanguages(langs []string) {
+	key := strings.Join(langs, ",")
+	if ie.backendLanguages == key {
+		return
+	}
+	ie.backendLanguages = key
+	opts := runtimeOptionsForLangs(langs)
+	for i := range ie.cicdFields {
+		if ie.cicdFields[i].Key != "container_runtime" {
+			continue
+		}
+		ie.cicdFields[i].Options = opts
+		// Keep value if still valid, else reset to first option.
+		found := false
+		for j, o := range opts {
+			if o == ie.cicdFields[i].Value {
+				ie.cicdFields[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found && len(opts) > 0 {
+			ie.cicdFields[i].Value = opts[0]
+			ie.cicdFields[i].SelIdx = 0
+		}
+		break
+	}
 }
 
 func (ie InfraEditor) activeTabEnabled() bool {
