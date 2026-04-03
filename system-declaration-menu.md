@@ -47,7 +47,22 @@ These are referenced throughout the menu:
 | CORS Strategy          | `Permissive` · `Strict allowlist` · `Same-origin`                                                            |
 | CORS Origins           | Free text                                                                                                    |
 | Session Mgmt           | `Stateless (JWT only)` · `Server-side sessions (Redis)` · `Database sessions` · `None`                      |
-| Linter                 | `golangci-lint` · `Ruff` · `ESLint` · `Checkstyle` · `ktlint` · `Clippy` · `RuboCop` · `PHP-CS-Fixer` · `Custom` · `None` |
+| Linter                 | Dynamically filtered by language — see table below                                                           |
+
+Linter options per language:
+
+| Language        | Linters                                                                               |
+|-----------------|---------------------------------------------------------------------------------------|
+| Go              | `golangci-lint` · `staticcheck` · `go vet` · `None`                                  |
+| TypeScript/Node | `ESLint` · `Biome` · `TSLint (legacy)` · `None`                                      |
+| Python          | `Ruff` · `Flake8` · `Pylint` · `mypy` · `None`                                       |
+| Java            | `Checkstyle` · `SpotBugs` · `PMD` · `SonarLint` · `None`                             |
+| Kotlin          | `ktlint` · `detekt` · `SonarLint` · `None`                                           |
+| C#/.NET         | `Roslyn Analyzers` · `StyleCop` · `SonarLint` · `None`                               |
+| Rust            | `Clippy` · `cargo-audit` · `None`                                                     |
+| Ruby            | `RuboCop` · `StandardRB` · `None`                                                     |
+| PHP             | `PHP-CS-Fixer` · `PHPStan` · `Psalm` · `None`                                        |
+| Elixir          | `Credo` · `Dialyxir` · `None`                                                         |
 
 ---
 
@@ -139,14 +154,25 @@ Framework suggestions per language:
 
 > Background/scheduled job queue configuration. *(repeatable — add multiple queues)*
 
-| Field         | Options / Input                                                                      |
-|---------------|--------------------------------------------------------------------------------------|
-| Name          | Free text identifier for this queue                                                  |
-| Technology    | `Temporal` · `BullMQ` · `Sidekiq` · `Celery` · `Faktory` · `Asynq` · `River` · `Custom` |
-| Concurrency   | Free text (default: `10`)                                                            |
-| Max Retries   | Free text (default: `3`)                                                             |
-| Retry Policy  | `Exponential backoff` · `Fixed interval` · `Linear backoff` · `None`                 |
-| Dead Letter Q | `false` · `true`                                                                     |
+| Field          | Options / Input                                                                      |
+|----------------|--------------------------------------------------------------------------------------|
+| Name           | Free text identifier for this queue                                                  |
+| Technology     | `Temporal` · `BullMQ` · `Sidekiq` · `Celery` · `Faktory` · `Asynq` · `River` · `Custom` |
+| Concurrency    | Free text (default: `10`)                                                            |
+| Max Retries    | Free text (default: `3`)                                                             |
+| Retry Policy   | `Exponential backoff` · `Fixed interval` · `Linear backoff` · `None`                 |
+| Dead Letter Q  | `false` · `true`                                                                     |
+| Worker Service | Select from defined service units — which service hosts this worker                  |
+| Payload DTO    | Select from defined DTOs — the job payload type                                      |
+
+**Cron Jobs** *(repeatable within each queue)*
+
+| Field    | Options / Input                                                              |
+|----------|------------------------------------------------------------------------------|
+| Name     | Free text identifier (e.g., `nightly-cleanup`)                               |
+| Schedule | Cron expression (e.g., `0 2 * * *`)                                         |
+| Handler  | Free text — handler function / method name                                   |
+| Timeout  | Free text — maximum execution time (e.g., `30s`, `5m`)                      |
 
 ---
 
@@ -171,10 +197,27 @@ Framework suggestions per language:
 | Auth Strategy          | Multi-select: `JWT (stateless)` · `Session-based` · `OAuth 2.0 / OIDC` · `API Keys` · `mTLS` · `None` |
 | Identity Provider      | `Self-managed` · `Auth0` · `Clerk` · `Supabase Auth` · `Firebase Auth` · `Keycloak` · `AWS Cognito` · `Other` |
 | Authorization Model    | `RBAC` · `ABAC` · `ACL` · `ReBAC` · `Policy-based (OPA/Cedar)` · `Custom`                    |
-| Roles                  | Multi-select: `admin` · `superadmin` · `user` · `moderator` · `editor` · `viewer` · `manager` · `auditor` · `owner` |
 | Token Storage (client) | Multi-select: `HttpOnly cookie` · `Authorization header (Bearer)` · `WebSocket protocol header` · `Other` |
 | Refresh Token          | `None` · `Rotating` · `Non-rotating` · `Sliding window`                                       |
 | MFA Support            | `None` · `TOTP` · `SMS` · `Email` · `Passkeys/WebAuthn`                                       |
+
+**Permissions** *(repeatable — define named permission strings before defining roles)*
+
+| Field       | Input                                                              |
+|-------------|--------------------------------------------------------------------|
+| Name        | e.g., `users:read`, `orders:write`, `reports:export`               |
+| Description | What this permission allows                                        |
+
+**Roles** *(repeatable — full CRUD role editor, not a preset multi-select)*
+
+| Field       | Input                                                              |
+|-------------|--------------------------------------------------------------------|
+| Name        | e.g., `admin`, `editor`, `viewer`                                  |
+| Description | What this role represents in the system                            |
+| Permissions | Multi-select from defined Permissions above                        |
+| Inherits    | Multi-select from other defined roles (role hierarchy / inheritance) |
+
+> Roles defined here are referenced in **Contracts → Endpoints** (`auth_roles`) and **Frontend → Pages** (`auth_roles`) for access control.
 
 ---
 
@@ -184,16 +227,19 @@ Framework suggestions per language:
 
 #### Adding a Database
 
-| Field     | Options / Input                                                                                                        |
-|-----------|------------------------------------------------------------------------------------------------------------------------|
-| Alias     | Free text identifier (e.g., `primary-postgres`, `cache-redis`)                                                         |
-| Type      | `PostgreSQL` · `MySQL` · `SQLite` · `MongoDB` · `DynamoDB` · `Cassandra` · `Redis` · `Memcached` · `ClickHouse` · `Elasticsearch` · `other` |
-| Version   | Free text (e.g., `16`, `7.x`)                                                                                          |
-| Namespace | Free text (database name / schema)                                                                                      |
-| Is Cache  | `no` · `yes`                                                                                                           |
-| SSL Mode  | *(PostgreSQL/MySQL only)* `require` · `disable` · `verify-ca` · `verify-full`                                          |
-| Consistency | *(Cassandra only)* `LOCAL_QUORUM` · `ONE` · `QUORUM` · `ALL` · `LOCAL_ONE`                                           |
-| Notes     | Free text                                                                                                              |
+| Field       | Options / Input                                                                                                        |
+|-------------|------------------------------------------------------------------------------------------------------------------------|
+| Alias       | Free text identifier (e.g., `primary-postgres`, `cache-redis`)                                                         |
+| Type        | `PostgreSQL` · `MySQL` · `SQLite` · `MongoDB` · `DynamoDB` · `Cassandra` · `Redis` · `Memcached` · `ClickHouse` · `Elasticsearch` · `other` |
+| Version     | Free text (e.g., `16`, `7.x`)                                                                                          |
+| Namespace   | Free text (database name / schema)                                                                                      |
+| Is Cache    | `no` · `yes`                                                                                                           |
+| SSL Mode    | *(PostgreSQL/MySQL only)* `require` · `disable` · `verify-ca` · `verify-full`                                          |
+| Consistency | *(Cassandra/MongoDB/DynamoDB only)* `strong` · `eventual` · `LOCAL_QUORUM` · `ONE` · `QUORUM` · `ALL` · `LOCAL_ONE`   |
+| Replication | *(not available for Redis/Memcached/SQLite)* `single-node` · `primary-replica` · `multi-region`                       |
+| Pool Min    | *(not available for Redis/Memcached)* Free text integer — minimum connection pool size                                  |
+| Pool Max    | *(not available for Redis/Memcached)* Free text integer — maximum connection pool size                                  |
+| Notes       | Free text                                                                                                              |
 
 ---
 
@@ -235,9 +281,13 @@ Framework suggestions per language:
 
 ### 2.3 Caching Sub Tab
 
+*(repeatable — add multiple named caching configurations)*
+
 | Field         | Options / Input                                                              |
 |---------------|------------------------------------------------------------------------------|
-| Caching Layer | `Application-level` · `Dedicated cache (Redis/Valkey)` · `CDN` · `None`     |
+| Name          | Free text identifier for this caching configuration (e.g., `user-cache`, `session-cache`) |
+| Caching Layer | `Application-level` · `Dedicated cache` · `CDN` · `None`                    |
+| Cache DB      | *(only when Layer = `Dedicated cache`)* Select from databases with `Is Cache = yes` |
 | Strategy      | Multi-select: `Cache-aside` · `Read-through` · `Write-through` · `Write-behind` |
 | Invalidation  | `TTL-based` · `Event-driven` · `Manual` · `Hybrid`                           |
 | TTL           | `30s` · `1m` · `5m` · `15m` · `1h` · `24h` · `Custom`                       |
@@ -265,8 +315,24 @@ Framework suggestions per language:
 
 | Field               | Options / Input                                                                               |
 |---------------------|-----------------------------------------------------------------------------------------------|
-| Migration Tool      | `golang-migrate` · `Atlas` · `Flyway` · `Liquibase` · `Prisma Migrate` · `Alembic` · `None`  |
+| Migration Tool      | Dynamically filtered by backend language — see table below                                    |
 | Backup Strategy     | `Automated daily` · `Point-in-time recovery` · `Manual snapshots` · `Managed provider` · `None` |
+
+Migration tool options per backend language:
+
+| Language        | Tools                                                                                         |
+|-----------------|-----------------------------------------------------------------------------------------------|
+| Go              | `golang-migrate` · `Atlas` · `goose` · `None`                                                 |
+| TypeScript/Node | `Prisma Migrate` · `TypeORM Migrations` · `Knex.js Migrations` · `db-migrate` · `None`        |
+| Python          | `Alembic` · `Django Migrations` · `Flyway` · `None`                                           |
+| Java            | `Flyway` · `Liquibase` · `None`                                                               |
+| Kotlin          | `Flyway` · `Liquibase` · `Exposed Migrations` · `None`                                        |
+| C#/.NET         | `EF Core Migrations` · `Flyway` · `Liquibase` · `None`                                        |
+| Ruby            | `Active Record Migrations` · `Sequel Migrations` · `None`                                     |
+| PHP             | `Doctrine Migrations` · `Phinx` · `Laravel Migrations` · `None`                               |
+| Rust            | `SQLx Migrations` · `Diesel Migrations` · `refinery` · `None`                                 |
+| Elixir          | `Ecto Migrations` · `None`                                                                    |
+| *(no language)* | `golang-migrate` · `Atlas` · `Flyway` · `Liquibase` · `Prisma Migrate` · `Alembic` · `None`  |
 | Search Tech         | `Elasticsearch` · `Meilisearch` · `Algolia` · `PostgreSQL FTS` · `Typesense` · `None`         |
 | Retention Policy    | `30 days` · `90 days` · `1 year` · `3 years` · `7 years` · `Indefinite` · `Custom`            |
 | Delete Strategy     | `Soft-delete` · `Hard-delete` · `Archival` · `Soft + periodic purge`                          |
@@ -359,22 +425,22 @@ Framework suggestions per language:
 | Language         | `TypeScript` · `JavaScript` · `Dart` · `Kotlin` · `Swift`                                                      |
 | Platform         | `Web (SPA)` · `Web (SSR/SSG)` · `Mobile (cross-platform)` · `Mobile (native)` · `Desktop`                      |
 | Framework        | *(filtered by language — see below)*                                                                            |
-| Meta-framework   | `Next.js` · `Nuxt` · `SvelteKit` · `Remix` · `Astro` · `None`                                                  |
-| Package Manager  | `npm` · `yarn` · `pnpm` · `bun`                                                                                 |
-| Styling          | `Tailwind CSS` · `CSS Modules` · `Styled Components` · `Sass/SCSS` · `Vanilla CSS` · `UnoCSS`                   |
-| Component Lib    | `shadcn/ui` · `Radix` · `Material UI` · `Ant Design` · `Headless UI` · `DaisyUI` · `None` · `Custom`           |
-| State Mgmt       | `React Context` · `Zustand` · `Redux Toolkit` · `Jotai` · `Pinia` · `Svelte stores` · `Signals` · `None`       |
-| Data Fetching    | `TanStack Query` · `SWR` · `Apollo Client` · `tRPC client` · `RTK Query` · `Native fetch`                      |
-| Form Handling    | `React Hook Form` · `Formik` · `Zod + native` · `Vee-Validate` · `None`                                        |
-| Validation       | `Zod` · `Yup` · `Valibot` · `Joi` · `Class-validator` · `None`                                                 |
-| PWA Support      | `None` · `Basic (manifest + service worker)` · `Full offline` · `Push notifications`                           |
+| Meta-framework   | *(filtered by framework — see below)*                                                                           |
+| Package Manager  | *(filtered by language)* `npm` · `yarn` · `pnpm` · `bun` *(TypeScript/JavaScript)* · `pub` *(Dart)* · `Gradle` *(Kotlin)* · `SwiftPM` *(Swift)* |
+| Styling          | *(filtered by language)* `Tailwind CSS` · `CSS Modules` · `Styled Components` · `Sass/SCSS` · `Vanilla CSS` · `UnoCSS` *(TypeScript/JavaScript only)* · `None` · `Custom` |
+| Component Lib    | *(filtered by framework — see below)*                                                                           |
+| State Mgmt       | *(filtered by framework — see below)*                                                                           |
+| Data Fetching    | *(filtered by framework — see below)*                                                                           |
+| Form Handling    | *(filtered by framework — see below)*                                                                           |
+| Validation       | *(filtered by language)* `Zod` · `Yup` · `Valibot` · `Joi` · `Class-validator` *(TypeScript)* · `Zod` · `Yup` · `Valibot` · `Joi` *(JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
+| PWA Support      | *(filtered by platform)* `None` · `Basic (manifest + service worker)` · `Full offline` · `Push notifications` *(Web only)* · `None` *(Mobile/Desktop)* |
 | Real-time        | `WebSocket` · `SSE` · `Polling` · `None`                                                                        |
-| Image Optim.     | `Next/Image (built-in)` · `Cloudinary` · `Imgix` · `Sharp (self-hosted)` · `CDN transform` · `None`            |
+| Image Optim.     | *(filtered by platform)* `Next/Image (built-in)` · `Cloudinary` · `Imgix` · `Sharp (self-hosted)` · `CDN transform` · `None` *(Web only)* · `None` *(Mobile/Desktop)* |
 | Auth Flow        | `Redirect (OAuth/OIDC)` · `Modal login` · `Magic link` · `Passwordless` · `Social only`                        |
-| Error Boundary   | `React Error Boundary` · `Global try-catch` · `Framework default` · `Custom`                                   |
-| Bundle Optim.    | `Code splitting (route-based)` · `Dynamic imports` · `Tree shaking only` · `None`                              |
-| FE Testing       | `Vitest` · `Jest` · `Testing Library` · `Storybook` · `None`                                                   |
-| Linter           | `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None`                                     |
+| Error Boundary   | *(filtered by framework — see below)*                                                                           |
+| Bundle Optim.    | *(filtered by language)* `Code splitting (route-based)` · `Dynamic imports` · `Tree shaking only` · `None` *(TypeScript/JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
+| FE Testing       | *(filtered by language)* `Vitest` · `Jest` · `Testing Library` · `Storybook` · `None` *(TypeScript/JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
+| Linter           | *(filtered by language)* `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None` *(TypeScript/JavaScript)* · `Custom` · `None` *(Dart/Kotlin/Swift)* |
 
 Framework options per language:
 
@@ -385,6 +451,64 @@ Framework options per language:
 | Dart       | `Flutter`                                                        |
 | Kotlin     | `Jetpack Compose` · `KMP (Compose Multiplatform)`                |
 | Swift      | `SwiftUI` · `UIKit`                                              |
+
+Meta-framework options per framework:
+
+| Framework | Meta-frameworks                          |
+|-----------|------------------------------------------|
+| React     | `Next.js` · `Remix` · `Astro` · `None`  |
+| Vue       | `Nuxt` · `Astro` · `None`               |
+| Svelte    | `SvelteKit` · `Astro` · `None`          |
+| Solid     | `Astro` · `None`                        |
+| All others | `None`                                  |
+
+Component library options per framework:
+
+| Framework | Component Libraries                                                                   |
+|-----------|---------------------------------------------------------------------------------------|
+| React     | `shadcn/ui` · `Radix` · `Material UI` · `Ant Design` · `Headless UI` · `DaisyUI` · `None` · `Custom` |
+| Vue       | `Material UI` · `None` · `Custom`                                                     |
+| Angular   | `Material UI` · `None` · `Custom`                                                     |
+| All others | `None` · `Custom`                                                                    |
+
+State management options per framework:
+
+| Framework | State Management                                             |
+|-----------|--------------------------------------------------------------|
+| React     | `React Context` · `Zustand` · `Redux Toolkit` · `Jotai` · `None` |
+| Vue       | `Pinia` · `None`                                             |
+| Svelte    | `Svelte stores` · `None`                                     |
+| Angular / Solid / Qwik | `Signals` · `None`                            |
+| All others | `None`                                                      |
+
+Data fetching options per framework:
+
+| Framework | Data Fetching                                                              |
+|-----------|----------------------------------------------------------------------------|
+| React     | `TanStack Query` · `SWR` · `Apollo Client` · `tRPC client` · `RTK Query` · `Native fetch` |
+| Vue       | `TanStack Query` · `Apollo Client` · `Native fetch`                        |
+| Svelte    | `TanStack Query` · `SWR` · `Native fetch`                                  |
+| Angular   | `Apollo Client` · `Native fetch`                                           |
+| Solid     | `TanStack Query` · `Native fetch`                                          |
+| All others | `Native fetch`                                                            |
+
+Form handling options per framework:
+
+| Framework | Form Handling                                           |
+|-----------|---------------------------------------------------------|
+| React     | `React Hook Form` · `Formik` · `Zod + native` · `None` |
+| Vue       | `Vee-Validate` · `Zod + native` · `None`                |
+| Svelte / Angular / Solid / Qwik | `Zod + native` · `None`        |
+| All others | `None`                                                 |
+
+Error boundary options per framework:
+
+| Framework | Error Boundary                                                       |
+|-----------|----------------------------------------------------------------------|
+| React     | `React Error Boundary` · `Global try-catch` · `Framework default` · `Custom` |
+| Vue / Angular / Svelte / Solid / Qwik | `Global try-catch` · `Framework default` · `Custom` |
+| HTMX      | `Global try-catch` · `Custom`                                        |
+| Flutter / Compose / SwiftUI / UIKit | `Framework default` · `Custom` |
 
 ---
 
@@ -437,8 +561,8 @@ Framework options per language:
 | Field               | Options / Input                                                                      |
 |---------------------|--------------------------------------------------------------------------------------|
 | Enabled             | `false` · `true`                                                                     |
-| Default Locale      | Free text (e.g., `en`)                                                               |
-| Supported Locales   | Free text (comma-separated, e.g., `en, fr, de`)                                      |
+| Default Locale      | Dropdown — `en` · `en-US` · `en-GB` · `en-AU` · `en-CA` · `fr` · `fr-FR` · `fr-CA` · `de` · `de-DE` · `de-AT` · `es` · `es-ES` · `es-MX` · `es-AR` · `pt` · `pt-BR` · `pt-PT` · `it` · `nl` · `nl-NL` · `pl` · `ru` · `ja` · `zh` · `zh-CN` · `zh-TW` · `ko` · `ar` · `hi` · `tr` · `sv` · `da` · `fi` · `nb` · `cs` · `hu` · `ro` · `vi` · `th` · `id` · `ms` · `uk` · `he` |
+| Supported Locales   | Multi-select from the same locale list above                                         |
 | I18N Library        | `i18next` · `next-intl` · `react-i18next` · `LinguiJS` · `vue-i18n` · `Custom` · `None` |
 | Timezone Handling   | `UTC always` · `User preference` · `Auto-detect` · `Manual`                          |
 
@@ -536,12 +660,37 @@ Framework options per language:
 
 | Field             | Options / Input                                                                  |
 |-------------------|----------------------------------------------------------------------------------|
-| Unit Testing      | `Jest` · `Vitest` · `pytest` · `Go testing` · `JUnit` · `xUnit` · `Other`       |
+| Unit Testing      | Dynamically filtered by backend language — see table below                       |
 | Integration Tests | `Testcontainers` · `Docker Compose` · `In-memory fakes` · `None`                |
-| E2E Testing       | `Playwright` · `Cypress` · `Selenium` · `None`                                  |
+| E2E Testing       | Dynamically filtered by frontend platform/framework — see table below            |
 | API Testing       | `Bruno` · `Hurl` · `Postman/Newman` · `REST Client` · `None`                    |
-| Load Testing      | `k6` · `Locust` · `Artillery` · `JMeter` · `None`                               |
+| Load Testing      | `k6` · `Artillery` · `JMeter` · `None` *(+ `Locust` when Python is a backend language)* |
 | Contract Testing  | `Pact` · `Schemathesis` · `Dredd` · `None`                                      |
+
+Unit testing options per backend language:
+
+| Language        | Unit Testing Tools                                                         |
+|-----------------|----------------------------------------------------------------------------|
+| Go              | `Go testing` · `Testify` · `Other`                                         |
+| TypeScript/Node | `Jest` · `Vitest` · `Other`                                                |
+| Python          | `pytest` · `unittest` · `Other`                                            |
+| Java            | `JUnit` · `TestNG` · `Other`                                               |
+| Kotlin          | `JUnit` · `Kotest` · `Other`                                               |
+| C#/.NET         | `xUnit` · `NUnit` · `MSTest` · `Other`                                     |
+| Rust            | `cargo test` · `Other`                                                     |
+| Ruby            | `RSpec` · `minitest` · `Other`                                             |
+| PHP             | `PHPUnit` · `Pest` · `Other`                                               |
+| *(no language)* | `Jest` · `Vitest` · `pytest` · `Go testing` · `JUnit` · `xUnit` · `Other` |
+
+E2E testing options per frontend platform/framework:
+
+| Platform / Framework         | E2E Tools                                       |
+|------------------------------|-------------------------------------------------|
+| Web (any framework)          | `Playwright` · `Cypress` · `Selenium` · `None`  |
+| Flutter / Dart               | `Flutter Driver` · `Integration Test` · `None`  |
+| Jetpack Compose / Android    | `Espresso` · `UI Automator` · `None`            |
+| SwiftUI / UIKit / iOS        | `XCUITest` · `EarlGrey` · `None`                |
+| *(no frontend configured)*   | `None`                                          |
 
 ---
 

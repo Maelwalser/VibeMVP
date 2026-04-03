@@ -356,10 +356,13 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "backend":
 		m.backendEditor.SetDomainNames(m.dataTabEditor.domainNames())
 		m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
+		m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
 		m.backendEditor, cmd = m.backendEditor.Update(msg)
 	case "data":
 		m.dataTabEditor.SetMigrationContext(m.backendEditor.Languages())
 		m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)
+		// Refresh rate_limit_backend options whenever cache sources change.
+		m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
 	case "contracts":
 		m.contractsEditor.SetDomains(m.dataTabEditor.domainNames())
 		m.contractsEditor.SetDomainDefs(m.dataTabEditor.domains)
@@ -371,6 +374,9 @@ func (m Model) delegateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frontendEditor.SetAuthRoles(m.backendEditor.AuthRoleOptions())
 		m.frontendEditor, cmd = m.frontendEditor.Update(msg)
 	case "infrastructure":
+		m.infraEditor.SetCloudProvider(m.backendEditor.CloudProvider())
+		m.infraEditor.SetBackendLanguages(m.backendEditor.Languages())
+		m.infraEditor.SetOrchestrator(m.backendEditor.Orchestrator())
 		m.infraEditor, cmd = m.infraEditor.Update(msg)
 	case "crosscut":
 		m.crossCutEditor.SetTestingContext(

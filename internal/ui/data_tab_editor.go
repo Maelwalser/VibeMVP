@@ -131,6 +131,18 @@ func newDataTabEditor() DataTabEditor {
 	}
 }
 
+// CacheAliases returns the aliases of all database sources marked as cache
+// (IsCache == true), for use by the backend rate_limit_backend dropdown.
+func (dt DataTabEditor) CacheAliases() []string {
+	var out []string
+	for _, src := range dt.dbEditor.Sources {
+		if src.IsCache && src.Alias != "" {
+			out = append(out, src.Alias)
+		}
+	}
+	return out
+}
+
 // dbNames returns the aliases of all created databases for use as dropdown options.
 func (dt DataTabEditor) dbNames() []string {
 	names := make([]string, 0, len(dt.dbEditor.Sources))
@@ -484,6 +496,75 @@ func migrationToolsForLangs(langs []string) []string {
 	return result
 }
 
+// searchTechForSources returns the valid search technology options given the
+// set of configured database technologies. "PostgreSQL FTS" is only included
+// when PostgreSQL is present; "MongoDB Atlas Search" only when MongoDB is
+// present; etc. "None" is always appended as the last option.
+func searchTechForSources(sources []manifest.DBSourceDef) []string {
+	seen := map[string]bool{}
+	var opts []string
+	add := func(tech string) {
+		if !seen[tech] {
+			seen[tech] = true
+			opts = append(opts, tech)
+		}
+	}
+
+	var searchTechByDB = map[string][]string{
+		"PostgreSQL":    {"PostgreSQL FTS", "Elasticsearch", "Meilisearch", "Typesense", "Algolia"},
+		"MySQL":         {"Elasticsearch", "Meilisearch", "Typesense", "Algolia"},
+		"MongoDB":       {"MongoDB Atlas Search", "Elasticsearch", "Meilisearch", "Algolia"},
+		"Elasticsearch": {"Elasticsearch"},
+	}
+
+	for _, src := range sources {
+		techs, ok := searchTechByDB[string(src.Type)]
+		if !ok {
+			// unknown DB: offer generic options
+			for _, t := range []string{"Elasticsearch", "Meilisearch", "Algolia", "Typesense"} {
+				add(t)
+			}
+			continue
+		}
+		for _, t := range techs {
+			add(t)
+		}
+	}
+	if len(opts) == 0 {
+		opts = []string{"Elasticsearch", "Meilisearch", "Algolia", "Typesense"}
+	}
+	opts = append(opts, "None")
+	return opts
+}
+
+// updateSearchTechOptions recomputes the search_tech governance field options
+// from the current database sources, preserving the selection when still valid.
+func (dt *DataTabEditor) updateSearchTechOptions() {
+	opts := searchTechForSources(dt.dbEditor.Sources)
+	for i := range dt.governanceFields {
+		if dt.governanceFields[i].Key != "search_tech" {
+			continue
+		}
+		current := dt.governanceFields[i].DisplayValue()
+		dt.governanceFields[i].Options = opts
+		found := false
+		for j, opt := range opts {
+			if opt == current {
+				dt.governanceFields[i].SelIdx = j
+				dt.governanceFields[i].Value = opt
+				found = true
+				break
+			}
+		}
+		if !found {
+			last := len(opts) - 1
+			dt.governanceFields[i].SelIdx = last
+			dt.governanceFields[i].Value = opts[last]
+		}
+		break
+	}
+}
+
 // SetMigrationContext updates the backend languages used to filter migration tool
 // options. Recomputes the governance field options immediately, preserving the
 // current selection when it remains valid.
@@ -531,8 +612,8 @@ func defaultGovernanceFields() []Field {
 		},
 		{
 			Key: "search_tech", Label: "Search Tech   ", Kind: KindSelect,
-			Options: []string{"Elasticsearch", "Meilisearch", "Algolia", "PostgreSQL FTS", "Typesense", "None"},
-			Value:   "None", SelIdx: 5,
+			Options: []string{"Elasticsearch", "Meilisearch", "Algolia", "Typesense", "None"},
+			Value:   "None", SelIdx: 4,
 		},
 		{
 			Key: "retention_policy", Label: "retention     ", Kind: KindSelect,
@@ -806,6 +887,7 @@ func (dt DataTabEditor) FromDataPillar(dp manifest.DataPillar) DataTabEditor {
 	dt.cachings = dp.Cachings
 
 	// Governance fields.
+	dt.updateSearchTechOptions()
 	if dp.Governance.RetentionPolicy != "" || dp.Governance.DeleteStrategy != "" || dp.MigrationTool != "" {
 		dt.govEnabled = true
 		dt.governanceFields = setFieldValue(dt.governanceFields, "retention_policy", dp.Governance.RetentionPolicy)
@@ -1056,8 +1138,9 @@ func (dt DataTabEditor) Update(msg tea.Msg) (DataTabEditor, tea.Cmd) {
 	case dataTabDatabases:
 		var cmd tea.Cmd
 		dt.dbEditor, cmd = dt.dbEditor.Update(msg)
-		// sync databases to data editor
+		// sync databases to data editor and governance search tech options
 		dt.dataEditor.availableDbs = dt.dbEditor.Sources
+		dt.updateSearchTechOptions()
 		return dt, cmd
 	case dataTabDomains:
 		return dt.updateDomains(key)
