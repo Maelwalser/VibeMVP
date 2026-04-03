@@ -170,6 +170,7 @@ func (dt DataTabEditor) updateDomainForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 		dt.saveDomainForm()
 		dt.domainSubView = domainViewList
 	}
+	dt.saveDomainForm()
 	return dt, nil
 }
 
@@ -367,6 +368,10 @@ func (dt DataTabEditor) updateAttrForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 		dt.saveDomainAttrItemsOnly()
 		dt.domainSubView = domainViewAttrs
 	}
+	if dt.attrIdx < len(dt.attrItems) {
+		dt.attrItems[dt.attrIdx] = copyFields(dt.attrForm)
+	}
+	dt.saveDomainAttrItemsOnly()
 	return dt, nil
 }
 
@@ -442,6 +447,9 @@ func (dt DataTabEditor) updateRelForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 			dt.relItems[dt.relIdx] = copyFields(dt.relForm)
 		}
 		dt.domainSubView = domainViewRels
+	}
+	if dt.relIdx < len(dt.relItems) {
+		dt.relItems[dt.relIdx] = copyFields(dt.relForm)
 	}
 	return dt, nil
 }

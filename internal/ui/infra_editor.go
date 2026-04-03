@@ -700,6 +700,7 @@ func (ie InfraEditor) updateEnvForm(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 		ie.saveEnvForm()
 		ie.envView = envViewList
 	}
+	ie.saveEnvForm()
 	return ie, nil
 }
 
@@ -729,6 +730,7 @@ func (ie InfraEditor) updateEnvFormDropdown(key tea.KeyMsg) (InfraEditor, tea.Cm
 	case "esc", "b":
 		ie.dd.Open = false
 	}
+	ie.saveEnvForm()
 	return ie, nil
 }
 

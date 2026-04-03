@@ -279,6 +279,7 @@ func (be BackendEditor) updateAuthRoleForm(key tea.KeyMsg) (BackendEditor, tea.C
 		be.saveAuthRoleForm()
 		be.authSubView = beAuthViewRoleList
 	}
+	be.saveAuthRoleForm()
 	return be, nil
 }
 
@@ -397,6 +398,7 @@ func (be BackendEditor) updateAuthPermForm(key tea.KeyMsg) (BackendEditor, tea.C
 		be.saveAuthPermForm()
 		be.authSubView = beAuthViewPermList
 	}
+	be.saveAuthPermForm()
 	return be, nil
 }
 

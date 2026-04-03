@@ -96,6 +96,9 @@ func (dt DataTabEditor) updateCachingForm(key tea.KeyMsg) (DataTabEditor, tea.Cm
 		}
 		dt.cachingSubView = cachingViewList
 	}
+	if dt.cachingIdx < len(dt.cachings) {
+		dt.cachings[dt.cachingIdx] = cachingDefFromForm(dt.cachingForm)
+	}
 	return dt, nil
 }
 
@@ -236,6 +239,9 @@ func (dt DataTabEditor) updateFSForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 			dt.fileStorages[dt.fsIdx] = fsDefFromForm(dt.fsForm)
 		}
 		dt.fsSubView = fsViewList
+	}
+	if dt.fsIdx < len(dt.fileStorages) {
+		dt.fileStorages[dt.fsIdx] = fsDefFromForm(dt.fsForm)
 	}
 	return dt, nil
 }

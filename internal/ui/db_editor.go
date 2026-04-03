@@ -268,6 +268,7 @@ func (db DBEditor) updateNormalForm(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 		db.saveFormBack()
 		db.view = dbeViewList
 	}
+	db.saveFormBack()
 	return db, nil
 }
 
@@ -291,6 +292,7 @@ func (db DBEditor) updateDBDropdown(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 	case "esc", "b":
 		db.dd.Open = false
 	}
+	db.saveFormBack()
 	return db, nil
 }
 

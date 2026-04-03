@@ -36,6 +36,20 @@ func (be BackendEditor) updateDropdown(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		}
 		be.dd.Open = false
 	}
+	// Auto-save the active form so changes persist without requiring b/esc.
+	if be.serviceEditor.itemView == beListViewForm {
+		be.saveServiceForm()
+	} else if be.commEditor.itemView == beListViewForm {
+		be.saveCommForm()
+	} else if be.eventEditor.itemView == beListViewForm {
+		be.saveEventForm()
+	} else if be.jobsSubView == beViewForm {
+		be.saveJobsForm()
+	} else if be.authSubView == beAuthViewRoleForm {
+		be.saveAuthRoleForm()
+	} else if be.authSubView == beAuthViewPermForm {
+		be.saveAuthPermForm()
+	}
 	return be, nil
 }
 
