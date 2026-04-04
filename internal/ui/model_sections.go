@@ -53,6 +53,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 			update: func(m *Model, msg tea.Msg) tea.Cmd {
 				m.backendEditor.SetDomainNames(m.dataTabEditor.domainNames())
 				m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
+				m.backendEditor.SetDTOProtocols(m.contractsEditor.DTOProtocols())
 				m.backendEditor.SetEndpointNames(m.contractsEditor.EndpointNames())
 				m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
 				m.backendEditor.SetDBSourceAliases(m.dataTabEditor.AllDBSourceAliases())

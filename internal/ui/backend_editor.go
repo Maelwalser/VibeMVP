@@ -197,6 +197,7 @@ type BackendEditor struct {
 	availableEndpoints []string
 	cacheAliases       []string // IsCache DB aliases from the Data pillar
 	dbSourceAliases    []string // All DB source aliases from the Data pillar (for health_deps)
+	dtoProtocols       []string // unique DTO serialisation protocols from ContractsEditor
 	environmentNames   []string // InfraPillar environment names for service env dropdowns
 	orchestrator       string   // Primary orchestrator from InfraPillar for service discovery
 
@@ -291,6 +292,58 @@ func (be *BackendEditor) applyHealthDepsOptionsToFields(fields []Field) {
 // SetDTONames injects DTO names from the contracts tab for job payload dropdowns.
 func (be *BackendEditor) SetDTONames(names []string) {
 	be.availableDTOs = names
+}
+
+// dtoProtocolToSerialization maps a DTO protocol name to the corresponding
+// messaging serialization option, or "" if no mapping exists.
+func dtoProtocolToSerialization(proto string) string {
+	switch proto {
+	case "Protobuf":
+		return "Protobuf"
+	case "Avro":
+		return "Avro"
+	case "MessagePack":
+		return "MessagePack"
+	case "REST/JSON":
+		return "JSON"
+	default:
+		return ""
+	}
+}
+
+// SetDTOProtocols injects the unique serialisation protocols used by DTOs in
+// the Contracts pillar. When all DTOs share a single protocol that maps to a
+// messaging serialization option (Protobuf, Avro, MessagePack), the messaging
+// serialization field is updated to match. Mixed or unmappable protocols leave
+// the current selection unchanged.
+func (be *BackendEditor) SetDTOProtocols(protocols []string) {
+	if stringSlicesEqual(be.dtoProtocols, protocols) {
+		return
+	}
+	be.dtoProtocols = protocols
+
+	// Determine a single dominant serialization suggestion.
+	if len(protocols) != 1 {
+		return // mixed or no DTOs — leave current selection
+	}
+	suggested := dtoProtocolToSerialization(protocols[0])
+	if suggested == "" || suggested == "JSON" {
+		return // no actionable mapping
+	}
+
+	for i := range be.MessagingFields {
+		if be.MessagingFields[i].Key != "serialization" {
+			continue
+		}
+		for j, opt := range be.MessagingFields[i].Options {
+			if opt == suggested {
+				be.MessagingFields[i].SelIdx = j
+				be.MessagingFields[i].Value = suggested
+				break
+			}
+		}
+		break
+	}
 }
 
 // SetEndpointNames injects endpoint names from the contracts tab for the API

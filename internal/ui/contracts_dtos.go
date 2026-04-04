@@ -505,3 +505,17 @@ func (ce ContractsEditor) DTONames() []string {
 	return names
 }
 
+// DTOProtocols returns the unique serialisation protocols used across all DTOs.
+// Used by BackendEditor to suggest a matching messaging serialization default.
+func (ce ContractsEditor) DTOProtocols() []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, dto := range ce.dtos {
+		if dto.Protocol != "" && !seen[dto.Protocol] {
+			seen[dto.Protocol] = true
+			result = append(result, dto.Protocol)
+		}
+	}
+	return result
+}
+
