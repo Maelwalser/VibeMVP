@@ -31,12 +31,13 @@ func (p ProviderMenu) View() string {
 	// main header bar: light appears to sweep across the title.
 	decoL := StyleHeaderDeco.Render(headerDecoFrames[AnimFrame])
 	decoR := StyleHeaderDeco.Render(headerDecoFrames[1-AnimFrame])
-	titleText := StyleNeonMagenta.Render("◈ AI PROVIDERS ◈")
+	titleText := StyleNeonMagenta.Background(lipgloss.Color(clrBg2)).Render("◈ AI PROVIDERS ◈")
+	spaceBg := lipgloss.NewStyle().Background(lipgloss.Color(clrBg2)).Render(" ")
 	titleLine := lipgloss.NewStyle().
 		Background(lipgloss.Color(clrBg2)).
 		Width(pmBoxW).
 		Align(lipgloss.Center).
-		Render(decoL + " " + titleText + " " + decoR)
+		Render(decoL + spaceBg + titleText + spaceBg + decoR)
 	rows = append(rows, titleLine)
 	rows = append(rows, "") // padding below title
 	rows = append(rows, p.renderHeaders())
@@ -75,7 +76,8 @@ func (p ProviderMenu) View() string {
 		rows = append(rows, "")
 	}
 
-	// Context-sensitive hint bar.
+	// Context-sensitive hint bar — use hintBarBg so all spans carry clrBg2.
+	modalBg := lipgloss.Color(clrBg2)
 	var hints string
 	switch {
 	case p.focus == pmFocusCredential:
@@ -85,18 +87,18 @@ func (p ProviderMenu) View() string {
 		}
 		switch {
 		case authMethod == "OAuth" && p.oauthAwaitingClientID:
-			hints = hintBar("Enter", "open browser →", "Esc", "back")
+			hints = hintBarBg(modalBg, "Enter", "open browser →", "Esc", "back")
 		case authMethod == "OAuth":
-			hints = hintBar("Enter", "confirm token", "Ctrl+O", "re-authorize", "Esc", "back")
+			hints = hintBarBg(modalBg, "Enter", "confirm token", "Ctrl+O", "re-authorize", "Esc", "back")
 		default:
-			hints = hintBar("Enter", "confirm", "Esc", "back")
+			hints = hintBarBg(modalBg, "Enter", "confirm", "Esc", "back")
 		}
 	case p.dropdownOpen:
-		hints = hintBar("j/k", "version", "Enter", "confirm", "Esc", "cancel")
+		hints = hintBarBg(modalBg, "j/k", "version", "Enter", "confirm", "Esc", "cancel")
 	case p.focus == pmFocusProviders:
-		hints = hintBar("j/k", "navigate", "Enter", "configure", "x", "clear", "M", "close")
+		hints = hintBarBg(modalBg, "j/k", "navigate", "Enter", "configure", "x", "clear", "M", "close")
 	default:
-		hints = hintBar("j/k", "nav", "h/l", "col", "Enter", "pick", "Esc", "back")
+		hints = hintBarBg(modalBg, "j/k", "nav", "h/l", "col", "Enter", "pick", "Esc", "back")
 	}
 	rows = append(rows, hints)
 

@@ -213,7 +213,7 @@ func (w WelcomeModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(centerIn.Render(subtitle))
 	b.WriteString("\n\n")
-	b.WriteString(StyleHelpDesc.Render(strings.Repeat("─", boxWidth-4)))
+	b.WriteString(StyleHelpDesc.Background(lipgloss.Color(clrBg2)).Render(strings.Repeat("─", boxWidth-4)))
 	b.WriteString("\n\n")
 
 	switch w.phase {
@@ -223,21 +223,22 @@ func (w WelcomeModel) View() string {
 			options = append(options, "Continue: "+shortPath(w.recentPath))
 		}
 		options = append(options, "Open Existing Manifest", "New Project")
+		modalBg := lipgloss.Color(clrBg2)
 		for i, opt := range options {
 			if i == w.cursor {
-				b.WriteString(StyleNeonViolet.Render("❯ ") + StyleFieldValActive.Render(opt))
+				b.WriteString(StyleNeonViolet.Background(modalBg).Render("❯ ") + StyleFieldValActive.Background(modalBg).Render(opt))
 			} else {
-				b.WriteString(StyleHelpDesc.Render("  ") + StyleFieldVal.Render(opt))
+				b.WriteString(StyleHelpDesc.Background(modalBg).Render("  ") + StyleFieldVal.Background(modalBg).Render(opt))
 			}
 			b.WriteString("\n")
 		}
 		if w.errMsg != "" {
 			b.WriteString("\n")
-			b.WriteString(StyleMsgErr.Render(w.errMsg))
+			b.WriteString(StyleMsgErr.Background(modalBg).Render(w.errMsg))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(StyleHelpDesc.Render("j/k: navigate  Enter: select  q: quit"))
+		b.WriteString(StyleHelpDesc.Background(modalBg).Render("j/k: navigate  Enter: select  q: quit"))
 
 	case welcomePhaseOpenPath:
 		b.WriteString(StyleNeonCyan.Render("Open Existing Manifest"))

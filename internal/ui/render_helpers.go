@@ -429,6 +429,23 @@ func hintBar(pairs ...string) string {
 	return "  " + strings.Join(hints, sep)
 }
 
+// hintBarBg is like hintBar but applies bg to all text segments — for use
+// inside modals where the background must be explicit on every styled span.
+func hintBarBg(bg lipgloss.Color, pairs ...string) string {
+	if len(pairs)%2 != 0 {
+		return ""
+	}
+	keyStyle := StyleHelpKey.Background(bg)
+	descStyle := StyleHelpDesc.Background(bg)
+	var hints []string
+	for i := 0; i < len(pairs); i += 2 {
+		hints = append(hints, keyStyle.Render(pairs[i])+descStyle.Render(" "+pairs[i+1]))
+	}
+	sep := descStyle.Render("  │  ")
+	prefix := lipgloss.NewStyle().Background(bg).Render("  ")
+	return prefix + strings.Join(hints, sep)
+}
+
 // fieldGet returns the DisplayValue for the field with the given key in a slice.
 func fieldGet(fields []Field, key string) string {
 	for _, f := range fields {
