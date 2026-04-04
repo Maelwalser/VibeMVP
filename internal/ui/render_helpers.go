@@ -58,21 +58,35 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 	for i, f := range fields {
 		isCur := i == activeIdx
 
+		// Capture the cursor-row background once per row so every individually-
+		// styled component (line number, label, separator, value) carries it.
+		// Without this the ANSI reset at the end of each styled segment clears the
+		// background set by the outer row wrapper, leaving only bare spaces lit up.
+		var curBG lipgloss.TerminalColor
+		if isCur {
+			curBG = activeCurLineStyle().GetBackground()
+		}
+
 		var lineNo string
 		if isCur {
-			lineNo = StyleCurLineNum.Render(fmt.Sprintf("%3d ", i+1))
+			lineNo = StyleCurLineNum.Background(curBG).Render(fmt.Sprintf("%3d ", i+1))
 		} else {
 			lineNo = StyleLineNum.Render(fmt.Sprintf("%3d ", i+1))
 		}
 
 		var keyStr string
 		if isCur {
-			keyStr = StyleFieldKeyActive.Render(f.Label)
+			keyStr = StyleFieldKeyActive.Background(curBG).Render(f.Label)
 		} else {
 			keyStr = StyleFieldKey.Render(f.Label)
 		}
 
-		eq := StyleEquals.Render(" = ")
+		var eq string
+		if isCur {
+			eq = StyleEquals.Background(curBG).Render(" = ")
+		} else {
+			eq = StyleEquals.Render(" = ")
+		}
 
 		var valStr string
 		switch {
@@ -85,48 +99,81 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 				val = val[:valW-3] + "…"
 			}
 			if isCur {
-				val = StyleFieldValActive.Render(val)
+				val = StyleFieldValActive.Background(curBG).Render(val)
+				arrow := StyleSelectArrow.Background(curBG)
+				if ddOpen {
+					valStr = val + arrow.Render(" ▴")
+				} else {
+					valStr = val + arrow.Render(" ▾")
+				}
 			} else {
 				val = StyleFieldVal.Render(val)
-			}
-			if isCur && ddOpen {
-				valStr = val + StyleSelectArrow.Render(" ▴")
-			} else {
-				valStr = val + StyleSelectArrow.Render(" ▾")
+				if ddOpen {
+					valStr = val + StyleSelectArrow.Render(" ▴")
+				} else {
+					valStr = val + StyleSelectArrow.Render(" ▾")
+				}
 			}
 		case f.Kind == KindMultiSelect && f.ColorSwatch:
-			arrow := StyleSelectArrow.Render(" ▾")
-			if isCur && ddOpen {
-				arrow = StyleSelectArrow.Render(" ▴")
-			}
-			if len(f.SelectedIdxs) == 0 {
-				placeholder := "(none)"
-				if isCur {
-					valStr = StyleFieldValActive.Render(placeholder) + arrow
-				} else {
-					valStr = StyleFieldVal.Render(placeholder) + arrow
+			if isCur {
+				arrow := StyleSelectArrow.Background(curBG)
+				arrowStr := arrow.Render(" ▾")
+				if ddOpen {
+					arrowStr = arrow.Render(" ▴")
 				}
-			} else {
-				var pieces []string
-				for _, idx := range f.SelectedIdxs {
-					if idx >= 0 && idx < len(f.Options) {
-						hex := f.Options[idx]
-						if isCustomOption(hex) {
-							hex = f.CustomText
-						}
-						if strings.HasPrefix(hex, "#") {
-							swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(hex)).Bold(true).Render("■")
-							pieces = append(pieces, swatch+StyleFieldVal.Render(" "+hex))
-						} else {
-							pieces = append(pieces, StyleSectionDesc.Render("■")+StyleFieldVal.Render(" custom"))
+				if len(f.SelectedIdxs) == 0 {
+					valStr = StyleFieldValActive.Background(curBG).Render("(none)") + arrowStr
+				} else {
+					var pieces []string
+					for _, idx := range f.SelectedIdxs {
+						if idx >= 0 && idx < len(f.Options) {
+							hex := f.Options[idx]
+							if isCustomOption(hex) {
+								hex = f.CustomText
+							}
+							if strings.HasPrefix(hex, "#") {
+								swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(hex)).Background(curBG).Bold(true).Render("■")
+								pieces = append(pieces, swatch+StyleFieldVal.Background(curBG).Render(" "+hex))
+							} else {
+								pieces = append(pieces, StyleSectionDesc.Background(curBG).Render("■")+StyleFieldVal.Background(curBG).Render(" custom"))
+							}
 						}
 					}
+					val := strings.Join(pieces, StyleSectionDesc.Background(curBG).Render(" · "))
+					if lipgloss.Width(val) > valW-2 {
+						val = StyleFieldVal.Background(curBG).Render(fmt.Sprintf("%d colors", len(f.SelectedIdxs)))
+					}
+					valStr = val + arrowStr
 				}
-				val := strings.Join(pieces, StyleSectionDesc.Render(" · "))
-				if lipgloss.Width(val) > valW-2 {
-					val = StyleFieldVal.Render(fmt.Sprintf("%d colors", len(f.SelectedIdxs)))
+			} else {
+				arrow := StyleSelectArrow.Render(" ▾")
+				if ddOpen {
+					arrow = StyleSelectArrow.Render(" ▴")
 				}
-				valStr = val + arrow
+				if len(f.SelectedIdxs) == 0 {
+					valStr = StyleFieldVal.Render("(none)") + arrow
+				} else {
+					var pieces []string
+					for _, idx := range f.SelectedIdxs {
+						if idx >= 0 && idx < len(f.Options) {
+							hex := f.Options[idx]
+							if isCustomOption(hex) {
+								hex = f.CustomText
+							}
+							if strings.HasPrefix(hex, "#") {
+								swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(hex)).Bold(true).Render("■")
+								pieces = append(pieces, swatch+StyleFieldVal.Render(" "+hex))
+							} else {
+								pieces = append(pieces, StyleSectionDesc.Render("■")+StyleFieldVal.Render(" custom"))
+							}
+						}
+					}
+					val := strings.Join(pieces, StyleSectionDesc.Render(" · "))
+					if lipgloss.Width(val) > valW-2 {
+						val = StyleFieldVal.Render(fmt.Sprintf("%d colors", len(f.SelectedIdxs)))
+					}
+					valStr = val + arrow
+				}
 			}
 		case f.Kind == KindMultiSelect:
 			val := f.DisplayValue()
@@ -138,14 +185,20 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 				val = val[:valW-3] + "…"
 			}
 			if isCur {
-				val = StyleFieldValActive.Render(val)
+				val = StyleFieldValActive.Background(curBG).Render(val)
+				arrow := StyleSelectArrow.Background(curBG)
+				if ddOpen {
+					valStr = val + arrow.Render(" ▴")
+				} else {
+					valStr = val + arrow.Render(" ▾")
+				}
 			} else {
 				val = StyleFieldVal.Render(val)
-			}
-			if isCur && ddOpen {
-				valStr = val + StyleSelectArrow.Render(" ▴")
-			} else {
-				valStr = val + StyleSelectArrow.Render(" ▾")
+				if ddOpen {
+					valStr = val + StyleSelectArrow.Render(" ▴")
+				} else {
+					valStr = val + StyleSelectArrow.Render(" ▾")
+				}
 			}
 		default:
 			dv := f.DisplayValue()
@@ -153,9 +206,13 @@ func renderFormFields(w int, fields []Field, activeIdx int, insertMode bool, inp
 				dv = dv[:valW-1] + "…"
 			}
 			if dv == "" {
-				valStr = StyleSectionDesc.Render("_")
+				if isCur {
+					valStr = StyleSectionDesc.Background(curBG).Render("_")
+				} else {
+					valStr = StyleSectionDesc.Render("_")
+				}
 			} else if isCur {
-				valStr = StyleFieldValActive.Render(dv)
+				valStr = StyleFieldValActive.Background(curBG).Render(dv)
 			} else {
 				valStr = StyleFieldVal.Render(dv)
 			}

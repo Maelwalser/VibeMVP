@@ -270,10 +270,7 @@ var (
 			Foreground(lipgloss.Color("#303030"))
 )
 
-// activeCurLineStyle returns the highlighted-row style for the current animation frame.
+// activeCurLineStyle returns the highlighted-row style (constant, no pulse animation).
 func activeCurLineStyle() lipgloss.Style {
-	if AnimFrame == 1 {
-		return StyleCurLinePulse
-	}
 	return StyleCurLine
 }

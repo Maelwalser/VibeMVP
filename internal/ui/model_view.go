@@ -311,7 +311,7 @@ func (m Model) renderTabBar(w int) string {
 //
 //	[NRM]  SECTION  ──────────────────────────────────────  02/08
 func (m Model) renderStatusLine(w int) string {
-	glyphs := modeSpinFrames[AnimFrame]
+	glyphs := modeSpinFrames[0]
 
 	var modeStyle lipgloss.Style
 	var modeText string
