@@ -192,11 +192,15 @@ func (w WelcomeModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return w, nil
 }
 
-// vibeBanner — editorial block-letter wordmark, 3 lines × 28 chars.
-var vibeBanner = [3]string{
-	"╦  ╦╦╔╗ ╔═╗╔╦╗╔═╗╔╗╔╦ ╦",
-	"╚╗╔╝║╠╩╗║╣ ║║║║╣ ║║║║ ║",
-	" ╚╝ ╩╚═╝╚═╝╩ ╩╚═╝╝╚╝╚═╝",
+// vibeBanner — ASCII art wordmark, 7 lines (no trailing spaces).
+var vibeBanner = [7]string{
+	`  _     _   __     _____     _____  __    __    _____  __   __   __    __`,
+	` /_/\ /\_\ /\_\  /\  __/\  /\_____\/_/\  /\_\ /\_____\/_/\ /\_\ /\_\  /_/\`,
+	` ) ) ) ( ( \/_/  ) )(_ ) )( (_____/) ) \/ ( (( (_____/) ) \ ( (( ( (  ) ) )`,
+	`/_/ / \ \_\ /\_\/ / __/ /  \ \__\ /_/ \  / \_\\ \__\ /_/   \ \_\\ \ \/ / /`,
+	`\ \ \_/ / // / /\ \  _\ \  / /__/_\ \ \\// / // /__/_\ \ \   / / \ \  / /`,
+	` \ \   / /( (_(  ) )(__) )( (_____\)_) )( (_(( (_____\)_) \ (_(  ( (__) )`,
+	`  \_\_/_/  \/_/  \/____\/  \/_____/\_\/  \/_/ \/_____/\_\/ \/_/   \/__\/`,
 }
 
 // View satisfies tea.Model.
@@ -209,23 +213,31 @@ func (w WelcomeModel) View() string {
 	dim := lipgloss.Color(clrFgDim)
 	border := lipgloss.Color(clrComment)
 
-	const innerW = 48
-	const boxWidth = innerW + 4 // 2 padding each side
+	// innerW is derived from the widest banner line plus 2 so the bounding box
+	// of the art has exactly 1 space of margin on each side (left and right).
+	innerW := 0
+	for _, line := range vibeBanner {
+		if len(line) > innerW {
+			innerW = len(line)
+		}
+	}
+	innerW += 2
+	boxWidth := innerW + 4 // border (1+1) + padding (1+1)
 
 	center := lipgloss.NewStyle().Width(innerW).Align(lipgloss.Center).Background(modalBg)
 	left := lipgloss.NewStyle().Width(innerW).Background(modalBg)
+
+	bannerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(clrYellow)).
+		Bold(true).
+		Background(modalBg)
 
 	var b strings.Builder
 
 	// ── Wordmark ─────────────────────────────────────────────────────────────
 	b.WriteString("\n")
 	for _, line := range vibeBanner {
-		styled := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(clrYellow)).
-			Bold(true).
-			Background(modalBg).
-			Render(line)
-		b.WriteString(center.Render(styled))
+		b.WriteString(bannerStyle.Render(" " + line))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
