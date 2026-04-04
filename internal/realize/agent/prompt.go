@@ -3,9 +3,11 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/vibe-menu/internal/realize/dag"
+	"github.com/vibe-menu/internal/realize/memory"
 	"github.com/vibe-menu/internal/realize/skills"
 )
 
@@ -45,12 +47,39 @@ func UserMessage(ac *Context) (string, error) {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("## Task: %s\n\n", ac.Task.Label))
 	b.WriteString(fmt.Sprintf("Task ID: %s\nKind: %s\n", ac.Task.ID, ac.Task.Kind))
-	if ac.Task.Payload.ModulePath != "" {
-		b.WriteString(fmt.Sprintf("Module path: %s  ← use this EXACTLY as the Go module name in go.mod and all import paths\n", ac.Task.Payload.ModulePath))
+	modulePath := ac.Task.Payload.ModulePath
+	if modulePath != "" {
+		b.WriteString(fmt.Sprintf("Module path: **%s**  ← REQUIRED: use this EXACTLY as the Go module name in go.mod and ALL internal import paths. Never substitute a placeholder like \"github.com/your-org/\" or \"github.com/your-company/\".\n", modulePath))
 	}
 	b.WriteString("\n## Manifest Payload\n\n```json\n")
 	b.Write(payloadJSON)
 	b.WriteString("\n```\n")
+
+	// Cross-task type registry: list all types already defined by upstream tasks.
+	// Injected on attempt 0 only — on retries the registry is stable and the agent
+	// already received it in the earlier attempt.
+	if len(ac.ExistingTypeRegistry) > 0 && ac.AttemptNumber == 0 {
+		b.WriteString("\n## Cross-Task Type Registry — DO NOT REDEFINE\n\n")
+		b.WriteString("These types are already defined by upstream tasks. ")
+		b.WriteString("**Import them from the listed package — do NOT redeclare them in your output.**\n")
+		b.WriteString("Redefining these types will cause a `redeclared in this block` compilation error.\n\n")
+		names := make([]string, 0, len(ac.ExistingTypeRegistry))
+		for name := range ac.ExistingTypeRegistry {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			entry := ac.ExistingTypeRegistry[name]
+			if entry.Package != "" {
+				importPath := entry.Package
+				if modulePath != "" {
+					importPath = modulePath + "/" + entry.Package
+				}
+				b.WriteString(fmt.Sprintf("- `%s` — `%s` — import as `\"%s\"`\n", name, entry.File, importPath))
+			}
+		}
+		b.WriteString("\n")
+	}
 
 	// Inject shared memory from completed upstream tasks.
 	// On attempt 0: inject full type-signature excerpts so the agent knows what
@@ -86,6 +115,20 @@ func UserMessage(ac *Context) (string, error) {
 				b.WriteString(fmt.Sprintf("- %s (%s): %d file(s)\n", dep.Label, dep.Kind, len(dep.Files)))
 			}
 			b.WriteString("\n")
+		}
+	}
+
+	// Highlight constructor signatures from dependency outputs so that tasks like
+	// bootstrap don't mishandle multi-return constructors (e.g. ignore an error).
+	if len(ac.DependencyOutputs) > 0 && ac.AttemptNumber == 0 {
+		if ctors := extractConstructorSignatures(ac.DependencyOutputs); len(ctors) > 0 {
+			b.WriteString("\n## Critical Constructor Signatures\n\n")
+			b.WriteString("Call these constructors with the **exact** return signature shown, including error returns:\n\n")
+			b.WriteString("```go\n")
+			for _, sig := range ctors {
+				b.WriteString(sig + "\n")
+			}
+			b.WriteString("```\n")
 		}
 	}
 
@@ -186,6 +229,37 @@ func errorPatternHints(errors string) string {
 			"Formatting issue: one or more files are not gofmt-clean. Use standard Go indentation (tabs) " +
 				"and ensure the generated source passes `gofmt -l` without listing any files.",
 		},
+		{
+			"has no field named",
+			"Struct field mismatch: you are accessing a field that does not exist on the type. " +
+				"Check the exact struct definition in the Shared Team Context above — do not guess field names. " +
+				"Common cause: using a shorthand like resp.Email when the actual field is nested (resp.User.Email), " +
+				"or the struct was renamed by an upstream task.",
+		},
+		{
+			"not enough return values",
+			"Return arity mismatch: a function returns fewer values than the caller expects. " +
+				"Check the Critical Constructor Signatures and Shared Team Context — a New* constructor " +
+				"likely changed to return an additional error value. Update the call site to handle all return values.",
+		},
+		{
+			"too many return values",
+			"Return arity mismatch: a function returns more values than the caller expects. " +
+				"Check the function's actual signature in the Shared Team Context above.",
+		},
+		{
+			"multiple-value",
+			"Multi-return handling: a function returning multiple values (e.g. value, error) is being " +
+				"used in a single-value context. Assign all return values explicitly: " +
+				"svc, err := NewService(...); if err != nil { ... }",
+		},
+		{
+			"cannot find module providing",
+			"Unknown import path: the imported package does not match any module in go.mod. " +
+				"Verify you are using the exact module path from the 'Module path:' field at the top of this task, " +
+				"not a placeholder like 'github.com/your-org/' or 'github.com/your-company/'. " +
+				"All internal packages must be imported as '{module_path}/internal/...'.",
+		},
 	}
 
 	var matched []string
@@ -205,6 +279,37 @@ func errorPatternHints(errors string) string {
 		b.WriteString(m + "\n")
 	}
 	return b.String()
+}
+
+// extractConstructorSignatures scans dependency output excerpts for exported
+// constructor functions (func New*) and returns their signature lines.
+// This is injected into the prompt so downstream tasks (especially bootstrap)
+// call constructors with the correct number of return values.
+func extractConstructorSignatures(deps []*memory.TaskOutput) []string {
+	seen := make(map[string]bool)
+	var sigs []string
+	for _, dep := range deps {
+		for _, f := range dep.Files {
+			if !strings.HasSuffix(strings.ToLower(f.Path), ".go") {
+				continue
+			}
+			for _, line := range strings.Split(f.Content, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "func New") && strings.Contains(trimmed, "(") {
+					// Strip body marker if signature was already extracted.
+					sig := strings.TrimSuffix(trimmed, " {")
+					sig = strings.TrimSuffix(sig, "{")
+					sig = strings.TrimSpace(sig)
+					if !seen[sig] {
+						seen[sig] = true
+						sigs = append(sigs, sig)
+					}
+				}
+			}
+		}
+	}
+	sort.Strings(sigs)
+	return sigs
 }
 
 // outputFormatInstructions describes the required response format to the agent.

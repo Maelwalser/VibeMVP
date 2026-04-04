@@ -23,4 +23,9 @@ type Context struct {
 	// for the task's technology stack. Injected into the system prompt to
 	// prevent the agent from inventing module versions or non-existent types.
 	DepsContext string
+	// ExistingTypeRegistry is a snapshot of all exported types already committed
+	// by upstream tasks, keyed by type name. Agents must import from the listed
+	// package path instead of redefining the type. This prevents duplicate
+	// interface/struct declarations across independently generated tasks.
+	ExistingTypeRegistry map[string]memory.TypeEntry
 }

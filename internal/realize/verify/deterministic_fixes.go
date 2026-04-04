@@ -19,6 +19,11 @@ import (
 func ApplyDeterministicFixes(dir string, files []string) string {
 	var fixes []string
 
+	// Fix placeholder import paths first — rewriting imports may introduce
+	// temporarily un-gofmt'd lines, so run gofmt after.
+	if f := fixPlaceholderImportPaths(dir, files); f != "" {
+		fixes = append(fixes, f)
+	}
 	if f := fixGoEscapeSequences(dir, files); f != "" {
 		fixes = append(fixes, f)
 	}
@@ -33,6 +38,88 @@ func ApplyDeterministicFixes(dir string, files []string) string {
 		return ""
 	}
 	return strings.Join(fixes, "; ")
+}
+
+// ── Placeholder import path fix ──────────────────────────────────────────────
+//
+// LLMs sometimes use placeholder organisation names in import paths
+// (e.g. "github.com/your-org/app-name/internal/domain") instead of the actual
+// Go module path declared in go.mod. This function reads go.mod from the temp
+// directory, extracts the module path, and rewrites any placeholder-org imports
+// to use the correct path — without requiring an LLM retry.
+
+// placeholderOrgRe matches quoted import paths whose second path component is a
+// known placeholder organisation name, e.g. "github.com/your-org/repo/internal/...".
+var placeholderOrgRe = regexp.MustCompile(
+	`"github\.com/(?:your-org|your-company|yourcompany|your_company|` +
+		`mycompany|my-company|example-org|my-org|acme|acme-corp|` +
+		`your-app|myapp|company|org-name|team-name)/[^"]+"`,
+)
+
+func fixPlaceholderImportPaths(dir string, files []string) string {
+	modulePath := extractModulePathFromDir(dir)
+	if modulePath == "" {
+		return ""
+	}
+
+	fixed := 0
+	for _, f := range files {
+		if filepath.Ext(f) != ".go" {
+			continue
+		}
+		path := filepath.Join(dir, f)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		newContent := placeholderOrgRe.ReplaceAllStringFunc(content, func(match string) string {
+			// match is e.g. `"github.com/your-org/auth-api/internal/domain"`
+			inner := match[1 : len(match)-1] // strip surrounding quotes
+			// Split: ["github.com", "your-org", "auth-api", "internal", "domain", ...]
+			parts := strings.SplitN(inner, "/", 4)
+			if len(parts) < 3 {
+				return match // unexpected shape — leave unchanged
+			}
+			if len(parts) == 4 {
+				// Has sub-path: replace org+repo with modulePath, keep sub-path.
+				return `"` + modulePath + "/" + parts[3] + `"`
+			}
+			// Import is the module root itself (e.g. "github.com/your-org/auth-api").
+			return `"` + modulePath + `"`
+		})
+		if newContent != content {
+			os.WriteFile(path, []byte(newContent), 0644)
+			fixed++
+		}
+	}
+	if fixed == 0 {
+		return ""
+	}
+	return fmt.Sprintf("rewrote placeholder import paths in %d file(s) (module: %s)", fixed, modulePath)
+}
+
+// extractModulePathFromDir reads the module path from the go.mod file located
+// in dir or any of its parent directories, returning "" when none is found.
+func extractModulePathFromDir(dir string) string {
+	current := dir
+	for {
+		data, err := os.ReadFile(filepath.Join(current, "go.mod"))
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "module ") {
+					return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+				}
+			}
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+	return ""
 }
 
 // ── Escape sequence fix ──────────────────────────────────────────────────────

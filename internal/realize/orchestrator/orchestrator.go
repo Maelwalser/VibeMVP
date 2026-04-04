@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -145,6 +146,26 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		}
 	}
 
+	// Run a project-wide integration build after all tasks complete.
+	// This catches cross-task compilation errors (import path mismatches, type
+	// field access on wrong struct, missing multi-return handling) that per-task
+	// verification misses because each task is verified in isolation.
+	// Non-blocking: failures are logged with a targeted summary but do not abort
+	// the pipeline — the user receives all generated code plus a clear diagnostic.
+	o.log("realize: running integration build across all output files...")
+	intResult := verify.RunIntegrationBuild(ctx, o.cfg.OutputDir)
+	if intResult.Passed {
+		o.log("realize: integration build passed ✓ — all generated code compiles together")
+	} else {
+		o.log("realize: ⚠ integration build found cross-task errors:\n%s", intResult.Output)
+		o.log("realize: NOTE — the above errors were not caught by per-task verification because")
+		o.log("realize:       tasks are verified in isolation. Common causes:")
+		o.log("realize:       1. Wrong import paths — check that all internal imports use module path '%s'", modulePathFromOutput(o.cfg.OutputDir))
+		o.log("realize:       2. Duplicate type declarations — two tasks defined conflicting interfaces")
+		o.log("realize:       3. Function signature mismatch — caller ignores an error return value")
+		o.log("realize:       Run 'go build ./...' inside the backend directory to reproduce the errors.")
+	}
+
 	o.log("realize: complete — output written to %s", o.cfg.OutputDir)
 	return nil
 }
@@ -245,6 +266,42 @@ func (o *Orchestrator) printPlan(d *dag.DAG, providers manifest.ProviderAssignme
 		}
 	}
 	return nil
+}
+
+// modulePathFromOutput attempts to read the Go module path from the first go.mod
+// found under outputDir, for use in diagnostic messages.
+func modulePathFromOutput(outputDir string) string {
+	var result string
+	filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || result != "" {
+			return nil
+		}
+		if info.IsDir() {
+			if name := info.Name(); name == ".tmp" || name == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.Name() != "go.mod" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "module ") {
+				result = strings.TrimSpace(strings.TrimPrefix(line, "module "))
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	if result == "" {
+		return "<unknown>"
+	}
+	return result
 }
 
 // loadManifest reads and parses a manifest.json file.

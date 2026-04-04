@@ -1,8 +1,45 @@
 package memory
 
 import (
+	"path/filepath"
 	"strings"
 )
+
+// ExtractGoExportedTypeNames returns a map of exported type name → TypeEntry for
+// every exported type, interface, struct alias, or const group declared in the given
+// Go source file. Test files (_test.go) are intentionally skipped.
+//
+// This is used to populate the cross-task type registry so downstream agents know
+// which types are already defined and must not be redeclared.
+func ExtractGoExportedTypeNames(filePath, content string) map[string]TypeEntry {
+	lower := strings.ToLower(filePath)
+	if !strings.HasSuffix(lower, ".go") || strings.HasSuffix(lower, "_test.go") {
+		return nil
+	}
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+	result := make(map[string]TypeEntry)
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "type ") {
+			continue
+		}
+		// "type Foo struct {" / "type Foo interface {" / "type Foo = Bar"
+		parts := strings.Fields(trimmed)
+		if len(parts) < 2 {
+			continue
+		}
+		name := parts[1]
+		// Only export-worthy (capitalised) names.
+		if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
+			continue
+		}
+		result[name] = TypeEntry{Package: pkg, File: filePath}
+	}
+	return result
+}
 
 // extractSignatures returns a compact representation of a source file containing
 // only type declarations, exported function/method signatures, and package/import

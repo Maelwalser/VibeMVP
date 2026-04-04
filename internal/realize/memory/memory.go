@@ -8,7 +8,6 @@ import (
 	"github.com/vibe-menu/internal/realize/dag"
 )
 
-
 // FileExcerpt is a filtered, possibly-truncated snapshot of one generated file.
 type FileExcerpt struct {
 	Path    string
@@ -26,20 +25,31 @@ type TaskOutput struct {
 	Files  []FileExcerpt
 }
 
+// TypeEntry records where an exported type is first defined across the project.
+// Used to build the cross-task type registry that prevents duplicate declarations.
+type TypeEntry struct {
+	// Package is the relative package directory, e.g. "internal/domain".
+	Package string
+	// File is the relative source file path, e.g. "internal/domain/user.go".
+	File string
+}
+
 // SharedMemory is a thread-safe store of completed task outputs.
 // It is written to by TaskRunner after a successful commit and read by
 // downstream agents before they are invoked.
 type SharedMemory struct {
-	mu       sync.RWMutex
-	outputs  map[string]*TaskOutput
-	rawPaths map[string][]string // task ID → committed file paths (untruncated)
+	mu           sync.RWMutex
+	outputs      map[string]*TaskOutput
+	rawPaths     map[string][]string // task ID → committed file paths (untruncated)
+	typeRegistry map[string]TypeEntry // exported type name → first-seen location
 }
 
 // New returns an empty SharedMemory.
 func New() *SharedMemory {
 	return &SharedMemory{
-		outputs:  make(map[string]*TaskOutput),
-		rawPaths: make(map[string][]string),
+		outputs:      make(map[string]*TaskOutput),
+		rawPaths:     make(map[string][]string),
+		typeRegistry: make(map[string]TypeEntry),
 	}
 }
 
@@ -64,6 +74,36 @@ func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
 	defer m.mu.Unlock()
 	m.outputs[task.ID] = out
 	m.rawPaths[task.ID] = paths
+}
+
+// RegisterTypes records the exported types produced by a task into the shared type
+// registry. If a type name is already registered (by an earlier task), the existing
+// entry is kept — first-writer wins, which matches Go's compilation semantics where
+// the first definition in the dependency order is authoritative.
+// Safe for concurrent use.
+func (m *SharedMemory) RegisterTypes(types map[string]TypeEntry) {
+	if len(types) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for name, entry := range types {
+		if _, exists := m.typeRegistry[name]; !exists {
+			m.typeRegistry[name] = entry
+		}
+	}
+}
+
+// TypeRegistry returns a snapshot of all exported types seen so far.
+// Safe for concurrent use.
+func (m *SharedMemory) TypeRegistry() map[string]TypeEntry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make(map[string]TypeEntry, len(m.typeRegistry))
+	for k, v := range m.typeRegistry {
+		result[k] = v
+	}
+	return result
 }
 
 // CommittedPaths returns all file paths committed by the given dependency task IDs.

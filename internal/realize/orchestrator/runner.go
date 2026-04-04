@@ -162,12 +162,13 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		a := r.agentForAttempt(attempt)
 
 		ac := &agent.Context{
-			Task:              r.task,
-			SkillDocs:         r.skillDocs,
-			PreviousErrors:    lastVerifyOutput,
-			DependencyOutputs: r.memory.DepsOf(r.task),
-			AttemptNumber:     attempt,
-			DepsContext:       r.depsContext,
+			Task:                 r.task,
+			SkillDocs:            r.skillDocs,
+			PreviousErrors:       lastVerifyOutput,
+			DependencyOutputs:    r.memory.DepsOf(r.task),
+			AttemptNumber:        attempt,
+			DepsContext:          r.depsContext,
+			ExistingTypeRegistry: r.memory.TypeRegistry(),
 		}
 
 		result, err := a.Run(ctx, ac)
@@ -271,11 +272,28 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 		}
 	}
 	r.memory.Record(r.task, files)
+	r.registerExportedTypes(files)
 	if err := r.state.MarkCompleted(r.task.ID); err != nil {
 		r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 	}
 	r.log("[%s] done (%d files)", r.task.ID, len(files))
 	return nil
+}
+
+// registerExportedTypes scans the committed Go files for exported type declarations
+// and records them in the shared type registry. Downstream tasks see this registry
+// and are instructed not to redeclare the listed types — preventing the dual-interface
+// pattern where two tasks independently define conflicting type aliases.
+func (r *TaskRunner) registerExportedTypes(files []dag.GeneratedFile) {
+	types := make(map[string]memory.TypeEntry)
+	for _, f := range files {
+		for name, entry := range memory.ExtractGoExportedTypeNames(f.Path, f.Content) {
+			types[name] = entry
+		}
+	}
+	if len(types) > 0 {
+		r.memory.RegisterTypes(types)
+	}
 }
 
 // readLockedGoMod reads the go.mod produced by a prior phase (plan or deps resolution)

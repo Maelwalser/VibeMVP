@@ -2,6 +2,42 @@ package agent
 
 import "github.com/vibe-menu/internal/realize/dag"
 
+// crossTaskConsistencyRules is appended to every implementation-layer role
+// description. It enforces the invariants that prevent the most common
+// cross-task compilation failures: wrong module paths, duplicate type declarations,
+// and mismatched constructor signatures.
+const crossTaskConsistencyRules = `
+
+## Cross-Task Consistency Requirements (CRITICAL)
+
+These rules are checked by a project-wide integration build that runs after all tasks
+complete. Violating them causes compilation failures that are harder to fix than
+per-task errors.
+
+1. **Module path**: Use EXACTLY the value from the "Module path:" field at the top of the
+   task message for every internal import path. NEVER use placeholder paths such as
+   "github.com/your-org/", "github.com/your-company/", or any invented organisation name.
+   Internal packages must be imported as "<module_path>/internal/...".
+
+2. **No duplicate type declarations**: If a type, interface, struct, or error sentinel is
+   listed in the "Cross-Task Type Registry" or shown in "Shared Team Context", import it
+   from the listed package — do NOT define it again. Duplicate declarations in the same
+   package cause a "redeclared in this block" compile error that cannot be auto-fixed.
+
+3. **Constructor call signatures**: Match the EXACT return signature of every New* function
+   shown in "Critical Constructor Signatures". If a constructor returns (T, error), you
+   MUST assign both return values: svc, err := NewFoo(...); if err != nil { ... }.
+   Ignoring a returned error causes a "multiple-value in single-value context" compile error.
+
+4. **Sentinel errors**: Use error sentinel values from internal/domain/errors.go and
+   internal/repository/errors.go. Return them unwrapped (fmt.Errorf("context: %w", ErrFoo))
+   so callers can use errors.Is(). Do not invent new sentinel names not present in those files.
+
+5. **Cookie / CORS security**: Never combine AllowCredentials: true with AllowOrigins: "*" —
+   this violates the CORS spec and will silently break all credentialed browser requests.
+   Use a specific origin list or read it from an environment variable. Avoid Secure: true on
+   cookies in configurations that may run over plain HTTP in development.`
+
 // taskRoleDescriptions maps each TaskKind to the system-prompt role text that
 // scopes the agent's expertise and strict file output rules.
 // Add or edit entries here to change per-task agent behaviour without touching
@@ -40,14 +76,19 @@ STRICT SCOPE: Output ONLY Go source files under internal/domain/ with package do
 
 STRICT SCOPE:
 - Repository interfaces (e.g. UserRepository, BlogRepository) in internal/repository/interfaces.go
+  EXCEPTION: if the "Cross-Task Type Registry" already lists a UserRepository or similar interface,
+  do NOT redefine it — add new interfaces only for entities not already covered.
 - PostgreSQL implementations in internal/repository/postgres/<entity>_repository.go
 - A database connection/pool setup file (internal/repository/postgres/db.go)
 - Table-driven _test.go files alongside each implementation
 - Use the module path from the payload's module_path field for all imports
 - DO NOT generate: domain structs (already in internal/domain/), service layer, handlers, main.go, or go.mod
+- Return sentinel errors from internal/repository/errors.go (e.g. repository.ErrNotFound) so
+  callers can use errors.Is() — never return fmt.Errorf("not found") for well-known conditions.
 
 For ArchModularMonolith: group by module instead of by layer —
-use internal/modules/{module-name}/repository/ and internal/modules/{module-name}/repository/postgres/`,
+use internal/modules/{module-name}/repository/ and internal/modules/{module-name}/repository/postgres/` +
+		crossTaskConsistencyRules,
 
 	dag.TaskKindServiceLogic: `You are an expert Go backend engineer. Generate ONLY the service (business logic) layer.
 
@@ -58,7 +99,8 @@ STRICT SCOPE:
 - Use the module path from the payload's module_path field for all imports
 - DO NOT generate: domain structs, repository code, handlers, main.go, or go.mod
 
-For ArchModularMonolith: group by module — use internal/modules/{module-name}/service/`,
+For ArchModularMonolith: group by module — use internal/modules/{module-name}/service/` +
+		crossTaskConsistencyRules,
 
 	dag.TaskKindServiceHandler: `You are an expert Go backend engineer. Generate ONLY the HTTP handler and routing layer.
 
@@ -71,7 +113,8 @@ STRICT SCOPE:
 - DO NOT generate: domain structs, repository code, service code, main.go, or go.mod
 
 For ArchModularMonolith: group by module — use internal/modules/{module-name}/handler/
-and a single internal/router/router.go that imports all module handlers`,
+and a single internal/router/router.go that imports all module handlers` +
+		crossTaskConsistencyRules,
 
 	dag.TaskKindServiceBootstrap: `You are an expert Go backend engineer. Generate ONLY the application bootstrap files.
 
@@ -79,7 +122,15 @@ STRICT SCOPE:
 - main.go — wires together all layers (repository → service → handler), starts the HTTP server
 - .env.example — all required environment variables with placeholder values
 - DO NOT generate go.mod or go.sum — the module was already created and all dependencies fully resolved in the project skeleton + dependency resolution phases. Regenerating go.mod would overwrite the locked dependency tree and reintroduce version conflicts.
-- DO NOT generate: domain structs, repository code, service code, or handler code (they are already generated)`,
+- DO NOT generate: domain structs, repository code, service code, or handler code (they are already generated)
+
+BOOTSTRAP WIRING RULES (CRITICAL):
+- Every New* constructor in the "Critical Constructor Signatures" section returns specific types —
+  match those exact signatures. Multi-return constructors (e.g. svc, err := NewService(...)) MUST
+  have their error return handled before proceeding.
+- Use ONLY the layer types listed in Shared Team Context. Do NOT introduce new service structs,
+  new repository implementations, or new interfaces that are not shown upstream.` +
+		crossTaskConsistencyRules,
 
 	dag.TaskKindAuth:      "You are an expert security engineer. Generate authentication and authorization middleware, JWT token handling, and identity integration code.",
 	dag.TaskKindMessaging: "You are an expert distributed systems engineer. Generate message broker configuration, event producer/consumer boilerplate, and event schema definitions.",
