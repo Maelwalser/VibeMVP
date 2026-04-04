@@ -212,18 +212,21 @@ func outputFormatInstructions() string {
 	return `## Output Format
 
 You MUST respond with a <files> block containing a JSON array of file objects.
-Each file object has a "path" (relative to the project output directory) and "content" (complete file content).
+Each file object has a "path" (relative to YOUR component's directory) and "content" (complete file content).
+The pipeline places your files under the correct subdirectory automatically — use component-relative paths
+like "go.mod", "internal/service/user.go", "src/components/Button.tsx". Do NOT prefix paths with
+directory names like "backend/", "frontend/", or "services/user-api/" — those are added by the pipeline.
 
 Example:
 <files>
 [
   {
-    "path": "services/user-api/main.go",
+    "path": "main.go",
     "content": "package main\n\nimport ..."
   },
   {
-    "path": "services/user-api/Dockerfile",
-    "content": "FROM golang:<version>-alpine\n..."
+    "path": "internal/domain/user.go",
+    "content": "package domain\n\n..."
   }
 ]
 </files>

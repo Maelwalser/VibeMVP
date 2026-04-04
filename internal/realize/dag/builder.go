@@ -80,6 +80,7 @@ func deriveModulePath(svcName string) string {
 // ── Wave 0: data tasks ────────────────────────────────────────────────────────
 
 func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
+	svcDirs := serviceOutputDirs(m)
 	basePayload := TaskPayload{
 		ArchPattern:  m.Backend.ArchPattern,
 		EnvConfig:    m.Backend.Env,
@@ -88,6 +89,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 		Cachings:     m.Data.Cachings,
 		FileStorages: m.Data.FileStorages,
 		AllServices:  m.Backend.Services,
+		OutputDir:    backendBaseDir(svcDirs),
 	}
 
 	add(d, &Task{
@@ -111,6 +113,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 
 func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 	dataDeps := []string{"data.schemas", "data.migrations"}
+	svcDirs := serviceOutputDirs(m)
 
 	switch m.Backend.ArchPattern {
 	case manifest.ArchMonolith, manifest.ArchModularMonolith:
@@ -124,15 +127,15 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 			svc = m.Backend.Services[0]
 			svc.Name = "monolith"
 		}
-		b.addServiceTaskChain(m, &svc, d, dataDeps)
+		b.addServiceTaskChain(m, &svc, d, dataDeps, svcDirs)
 	default:
 		// microservices, event-driven, hybrid: one chain per service
 		for i := range m.Backend.Services {
-			b.addServiceTaskChain(m, &m.Backend.Services[i], d, dataDeps)
+			b.addServiceTaskChain(m, &m.Backend.Services[i], d, dataDeps, svcDirs)
 		}
 	}
 
-	// Auth middleware (always emitted if strategy is set)
+	// Auth middleware generates Go code — it belongs alongside the backend module.
 	if m.Backend.Auth.Strategy != "" {
 		add(d, &Task{
 			ID:    "backend.auth",
@@ -146,11 +149,12 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 				Databases:   m.Data.Databases,
 				AllServices: m.Backend.Services,
 				Auth:        &m.Backend.Auth,
+				OutputDir:   backendBaseDir(svcDirs),
 			},
 		})
 	}
 
-	// Messaging broker + event stubs
+	// Messaging broker + event stubs (config-level, stays at root)
 	if m.Backend.Messaging != nil {
 		add(d, &Task{
 			ID:           "backend.messaging",
@@ -168,7 +172,7 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 		})
 	}
 
-	// API gateway configuration
+	// API gateway configuration (config-level, stays at root)
 	if m.Backend.APIGateway != nil {
 		add(d, &Task{
 			ID:           "backend.gateway",
@@ -193,11 +197,16 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 // go build, and receives only the context it actually needs. Module path is
 // derived from the service name and injected into every task so all layers
 // share identical import paths with no guessing.
-func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.ServiceDef, d *DAG, dataDeps []string) {
+//
+// svcDirs is the full service-slug → output-dir map used to set OutputDir and
+// ServiceDirs on every task in the chain so the runner and infra agents know
+// where to place and find the generated files.
+func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.ServiceDef, d *DAG, dataDeps []string, svcDirs map[string]string) {
 	slug := svcSlug(svc.Name)
 	modPath := deriveModulePath(svc.Name)
 	svcCopy := *svc
 	links := commLinksFor(svc.Name, m.Backend.CommLinks)
+	outputDir := svcDirs[slug]
 
 	planID := svcPlanID(slug)
 	depsID := svcDepsID(slug)
@@ -223,6 +232,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Domains:     m.Data.Domains,
 			Databases:   m.Data.Databases,
 			Auth:        &m.Backend.Auth,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 
@@ -240,6 +251,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			ModulePath:  modPath,
 			ArchPattern: m.Backend.ArchPattern,
 			Service:     &svcCopy,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 
@@ -256,6 +269,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Service:     &svcCopy,
 			Domains:     m.Data.Domains,
 			Databases:   m.Data.Databases,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 
@@ -271,6 +286,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			ArchPattern: m.Backend.ArchPattern,
 			Service:     &svcCopy,
 			Domains:     m.Data.Domains,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 
@@ -290,6 +307,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Endpoints:   m.Contracts.Endpoints,
 			CommLinks:   links,
 			Auth:        &m.Backend.Auth,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 
@@ -308,6 +327,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			AllServices: m.Backend.Services,
 			Databases:   m.Data.Databases,
 			Auth:        &m.Backend.Auth,
+			ServiceDirs: svcDirs,
+			OutputDir:   outputDir,
 		},
 	})
 }
@@ -367,6 +388,7 @@ func (b *Builder) addFrontendTask(m *manifest.Manifest, d *DAG) {
 		deps = append(serviceIDs(m), "data.schemas")
 	}
 
+	svcDirs := serviceOutputDirs(m)
 	fp := m.Frontend
 	add(d, &Task{
 		ID:           "frontend",
@@ -381,6 +403,7 @@ func (b *Builder) addFrontendTask(m *manifest.Manifest, d *DAG) {
 			AllServices: m.Backend.Services,
 			Auth:        &m.Backend.Auth,
 			Frontend:    &fp,
+			OutputDir:   svcDirs["frontend"],
 		},
 	})
 }
@@ -504,26 +527,43 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 // serviceOutputDirs returns a map from service slug → output directory (relative
 // to the output root) where that service's generated source files reside.
 //
-// All service task chains write their files directly to the output root — the
-// writer uses f.Path as-is, so go.mod lands at "go.mod", not "services/api/go.mod".
-// Infra tasks must use these paths as Docker build contexts instead of inventing
-// a multi-service subdirectory layout.
+// When a frontend exists alongside a monolith, backend files move to "backend/"
+// so that go.mod and package.json are never in the same directory. Microservice
+// projects place each service under "services/<slug>/". Frontend always goes to
+// "frontend/". Backend-only monoliths stay at the root (".") unchanged.
+//
+// Infra tasks consume these values as Docker build contexts via the ServiceDirs
+// payload field — agents must NOT invent subdirectories outside this map.
 func serviceOutputDirs(m *manifest.Manifest) map[string]string {
 	dirs := make(map[string]string)
+	hasFrontend := m.Frontend.Tech.Framework != ""
+
 	switch m.Backend.ArchPattern {
 	case manifest.ArchMonolith, manifest.ArchModularMonolith:
-		dirs["monolith"] = "."
-	default:
+		if hasFrontend {
+			dirs["monolith"] = "backend"
+		} else {
+			dirs["monolith"] = "." // no separation needed without a frontend
+		}
+	default: // Microservices, Event-Driven, Hybrid
 		for _, svc := range m.Backend.Services {
-			dirs[svcSlug(svc.Name)] = "."
+			dirs[svcSlug(svc.Name)] = "services/" + svcSlug(svc.Name)
 		}
 	}
-	// Tell the infra.docker task where frontend source files live so it can
-	// set the correct docker-compose build context instead of inventing ./frontend.
-	if m.Frontend.Tech.Framework != "" {
-		dirs["frontend"] = "."
+	if hasFrontend {
+		dirs["frontend"] = "frontend"
 	}
 	return dirs
+}
+
+// backendBaseDir returns the output directory for cross-service backend tasks
+// (data schemas, migrations, auth middleware). For a monolith with a frontend
+// these must live alongside the Go module in "backend/"; otherwise root ".".
+func backendBaseDir(serviceDirs map[string]string) string {
+	if dir, ok := serviceDirs["monolith"]; ok && dir != "." {
+		return dir
+	}
+	return "."
 }
 
 // ── nil-safe helpers ──────────────────────────────────────────────────────────

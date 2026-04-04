@@ -54,6 +54,32 @@ func (w *Writer) WriteAllTo(dir string, files []dag.GeneratedFile) error {
 	return nil
 }
 
+// CommitWithPrefix is like Commit but prepends prefix to every destination path.
+// This allows the runner to place component files in their subdirectory (e.g.
+// "backend", "frontend") while keeping the temp-dir verification prefix-free.
+// If prefix is empty or ".", it behaves identically to Commit.
+func (w *Writer) CommitWithPrefix(srcDir, prefix string, files []dag.GeneratedFile) error {
+	for _, f := range files {
+		src := filepath.Join(srcDir, filepath.FromSlash(f.Path))
+		dstPath := f.Path
+		if prefix != "" && prefix != "." {
+			dstPath = filepath.Join(prefix, f.Path)
+		}
+		dst := filepath.Join(w.baseDir, filepath.FromSlash(dstPath))
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return fmt.Errorf("create dir for %s: %w", dstPath, err)
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return fmt.Errorf("read temp file %s: %w", f.Path, err)
+		}
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			return fmt.Errorf("commit %s: %w", dstPath, err)
+		}
+	}
+	return nil
+}
+
 // Commit moves files from srcDir into baseDir, overwriting existing files.
 func (w *Writer) Commit(srcDir string, files []dag.GeneratedFile) error {
 	for _, f := range files {

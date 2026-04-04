@@ -256,9 +256,12 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 // commit writes files to the output directory, publishes to shared memory,
 // and marks the task as completed.
 func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.GeneratedFile) error {
-	if err := r.writer.Commit(tmpDir, files); err != nil {
+	outputDir := r.task.Payload.OutputDir
+	if err := r.writer.CommitWithPrefix(tmpDir, outputDir, files); err != nil {
 		return fmt.Errorf("task %s: commit files: %w", r.task.ID, err)
 	}
+	// Record with prefixed paths so downstream tasks can locate files on disk.
+	files = applyOutputDirPrefix(files, outputDir)
 	// Keep the shared service temp dir alive until the bootstrap task completes
 	// so each layer's files accumulate for go build verification.
 	_, isSvcTask := serviceSlug(r.task.ID)
@@ -292,14 +295,18 @@ func (r *TaskRunner) readLockedGoMod(tmpDir string) string {
 // stageDependencyFiles copies files committed by upstream tasks into tmpDir so
 // the verifier (go build) can resolve cross-task packages without an LLM retry.
 // Files that already exist in tmpDir are skipped — earlier layers take precedence.
+// Memory stores prefixed output paths (e.g. "backend/internal/domain/user.go");
+// this function strips the service-dir prefix so temp dir stays prefix-free.
 func (r *TaskRunner) stageDependencyFiles(tmpDir string) error {
 	paths := r.memory.CommittedPaths(r.task.Dependencies)
 	for _, p := range paths {
-		dst := filepath.Join(tmpDir, p)
+		// Strip any service-dir prefix — temp dir is always component-relative.
+		stripped := stripOutputDirPrefix(p, r.task.Payload.ServiceDirs)
+		dst := filepath.Join(tmpDir, stripped)
 		if _, err := os.Stat(dst); err == nil {
 			continue // already present — don't overwrite
 		}
-		src := filepath.Join(r.writer.BaseDir(), p)
+		src := filepath.Join(r.writer.BaseDir(), p) // read from prefixed output location
 		data, err := os.ReadFile(src)
 		if err != nil {
 			continue // source may not exist (e.g. non-Go task with no-op verifier)
@@ -312,6 +319,36 @@ func (r *TaskRunner) stageDependencyFiles(tmpDir string) error {
 		}
 	}
 	return nil
+}
+
+// applyOutputDirPrefix prepends outputDir to every file path.
+// Returns the original slice unchanged if outputDir is empty or ".".
+func applyOutputDirPrefix(files []dag.GeneratedFile, outputDir string) []dag.GeneratedFile {
+	if outputDir == "" || outputDir == "." {
+		return files
+	}
+	result := make([]dag.GeneratedFile, len(files))
+	for i, f := range files {
+		result[i] = dag.GeneratedFile{Path: filepath.Join(outputDir, f.Path), Content: f.Content}
+	}
+	return result
+}
+
+// stripOutputDirPrefix removes a leading service-dir prefix from path so it can
+// be written to a prefix-free temp directory for verification.
+// E.g. "backend/internal/domain/user.go" → "internal/domain/user.go"
+func stripOutputDirPrefix(path string, serviceDirs map[string]string) string {
+	normalized := filepath.ToSlash(path)
+	for _, dir := range serviceDirs {
+		if dir == "" || dir == "." {
+			continue
+		}
+		prefix := dir + "/"
+		if strings.HasPrefix(normalized, prefix) {
+			return strings.TrimPrefix(normalized, prefix)
+		}
+	}
+	return path
 }
 
 // isImplementationTask reports whether the task is an implementation layer that

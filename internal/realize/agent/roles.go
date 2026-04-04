@@ -108,24 +108,31 @@ BUILD CONTEXT RULES — this is critical for Docker to find the source files:
   where their generated files live, relative to the output root. Use these values EXACTLY
   as the docker-compose build context. Do NOT invent subdirectories that are not in service_dirs.
 
-  Example: if service_dirs = {"monolith": ".", "frontend": "."}, then docker-compose must be:
+  Example: if service_dirs = {"monolith": "backend", "frontend": "frontend"}, then docker-compose must be:
     services:
       core-api:
         build:
-          context: .          ← value from service_dirs["monolith"]
+          context: ./backend   ← value from service_dirs["monolith"]
           dockerfile: Dockerfile
       frontend:
         build:
-          context: .          ← value from service_dirs["frontend"]
-          dockerfile: frontend/Dockerfile
+          context: ./frontend  ← value from service_dirs["frontend"]
+          dockerfile: Dockerfile
 
-  CRITICAL: if service_dirs contains "frontend": ".", the frontend source files (package.json,
-  src/, etc.) live at the output root — NOT in a "./frontend" subdirectory. The Dockerfile
-  for the frontend must be placed at frontend/Dockerfile but use context "." so COPY paths
-  resolve against the root where package.json actually lives.
+  Example: if service_dirs = {"monolith": "."} (backend-only), then:
+    services:
+      core-api:
+        build:
+          context: .
+          dockerfile: Dockerfile
 
-  The Dockerfile for the Go service must use COPY paths matching the build context:
-    COPY go.mod go.sum ./   ← correct when context is "." (go.mod is at the root)
+  Place each Dockerfile INSIDE its service's build context directory so that
+  Docker can find it relative to the context:
+    - backend/Dockerfile for the Go service when context is "./backend"
+    - frontend/Dockerfile for the frontend when context is "./frontend"
+
+  The Dockerfile for the Go service must use COPY paths relative to its build context:
+    COPY go.mod go.sum ./   ← correct when context is "./backend" (go.mod is at backend/go.mod)
 
 VERSION RULES — use ONLY versions from the "Infrastructure & Dependency Reference" section:
   - Go base image: use the exact golang image version from the reference (NOT 1.22 or earlier)

@@ -39,9 +39,17 @@ type TaskPayload struct {
 	// ServiceDirs maps each service slug to the directory containing its generated
 	// source files, relative to the output root. Used by infra tasks to set the
 	// correct Docker build context without guessing or inventing subdirectories.
-	// For a monolith: {"monolith": "."} — all files are at the output root.
-	// For microservices: each service also writes to the root, so the same applies.
+	// For a monolith with a frontend: {"monolith": "backend", "frontend": "frontend"}.
+	// For microservices: {"user-api": "services/user-api", "frontend": "frontend"}.
+	// For a backend-only monolith: {"monolith": "."} — all files at the output root.
 	ServiceDirs map[string]string `json:"service_dirs,omitempty"`
+
+	// OutputDir is the directory (relative to the output root) where this task's
+	// generated files will be placed. Empty or "." means the output root.
+	// Example: "backend", "frontend", "services/user-api".
+	// Agents output paths relative to their component — the pipeline applies this
+	// prefix at commit time. Temp-dir verification always stays prefix-free.
+	OutputDir string `json:"output_dir,omitempty"`
 
 	// Infrastructure pillar
 	Infra *manifest.InfraPillar `json:"infra,omitempty"`
