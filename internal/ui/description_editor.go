@@ -62,7 +62,7 @@ func (e DescriptionEditor) View(w, h int) string {
 
 	// Use a local copy so we don't mutate the receiver in View.
 	ta := e.ta
-	ta.SetWidth(w - 4)
+	ta.SetWidth(w)
 	ta.SetHeight(taH)
 
 	// Split textarea output into individual lines.
@@ -72,17 +72,14 @@ func (e DescriptionEditor) View(w, h int) string {
 		taLines = taLines[:taH]
 	}
 
-	// Indent every textarea line by 2 spaces to match the rest of the UI.
-	indented := make([]string, len(taLines))
-	for i, l := range taLines {
-		indented[i] = "  " + l
-	}
-
 	// Collect all output lines: header, blank, textarea rows.
+	// The textarea prompt ("  ") already provides left-side spacing, so no
+	// extra indent is needed. Setting width=w ensures the textarea background
+	// covers the full content area with no gaps on either side.
 	lines := make([]string, 0, h)
 	lines = append(lines, StyleSectionDesc.Render("  # Describe your project — what are you building?"))
 	lines = append(lines, "")
-	lines = append(lines, indented...)
+	lines = append(lines, taLines...)
 
 	// fillTildes ensures exactly h lines so the tab bar is never pushed off-screen.
 	return fillTildes(lines, h)
@@ -91,7 +88,7 @@ func (e DescriptionEditor) View(w, h int) string {
 // Update handles keyboard input for the description editor.
 func (e DescriptionEditor) Update(msg tea.Msg) (DescriptionEditor, tea.Cmd) {
 	if wsz, ok := msg.(tea.WindowSizeMsg); ok {
-		e.ta.SetWidth(wsz.Width - 4)
+		e.ta.SetWidth(wsz.Width)
 		e.ta.SetHeight(wsz.Height - 7)
 		return e, nil
 	}

@@ -198,9 +198,10 @@ type BackendEditor struct {
 	cacheAliases       []string // IsCache DB aliases from the Data pillar
 	dbSourceAliases    []string // All DB source aliases from the Data pillar (for health_deps)
 	dtoProtocols       []string // unique DTO serialisation protocols from ContractsEditor
-	environmentNames   []string // InfraPillar environment names for service env dropdowns
-	orchestrator       string   // Primary orchestrator from InfraPillar for service discovery
-	cloudProvider      string   // Primary cloud provider from InfraPillar for messaging deployment options
+	environmentNames   []string                        // InfraPillar environment names for service env dropdowns
+	environmentDefs    []manifest.ServerEnvironmentDef // InfraPillar full env defs for API GW tech filtering
+	orchestrator       string                          // Primary orchestrator from InfraPillar for service discovery
+	cloudProvider      string                          // Primary cloud provider from InfraPillar for messaging deployment options
 
 	// Vim motion state
 	countBuf string
@@ -491,6 +492,52 @@ func (be *BackendEditor) SetEnvironmentNames(names []string) {
 	}
 	// Refresh environment dropdown in the messaging broker config.
 	be.applyEnvNamesToServiceFields(be.MessagingFields)
+	// Refresh environment dropdown in the API gateway config.
+	be.applyEnvNamesToServiceFields(be.APIGWFields)
+}
+
+// SetEnvironmentDefs injects full environment definitions so the API Gateway
+// technology options can be filtered by the selected environment's orchestrator
+// and cloud provider.
+func (be *BackendEditor) SetEnvironmentDefs(defs []manifest.ServerEnvironmentDef) {
+	be.environmentDefs = defs
+	be.updateAPIGWTechOptions()
+}
+
+// updateAPIGWTechOptions re-filters the API gateway technology options based
+// on the currently selected environment's orchestrator and cloud provider.
+func (be *BackendEditor) updateAPIGWTechOptions() {
+	envVal := fieldGet(be.APIGWFields, "environment")
+	var orch, cloud string
+	for _, d := range be.environmentDefs {
+		if d.Name == envVal {
+			orch = d.Orchestrator
+			cloud = d.CloudProvider
+			break
+		}
+	}
+	opts := apiGWTechOptionsForEnv(orch, cloud)
+	cur := fieldGet(be.APIGWFields, "technology")
+	for i := range be.APIGWFields {
+		if be.APIGWFields[i].Key != "technology" {
+			continue
+		}
+		be.APIGWFields[i].Options = opts
+		// Keep current value when still valid; otherwise reset to first option.
+		valid := false
+		for j, o := range opts {
+			if o == cur {
+				be.APIGWFields[i].SelIdx = j
+				valid = true
+				break
+			}
+		}
+		if !valid && len(opts) > 0 {
+			be.APIGWFields[i].SelIdx = 0
+			be.APIGWFields[i].Value = opts[0]
+		}
+		break
+	}
 }
 
 // SetMessagingCloudProvider injects the primary cloud provider from infra so
@@ -650,10 +697,14 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		}
 		if t == beTabAPIGW && be.apiGWEnabled {
 			gw := manifest.APIGatewayConfig{
-				Technology: fieldGet(be.APIGWFields, "technology"),
-				Routing:    fieldGet(be.APIGWFields, "routing"),
-				Features:   fieldGetMulti(be.APIGWFields, "features"),
-				Endpoints:  fieldGetMulti(be.APIGWFields, "endpoints"),
+				Technology:  fieldGet(be.APIGWFields, "technology"),
+				Routing:     fieldGet(be.APIGWFields, "routing"),
+				Features:    fieldGetMulti(be.APIGWFields, "features"),
+				Endpoints:   fieldGetMulti(be.APIGWFields, "endpoints"),
+				Environment: fieldGet(be.APIGWFields, "environment"),
+			}
+			if gw.Environment == "(no environments configured)" {
+				gw.Environment = ""
 			}
 			bp.APIGateway = &gw
 		}
@@ -805,6 +856,9 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "token_storage", bp.Auth.TokenStorage)
 		be.AuthFields = setFieldValue(be.AuthFields, "session_mgmt", bp.Auth.SessionMgmt)
 		be.AuthFields = setFieldValue(be.AuthFields, "refresh_token", bp.Auth.RefreshToken)
+		// Recompute dynamic options after restoring strategy and provider.
+		be.updateAuthTokenStorageOptions()
+		be.updateAuthMFAOptions()
 		be.AuthFields = setFieldValue(be.AuthFields, "mfa", bp.Auth.MFA)
 	}
 
@@ -847,6 +901,9 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 	// API Gateway fields.
 	if bp.APIGateway != nil {
 		be.apiGWEnabled = true
+		if bp.APIGateway.Environment != "" {
+			be.APIGWFields = setFieldValue(be.APIGWFields, "environment", bp.APIGateway.Environment)
+		}
 		be.APIGWFields = setFieldValue(be.APIGWFields, "technology", bp.APIGateway.Technology)
 		be.APIGWFields = setFieldValue(be.APIGWFields, "routing", bp.APIGateway.Routing)
 		be.APIGWFields = restoreMultiSelectValue(be.APIGWFields, "features", bp.APIGateway.Features)

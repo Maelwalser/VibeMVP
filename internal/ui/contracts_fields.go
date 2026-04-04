@@ -694,31 +694,52 @@ var failureStrategyByProtocol = map[string][]string{
 	"SOAP":      {"Circuit Breaker", "Retry with backoff", "Timeout + fail", "None"},
 }
 
-// updateExtDependentFields filters failure_strategy options by protocol and
-// clamps extFormIdx to the visible field range after a protocol change.
+// authMechanismByProtocol maps each external API protocol to the auth
+// mechanisms that make sense for it.
+var authMechanismByProtocol = map[string][]string{
+	"REST":      {"API Key", "OAuth2 Client Credentials", "OAuth2 PKCE", "Bearer Token", "Basic Auth", "mTLS", "None"},
+	"GraphQL":   {"API Key", "OAuth2 Client Credentials", "OAuth2 PKCE", "Bearer Token", "Basic Auth", "mTLS", "None"},
+	"gRPC":      {"mTLS", "API Key", "Bearer Token", "None"},
+	"WebSocket": {"Bearer Token", "API Key", "None"},
+	"Webhook":   {"HMAC signature", "API Key", "None"},
+	"SOAP":      {"API Key", "OAuth2 Client Credentials", "Bearer Token", "Basic Auth", "mTLS", "None"},
+}
+
+// updateExtDependentFields filters failure_strategy and auth_mechanism options
+// by protocol, then clamps extFormIdx to the visible field range.
 func (ce *ContractsEditor) updateExtDependentFields() {
 	protocol := fieldGet(ce.extForm, "protocol")
-	if opts, ok := failureStrategyByProtocol[protocol]; ok {
+
+	updateSelectField := func(key string, optsByProto map[string][]string) {
+		opts, ok := optsByProto[protocol]
+		if !ok {
+			return
+		}
 		for i := range ce.extForm {
-			if ce.extForm[i].Key == "failure_strategy" {
-				ce.extForm[i].Options = opts
-				// Reset to first valid option if current value is no longer valid.
-				current := ce.extForm[i].Value
-				valid := false
-				for _, o := range opts {
-					if o == current {
-						valid = true
-						break
-					}
-				}
-				if !valid {
-					ce.extForm[i].Value = opts[0]
-					ce.extForm[i].SelIdx = 0
-				}
-				break
+			if ce.extForm[i].Key != key {
+				continue
 			}
+			ce.extForm[i].Options = opts
+			current := ce.extForm[i].Value
+			valid := false
+			for j, o := range opts {
+				if o == current {
+					ce.extForm[i].SelIdx = j
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				ce.extForm[i].Value = opts[0]
+				ce.extForm[i].SelIdx = 0
+			}
+			break
 		}
 	}
+
+	updateSelectField("failure_strategy", failureStrategyByProtocol)
+	updateSelectField("auth_mechanism", authMechanismByProtocol)
+
 	visible := ce.visibleExtFormFields()
 	if len(visible) > 0 && ce.extFormIdx >= len(visible) {
 		ce.extFormIdx = len(visible) - 1

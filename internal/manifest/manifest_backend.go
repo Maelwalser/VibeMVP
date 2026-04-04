@@ -69,10 +69,11 @@ type EventDef struct {
 
 // APIGatewayConfig describes API gateway configuration.
 type APIGatewayConfig struct {
-	Technology string `json:"technology"`
-	Routing    string `json:"routing"`
-	Features   string `json:"features,omitempty"`
-	Endpoints  string `json:"endpoints,omitempty"`
+	Technology  string `json:"technology"`
+	Routing     string `json:"routing"`
+	Features    string `json:"features,omitempty"`
+	Endpoints   string `json:"endpoints,omitempty"`
+	Environment string `json:"environment,omitempty"`
 }
 
 // PermissionDef defines a named permission (e.g. "users:read").

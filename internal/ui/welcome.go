@@ -205,11 +205,13 @@ func (w WelcomeModel) View() string {
 
 	var b strings.Builder
 
+	innerW := boxWidth - 4
+	centerIn := lipgloss.NewStyle().Width(innerW).Align(lipgloss.Center).Background(lipgloss.Color(clrBg2))
 	logo := StyleNeonCyan.Bold(true).Render("VibeMenu")
 	subtitle := StyleHelpDesc.Render("declarative system architecture")
-	b.WriteString(lipgloss.NewStyle().Width(boxWidth - 4).Align(lipgloss.Center).Render(logo))
+	b.WriteString(centerIn.Render(logo))
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Width(boxWidth - 4).Align(lipgloss.Center).Render(subtitle))
+	b.WriteString(centerIn.Render(subtitle))
 	b.WriteString("\n\n")
 	b.WriteString(StyleHelpDesc.Render(strings.Repeat("─", boxWidth-4)))
 	b.WriteString("\n\n")

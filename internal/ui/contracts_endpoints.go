@@ -323,6 +323,8 @@ func (ce ContractsEditor) updateExtList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 			if api.SOAPVersion != "" {
 				ce.extForm = setFieldValue(ce.extForm, "soap_version", api.SOAPVersion)
 			}
+			// Filter auth_mechanism and failure_strategy options for the loaded protocol.
+			ce.updateExtDependentFields()
 			ce.extFormIdx = 0
 			ce.extSubView = ceViewForm
 		}

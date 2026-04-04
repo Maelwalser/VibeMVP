@@ -123,6 +123,23 @@ func (ie InfraEditor) EnvironmentNames() []string {
 	return names
 }
 
+// EnvironmentDefs returns lightweight records of each configured environment's
+// name, orchestrator, and cloud provider. Used by the API Gateway editor to
+// filter technology options based on the selected environment.
+func (ie InfraEditor) EnvironmentDefs() []manifest.ServerEnvironmentDef {
+	out := make([]manifest.ServerEnvironmentDef, 0, len(ie.envs))
+	for _, e := range ie.envs {
+		if e.Name != "" {
+			out = append(out, manifest.ServerEnvironmentDef{
+				Name:          e.Name,
+				Orchestrator:  e.Orchestrator,
+				CloudProvider: e.CloudProvider,
+			})
+		}
+	}
+	return out
+}
+
 // PrimaryOrchestrator returns the orchestrator of the first configured environment,
 // or an empty string when no environments have been defined yet.
 func (ie InfraEditor) PrimaryOrchestrator() string {

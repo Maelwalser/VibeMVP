@@ -58,6 +58,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
 				m.backendEditor.SetDBSourceAliases(m.dataTabEditor.AllDBSourceAliases())
 				m.backendEditor.SetEnvironmentNames(m.infraEditor.EnvironmentNames())
+				m.backendEditor.SetEnvironmentDefs(m.infraEditor.EnvironmentDefs())
 				m.backendEditor.SetOrchestrator(m.infraEditor.PrimaryOrchestrator())
 				m.backendEditor.SetMessagingCloudProvider(m.infraEditor.PrimaryCloudProvider())
 				var cmd tea.Cmd
@@ -115,6 +116,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.infraEditor, cmd = m.infraEditor.Update(msg)
 				// Propagate environment names to backend and data after infra updates.
 				m.backendEditor.SetEnvironmentNames(m.infraEditor.EnvironmentNames())
+				m.backendEditor.SetEnvironmentDefs(m.infraEditor.EnvironmentDefs())
 				m.backendEditor.SetOrchestrator(m.infraEditor.PrimaryOrchestrator())
 				m.backendEditor.SetMessagingCloudProvider(m.infraEditor.PrimaryCloudProvider())
 				m.dataTabEditor.SetEnvironmentNames(m.infraEditor.EnvironmentNames())

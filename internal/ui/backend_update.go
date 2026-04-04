@@ -114,6 +114,9 @@ func (be *BackendEditor) toggleMultiSelectOption() {
 	if f := be.mutableFieldPtr(); f != nil && f.Kind == KindMultiSelect {
 		f.ToggleMultiSelect(be.dd.OptIdx)
 		f.DDCursor = be.dd.OptIdx
+		if be.activeTab() == beTabAuth && be.authSubView == beAuthViewConfig && f.Key == "strategy" {
+			be.updateAuthTokenStorageOptions()
+		}
 	}
 }
 
@@ -276,6 +279,14 @@ func (be *BackendEditor) applyDropdown() bool {
 				be.updateEnvOrchestratorOptions()
 			case "orchestrator":
 				be.updateServiceDiscoveryOptions()
+			}
+		case beTabAPIGW:
+			if f.Key == "environment" {
+				be.updateAPIGWTechOptions()
+			}
+		case beTabAuth:
+			if be.authSubView == beAuthViewConfig && f.Key == "provider" {
+				be.updateAuthMFAOptions()
 			}
 		case beTabMessaging:
 			if f.Key == "broker_tech" {
@@ -591,6 +602,10 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 				case "orchestrator":
 					be.updateServiceDiscoveryOptions()
 				}
+			} else if be.activeTab() == beTabAPIGW && f.Key == "environment" {
+				be.updateAPIGWTechOptions()
+			} else if be.activeTab() == beTabAuth && be.authSubView == beAuthViewConfig && f.Key == "provider" {
+				be.updateAuthMFAOptions()
 			}
 		}
 	case "i", "a":

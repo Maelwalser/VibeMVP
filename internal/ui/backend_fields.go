@@ -637,8 +637,35 @@ func (be BackendEditor) withEventNames(fields []Field) []Field {
 	return out
 }
 
+// apiGWTechOptionsForEnv returns the API gateway technology options appropriate
+// for the given orchestrator and cloud provider combination.
+func apiGWTechOptionsForEnv(orchestrator, cloudProvider string) []string {
+	switch orchestrator {
+	case "Kubernetes", "K3s":
+		return []string{"Kong", "Traefik", "NGINX Ingress", "Envoy", "Custom (specify)", "None"}
+	case "Docker Compose":
+		return []string{"Traefik", "NGINX", "Custom (specify)", "None"}
+	}
+	switch cloudProvider {
+	case "AWS":
+		return []string{"AWS API Gateway", "Kong", "Custom (specify)", "None"}
+	case "GCP":
+		return []string{"Cloudflare Workers", "Custom (specify)", "None"}
+	}
+	// Default / unknown: full list.
+	return []string{
+		"Kong", "Traefik", "NGINX", "Envoy",
+		"AWS API Gateway", "Cloudflare Workers", "Custom (specify)", "None",
+	}
+}
+
 func defaultAPIGWFields() []Field {
 	return []Field{
+		{
+			Key: "environment", Label: "environment   ", Kind: KindSelect,
+			Options: []string{"(no environments configured)"},
+			Value:   "(no environments configured)",
+		},
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
 			Options: []string{

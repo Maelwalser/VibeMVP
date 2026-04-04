@@ -427,9 +427,18 @@ var allTracingOptions = []string{
 	"Azure App Insights", "New Relic Distributed Tracing", "None",
 }
 
-// applyMetricsToObsFields narrows the alerting and tracing options in the
-// observability field slice to those compatible with the current metrics selection.
-// Returns a new slice; the input is not modified.
+// errorTrackingByMetrics promotes the most natural error-tracking tool to the
+// top of the list based on the selected metrics backend:
+//   - Datadog (unified platform) → Datadog first
+//   - CloudWatch (AWS-native, implies AWS cloud) → Built-in first
+var errorTrackingByMetrics = map[string][]string{
+	"Datadog":    {"Datadog", "Sentry", "Rollbar", "Built-in", "None"},
+	"CloudWatch": {"Built-in", "Sentry", "Datadog", "Rollbar", "None"},
+}
+
+// applyMetricsToObsFields narrows the alerting, tracing, and error_tracking
+// options in the observability field slice to those compatible with the current
+// metrics selection. Returns a new slice; the input is not modified.
 func applyMetricsToObsFields(fields []Field) []Field {
 	metrics := fieldGet(fields, "metrics")
 	out := make([]Field, len(fields))
@@ -448,6 +457,12 @@ func applyMetricsToObsFields(fields []Field) []Field {
 				opts = o
 			} else {
 				opts = allTracingOptions
+			}
+		case "error_tracking":
+			if o, ok := errorTrackingByMetrics[metrics]; ok {
+				opts = o
+			} else {
+				opts = []string{"Sentry", "Datadog", "Rollbar", "Built-in", "None"}
 			}
 		default:
 			continue
