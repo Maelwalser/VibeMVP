@@ -170,7 +170,12 @@ func (ce *ContractsEditor) saveEPForm() {
 	ep.GraphQLOpType = fieldGet(ce.epForm, "graphql_op_type")
 	ep.GRPCStreamType = fieldGet(ce.epForm, "grpc_stream_type")
 	ep.WSDirection = fieldGet(ce.epForm, "ws_direction")
-	ep.PaginationStrategy = fieldGet(ce.epForm, "pagination")
+	proto := fieldGet(ce.epForm, "protocol")
+	if proto == "WebSocket message" || proto == "gRPC" || proto == "Event" {
+		ep.PaginationStrategy = ""
+	} else {
+		ep.PaginationStrategy = fieldGet(ce.epForm, "pagination")
+	}
 	ep.RateLimit = fieldGet(ce.epForm, "rate_limit")
 	ep.Description = fieldGet(ce.epForm, "description")
 }
