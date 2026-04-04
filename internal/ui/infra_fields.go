@@ -81,6 +81,7 @@ var infraAllOptions = map[string][]string{
 	"logging":      {"Loki + Grafana", "ELK Stack", "CloudWatch", "Cloud Logging", "Azure Monitor", "Datadog", "Stdout/file"},
 	"metrics":      {"Prometheus + Grafana", "Datadog", "CloudWatch", "Cloud Monitoring", "Azure Monitor", "New Relic", "None"},
 	"ssl_cert":     {"Auto-renew (certbot/ACME)", "ACM", "GCP-managed", "Azure-managed", "Cloudflare proxy", "Manual"},
+	"iac_tool":     {"Terraform", "Pulumi", "CloudFormation", "CDK", "Bicep", "ARM Templates", "Wrangler", "Ansible", "None"},
 }
 
 // infraProviderOptions maps field key → cloud_provider → recommended option slice.
@@ -140,6 +141,14 @@ var infraProviderOptions = map[string]map[string][]string{
 		"Cloudflare":  {"Cloudflare proxy", "Auto-renew (certbot/ACME)", "Manual"},
 		"Hetzner":     {"Auto-renew (certbot/ACME)", "Manual"},
 		"Self-hosted": {"Auto-renew (certbot/ACME)", "Manual"},
+	},
+	"iac_tool": {
+		"AWS":         {"Terraform", "Pulumi", "CloudFormation", "CDK", "None"},
+		"GCP":         {"Terraform", "Pulumi", "None"},
+		"Azure":       {"Terraform", "Pulumi", "Bicep", "ARM Templates", "None"},
+		"Cloudflare":  {"Terraform", "Pulumi", "Wrangler", "None"},
+		"Hetzner":     {"Terraform", "Pulumi", "Ansible", "None"},
+		"Self-hosted": {"Terraform", "Pulumi", "Ansible", "None"},
 	},
 }
 
@@ -267,8 +276,10 @@ func defaultInfraCICDFields() []Field {
 			Value:   "Rolling",
 		},
 		{
-			Key: "iac_tool", Label: "iac_tool      ", Kind: KindSelect,
-			Options: []string{"Terraform", "Pulumi", "CloudFormation", "Ansible", "None"},
+			Key:     "iac_tool",
+			Label:   "iac_tool      ",
+			Kind:    KindSelect,
+			Options: infraAllOptions["iac_tool"],
 			Value:   "Terraform",
 		},
 		{

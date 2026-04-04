@@ -9,6 +9,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// withoutField returns a copy of fields with the entry matching key removed.
+func withoutField(fields []Field, key string) []Field {
+	out := make([]Field, 0, len(fields))
+	for _, f := range fields {
+		if f.Key != key {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // copyFields makes a deep copy of a field slice, duplicating the Options slice
 // so mutations to one copy do not affect others.
 func copyFields(src []Field) []Field {
@@ -426,6 +437,24 @@ func fieldGet(fields []Field, key string) string {
 		}
 	}
 	return ""
+}
+
+// fieldGetSelectedSlice returns the selected option names for a KindMultiSelect
+// field as a []string, or nil if the field is not found or nothing is selected.
+func fieldGetSelectedSlice(fields []Field, key string) []string {
+	for _, f := range fields {
+		if f.Key != key {
+			continue
+		}
+		var out []string
+		for _, idx := range f.SelectedIdxs {
+			if idx < len(f.Options) {
+				out = append(out, f.Options[idx])
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // fieldGetMulti returns the comma-separated DisplayValue for a KindMultiSelect field,

@@ -196,6 +196,7 @@ type BackendEditor struct {
 	availableDTOs      []string
 	availableEndpoints []string
 	cacheAliases       []string // IsCache DB aliases from the Data pillar
+	dbSourceAliases    []string // All DB source aliases from the Data pillar (for health_deps)
 	environmentNames   []string // InfraPillar environment names for service env dropdowns
 	orchestrator       string   // Primary orchestrator from InfraPillar for service discovery
 
@@ -231,6 +232,60 @@ func (be *BackendEditor) SetDomainNames(names []string) {
 // not on every keypress, to avoid corrupting SelIdx during dropdown navigation.
 func (be *BackendEditor) SetCacheAliases(aliases []string) {
 	be.cacheAliases = aliases
+}
+
+// SetDBSourceAliases stores all DB source aliases from the Data pillar and
+// refreshes the health_deps multiselect options in the monolith CONFIG tab and
+// in every per-service form (non-monolith arches).
+func (be *BackendEditor) SetDBSourceAliases(aliases []string) {
+	be.dbSourceAliases = aliases
+	// Monolith: global health_deps lives in EnvFields (CONFIG tab).
+	be.applyHealthDepsOptionsToFields(be.EnvFields)
+	// Non-monolith: per-service health_deps lives in service forms.
+	be.applyHealthDepsOptionsToFields(be.serviceEditor.form)
+	for _, item := range be.serviceEditor.items {
+		be.applyHealthDepsOptionsToFields(item)
+	}
+}
+
+// applyHealthDepsOptionsToFields refreshes the health_deps multiselect options
+// in a field slice, preserving any currently selected aliases by name.
+// Also handles lazy restoration when options haven't been set yet but Value
+// holds a comma-separated list of names (written by serviceFieldsFromDef).
+func (be *BackendEditor) applyHealthDepsOptionsToFields(fields []Field) {
+	for i := range fields {
+		if fields[i].Key != "health_deps" {
+			continue
+		}
+		// Collect previously selected names before replacing options.
+		var selectedNames []string
+		if len(fields[i].Options) > 0 {
+			for _, idx := range fields[i].SelectedIdxs {
+				if idx < len(fields[i].Options) {
+					selectedNames = append(selectedNames, fields[i].Options[idx])
+				}
+			}
+		} else if fields[i].Value != "" {
+			// Options not yet populated — Value holds comma-sep names from manifest restore.
+			for _, name := range strings.Split(fields[i].Value, ", ") {
+				if name != "" {
+					selectedNames = append(selectedNames, name)
+				}
+			}
+		}
+		fields[i].Options = be.dbSourceAliases
+		fields[i].Value = ""
+		fields[i].SelectedIdxs = nil
+		for _, name := range selectedNames {
+			for j, opt := range fields[i].Options {
+				if opt == name {
+					fields[i].SelectedIdxs = append(fields[i].SelectedIdxs, j)
+					break
+				}
+			}
+		}
+		break
+	}
 }
 
 // SetDTONames injects DTO names from the contracts tab for job payload dropdowns.
@@ -396,8 +451,6 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 	arch := be.currentArch()
 
 	var env manifest.EnvConfig
-	// EnvConfig now only carries stages; server configs live in InfraPillar.Environments.
-	_ = env
 
 	var auth manifest.AuthConfig
 	if be.authEnabled {
@@ -489,10 +542,13 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		bp.LanguageVersion = fieldGet(be.EnvFields, "monolith_lang_ver")
 		bp.Framework = fieldGet(be.EnvFields, "monolith_fw")
 		bp.FrameworkVersion = fieldGet(be.EnvFields, "monolith_fw_ver")
-		env := fieldGet(be.EnvFields, "environment")
-		if env != "(no environments configured)" {
-			bp.MonolithEnvironment = env
+		envVal := fieldGet(be.EnvFields, "environment")
+		if envVal != "(no environments configured)" {
+			bp.MonolithEnvironment = envVal
 		}
+		// Global health dependencies for monolith live in EnvConfig.
+		env.HealthDeps = fieldGetSelectedSlice(be.EnvFields, "health_deps")
+		bp.Env = env
 	} else if len(be.Services) > 0 {
 		bp.Language = be.Services[0].Language
 		bp.LanguageVersion = be.Services[0].LanguageVersion
@@ -531,6 +587,15 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 			be.EnvFields = setFieldValue(be.EnvFields, "monolith_fw_ver", bp.FrameworkVersion)
 			if bp.MonolithEnvironment != "" {
 				be.EnvFields = setFieldValue(be.EnvFields, "environment", bp.MonolithEnvironment)
+			}
+			// Restore global health deps — options populated lazily via SetDBSourceAliases.
+			if len(bp.Env.HealthDeps) > 0 {
+				for i := range be.EnvFields {
+					if be.EnvFields[i].Key == "health_deps" {
+						be.EnvFields[i].Value = strings.Join(bp.Env.HealthDeps, ", ")
+						break
+					}
+				}
 			}
 		}
 	}
@@ -676,7 +741,12 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 	be.Services = bp.Services
 	be.serviceEditor.items = make([][]Field, len(bp.Services))
 	for i, svc := range bp.Services {
-		be.serviceEditor.items[i] = serviceFieldsFromDef(svc)
+		fields := serviceFieldsFromDef(svc)
+		// Monolith: health deps are global (CONFIG tab), not per-service.
+		if arch == "monolith" {
+			fields = withoutField(fields, "health_deps")
+		}
+		be.serviceEditor.items[i] = fields
 	}
 	// Apply orchestrator-based service discovery options now that items are populated.
 	be.updateServiceDiscoveryOptions()

@@ -115,6 +115,8 @@ type DataTabEditor struct {
 	backendLangs []string
 	// Context from backend — used to populate the service selector in FS forms.
 	serviceNames []string
+	// Context from contracts — used to populate entities multiselect in caching forms.
+	availableDTOs []string
 
 	// Shared
 	internalMode Mode
@@ -139,6 +141,18 @@ func (dt DataTabEditor) CacheAliases() []string {
 	var out []string
 	for _, src := range dt.dbEditor.Sources {
 		if src.IsCache && src.Alias != "" {
+			out = append(out, src.Alias)
+		}
+	}
+	return out
+}
+
+// AllDBSourceAliases returns the aliases of every configured database source
+// (both regular and cache), for use by the backend health_deps multiselect.
+func (dt DataTabEditor) AllDBSourceAliases() []string {
+	var out []string
+	for _, src := range dt.dbEditor.Sources {
+		if src.Alias != "" {
 			out = append(out, src.Alias)
 		}
 	}

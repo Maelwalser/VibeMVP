@@ -22,7 +22,7 @@ type ServiceDef struct {
 	FrameworkVersion string             `json:"framework_version,omitempty"`
 	PatternTag       PatternTag         `json:"pattern_tag,omitempty"` // hybrid only
 	Technologies     []string           `json:"technologies,omitempty"`
-	HealthcheckPath  string             `json:"healthcheck_path,omitempty"`
+	HealthDeps       []string           `json:"health_deps,omitempty"`
 	ErrorFormat      string             `json:"error_format,omitempty"`
 	ServiceDiscovery string             `json:"service_discovery,omitempty"`
 	Environment      string             `json:"environment,omitempty"`
@@ -147,7 +147,8 @@ type JobQueueDef struct {
 // EnvConfig describes backend-level configuration (CORS, sessions, linter).
 // Server deployment settings (compute, cloud, orchestrator) live in InfraPillar.Environments.
 type EnvConfig struct {
-	Stages string `json:"stages,omitempty"`
+	Stages     string   `json:"stages,omitempty"`
+	HealthDeps []string `json:"health_deps,omitempty"` // global health deps for monolith
 }
 
 // BackendPillar covers the full backend configuration.

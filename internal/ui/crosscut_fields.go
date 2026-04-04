@@ -269,6 +269,13 @@ func defaultStandardsFields() []Field {
 			Options: linterOpts,
 			Value:   "None", SelIdx: len(linterOpts) - 1,
 		},
+		{
+			Key:     "fe_linter",
+			Label:   "Frontend Linter",
+			Kind:    KindSelect,
+			Options: []string{"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
+			Value:   "None", SelIdx: 5,
+		},
 	}
 }
 
@@ -308,6 +315,7 @@ func (cc *CrossCutEditor) SetTestingContext(backendLangs, backendProtocols []str
 	cc.frontendFramework = frontendFramework
 	cc.testingFields = computeTestingFields(backendLangs, backendProtocols, backendArchPattern, frontendLang, frontendFramework, cc.testingFields)
 	cc.updateLinterOptions(backendLangs)
+	cc.updateFELinterOptions(frontendLang)
 }
 
 // updateLinterOptions narrows the be_linter select options in standardsFields
@@ -320,6 +328,36 @@ func (cc *CrossCutEditor) updateLinterOptions(langs []string) {
 		}
 		cc.standardsFields[i].Options = opts
 		// Keep current value when still valid; otherwise reset to None.
+		found := false
+		for j, o := range opts {
+			if o == cc.standardsFields[i].Value {
+				cc.standardsFields[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found && len(opts) > 0 {
+			cc.standardsFields[i].Value = opts[len(opts)-1] // last option is always "None"
+			cc.standardsFields[i].SelIdx = len(opts) - 1
+		}
+		break
+	}
+}
+
+// updateFELinterOptions narrows the fe_linter select options in standardsFields
+// to match the configured frontend language.
+func (cc *CrossCutEditor) updateFELinterOptions(lang string) {
+	var opts []string
+	if o, ok := feLinterByLanguage[lang]; ok {
+		opts = o
+	} else {
+		opts = []string{"Custom", "None"}
+	}
+	for i := range cc.standardsFields {
+		if cc.standardsFields[i].Key != "fe_linter" {
+			continue
+		}
+		cc.standardsFields[i].Options = opts
 		found := false
 		for j, o := range opts {
 			if o == cc.standardsFields[i].Value {
