@@ -126,13 +126,10 @@ func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
 		p.Docs = manifest.DocsConfig{
 			APIDocs:      fieldGet(cc.docsFields, "api_docs"),
 			AutoGenerate: fieldGet(cc.docsFields, "auto_generate") == "true",
-			Changelog:    fieldGet(cc.docsFields, "changelog"),
 		}
 	}
 	if cc.standardsEnabled {
-		p.BranchStrategy = fieldGet(cc.standardsFields, "branch_strategy")
 		p.DependencyUpdates = fieldGet(cc.standardsFields, "dep_updates")
-		p.CodeReview = fieldGet(cc.standardsFields, "code_review")
 		p.FeatureFlags = fieldGet(cc.standardsFields, "feature_flags")
 		p.UptimeSLO = fieldGet(cc.standardsFields, "uptime_slo")
 		p.LatencyP99 = fieldGet(cc.standardsFields, "latency_p99")
@@ -168,14 +165,11 @@ func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutE
 			return "false"
 		}
 		cc.docsFields = setFieldValue(cc.docsFields, "auto_generate", boolStr(d.AutoGenerate))
-		cc.docsFields = setFieldValue(cc.docsFields, "changelog", d.Changelog)
 	}
 
-	if p.BranchStrategy != "" || p.DependencyUpdates != "" || p.BackendLinter != "" || p.FrontendLinter != "" {
+	if p.DependencyUpdates != "" || p.BackendLinter != "" || p.FrontendLinter != "" {
 		cc.standardsEnabled = true
-		cc.standardsFields = setFieldValue(cc.standardsFields, "branch_strategy", p.BranchStrategy)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "dep_updates", p.DependencyUpdates)
-		cc.standardsFields = setFieldValue(cc.standardsFields, "code_review", p.CodeReview)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "feature_flags", p.FeatureFlags)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "uptime_slo", p.UptimeSLO)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "latency_p99", p.LatencyP99)

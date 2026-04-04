@@ -17,16 +17,13 @@ type TestingConfig struct {
 type DocsConfig struct {
 	APIDocs      string `json:"api_docs"`
 	AutoGenerate bool   `json:"auto_generate"`
-	Changelog    string `json:"changelog"`
 }
 
 // CrossCutPillar groups cross-cutting concerns.
 type CrossCutPillar struct {
 	Testing           TestingConfig `json:"testing"`
 	Docs              DocsConfig    `json:"docs"`
-	BranchStrategy    string        `json:"branch_strategy,omitempty"`
 	DependencyUpdates string        `json:"dependency_updates,omitempty"`
-	CodeReview        string        `json:"code_review,omitempty"`
 	FeatureFlags      string        `json:"feature_flags,omitempty"`
 	UptimeSLO         string        `json:"uptime_slo,omitempty"`
 	LatencyP99        string        `json:"latency_p99,omitempty"`
