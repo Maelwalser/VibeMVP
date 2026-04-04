@@ -234,6 +234,15 @@ func (dt *DataTabEditor) SetMigrationContext(langs []string) {
 	}
 }
 
+// SetDTONames injects DTO names from the contracts tab so that the caching
+// entities multiselect includes both domain names and DTO names.
+func (dt *DataTabEditor) SetDTONames(names []string) {
+	if stringSlicesEqual(dt.availableDTOs, names) {
+		return
+	}
+	dt.availableDTOs = names
+}
+
 // SetEnvironmentNames injects environment names from the infra tab so that
 // database forms show an environment selector dropdown.
 func (dt *DataTabEditor) SetEnvironmentNames(names []string) {
@@ -290,22 +299,28 @@ func defaultGovernanceFields() []Field {
 }
 
 // withRefreshedCachingEntities returns a copy of the DataTabEditor with the
-// entities multiselect options in cachingForm updated to reflect current domain names.
+// entities multiselect options in cachingForm updated to reflect current domain
+// and DTO names.
 func (dt DataTabEditor) withRefreshedCachingEntities() DataTabEditor {
 	domOpts := dt.domainNames()
+	opts := make([]string, 0, len(domOpts)+len(dt.availableDTOs))
+	opts = append(opts, domOpts...)
+	for _, name := range dt.availableDTOs {
+		opts = append(opts, "dto:"+name)
+	}
 	newFields := make([]Field, len(dt.cachingForm))
 	copy(newFields, dt.cachingForm)
 	for i := range newFields {
 		if newFields[i].Key == "entities" {
 			// Preserve existing selections by re-mapping
 			oldOpts := newFields[i].Options
-			newFields[i].Options = domOpts
-			newFields[i].Value = placeholderFor(domOpts, "(no domains configured)")
+			newFields[i].Options = opts
+			newFields[i].Value = placeholderFor(opts, "(no domains or DTOs configured)")
 			newSelected := make([]int, 0)
 			for _, oldIdx := range newFields[i].SelectedIdxs {
 				if oldIdx < len(oldOpts) {
 					oldVal := oldOpts[oldIdx]
-					for j, newOpt := range domOpts {
+					for j, newOpt := range opts {
 						if newOpt == oldVal {
 							newSelected = append(newSelected, j)
 							break

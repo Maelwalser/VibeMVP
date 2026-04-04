@@ -137,6 +137,7 @@ func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
 		p.UptimeSLO = fieldGet(cc.standardsFields, "uptime_slo")
 		p.LatencyP99 = fieldGet(cc.standardsFields, "latency_p99")
 		p.BackendLinter = fieldGet(cc.standardsFields, "be_linter")
+		p.FrontendLinter = fieldGet(cc.standardsFields, "fe_linter")
 	}
 	return p
 }
@@ -170,7 +171,7 @@ func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutE
 		cc.docsFields = setFieldValue(cc.docsFields, "changelog", d.Changelog)
 	}
 
-	if p.BranchStrategy != "" || p.DependencyUpdates != "" || p.BackendLinter != "" {
+	if p.BranchStrategy != "" || p.DependencyUpdates != "" || p.BackendLinter != "" || p.FrontendLinter != "" {
 		cc.standardsEnabled = true
 		cc.standardsFields = setFieldValue(cc.standardsFields, "branch_strategy", p.BranchStrategy)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "dep_updates", p.DependencyUpdates)
@@ -179,6 +180,7 @@ func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutE
 		cc.standardsFields = setFieldValue(cc.standardsFields, "uptime_slo", p.UptimeSLO)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "latency_p99", p.LatencyP99)
 		cc.standardsFields = setFieldValue(cc.standardsFields, "be_linter", p.BackendLinter)
+		cc.standardsFields = setFieldValue(cc.standardsFields, "fe_linter", p.FrontendLinter)
 	}
 
 	return cc

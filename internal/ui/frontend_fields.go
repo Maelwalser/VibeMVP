@@ -127,11 +127,6 @@ func defaultFETechFields() []Field {
 			Options: []string{"Code splitting (route-based)", "Dynamic imports", "Tree shaking only", "None"},
 			Value:   "None", SelIdx: 3,
 		},
-		{
-			Key: "fe_linter", Label: "Linter        ", Kind: KindSelect,
-			Options: []string{"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
-			Value:   "None", SelIdx: 5,
-		},
 	}
 }
 
@@ -189,7 +184,7 @@ func defaultFEThemeFields() []Field {
 	}
 }
 
-func defaultPageFormFields(authRoleOptions, pageRouteOptions, assetNameOptions, componentNameOptions []string) []Field {
+func defaultPageFormFields(authRoleOptions, linkedPageOptions, assetNameOptions, componentNameOptions []string) []Field {
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "route", Label: "route         ", Kind: KindText},
@@ -230,8 +225,8 @@ func defaultPageFormFields(authRoleOptions, pageRouteOptions, assetNameOptions, 
 		},
 		{
 			Key: "linked_pages", Label: "linked_pages  ", Kind: KindMultiSelect,
-			Options: pageRouteOptions,
-			Value:   placeholderFor(pageRouteOptions, "(no pages configured)"),
+			Options: linkedPageOptions,
+			Value:   placeholderFor(linkedPageOptions, "(no other pages)"),
 		},
 		{
 			Key: "assets", Label: "assets        ", Kind: KindMultiSelect,
@@ -387,9 +382,9 @@ var frontendMetaframeworksByFramework = map[string][]string{
 	"React":                       {"Next.js", "Remix", "Astro", "None"},
 	"Vue":                         {"Nuxt", "Astro", "None"},
 	"Svelte":                      {"SvelteKit", "Astro", "None"},
-	"Angular":                     {"None"},
-	"Solid":                       {"Astro", "None"},
-	"Qwik":                        {"None"},
+	"Angular":                     {"Analog", "None"},
+	"Solid":                       {"SolidStart", "Astro", "None"},
+	"Qwik":                        {"Qwik City", "None"},
 	"HTMX":                        {"None"},
 	"Flutter":                     {"None"},
 	"Jetpack Compose":             {"None"},
@@ -742,11 +737,5 @@ func (fe *FrontendEditor) updateFEDependentOptions() {
 		fe.setTechFieldOptions("bundle_opt", []string{"None"})
 	}
 
-	// fe_linter ← language
-	if opts, ok := feLinterByLanguage[lang]; ok {
-		fe.setTechFieldOptions("fe_linter", opts)
-	} else {
-		fe.setTechFieldOptions("fe_linter", []string{"Custom", "None"})
-	}
 }
 

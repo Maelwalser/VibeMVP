@@ -31,4 +31,5 @@ type CrossCutPillar struct {
 	UptimeSLO         string        `json:"uptime_slo,omitempty"`
 	LatencyP99        string        `json:"latency_p99,omitempty"`
 	BackendLinter     string        `json:"backend_linter,omitempty"`
+	FrontendLinter    string        `json:"frontend_linter,omitempty"`
 }

@@ -23,7 +23,6 @@ type FrontendTechConfig struct {
 	AuthFlowType       string `json:"auth_flow_type,omitempty"`
 	ErrorBoundary      string `json:"error_boundary,omitempty"`
 	BundleOptimization string `json:"bundle_optimization,omitempty"`
-	FrontendLinter     string `json:"frontend_linter,omitempty"`
 }
 
 // FrontendTheme describes the visual theme settings.
@@ -88,7 +87,7 @@ type PageDef struct {
 	Loading       string `json:"loading"`
 	ErrorHandling string `json:"error_handling"`
 	AuthRoles     string `json:"auth_roles,omitempty"`
-	LinkedPages   string `json:"linked_pages,omitempty"`
+	LinkedPages   string `json:"linked_pages,omitempty"`   // comma-separated routes of related pages
 	Assets        string `json:"assets,omitempty"`         // comma-separated asset names used on this page
 	ComponentRefs string `json:"component_refs,omitempty"` // comma-sep names from the component library
 }
