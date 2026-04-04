@@ -53,6 +53,10 @@ type CrossCutEditor struct {
 	backendArchPattern  string
 	frontendLang        string
 	frontendFramework   string
+
+	// Active API protocols sourced from ContractsEditor — used to build
+	// per-protocol documentation format fields.
+	docsProtocols []string
 }
 
 func (cc CrossCutEditor) activeTabEnabled() bool {
@@ -75,6 +79,7 @@ func (cc *CrossCutEditor) enableActiveTab() {
 	case ccTabDocs:
 		cc.docsEnabled = true
 		cc.docsFormIdx = 0
+		cc.rebuildDocsFields()
 	case ccTabStandards:
 		cc.standardsEnabled = true
 		cc.standardsFormIdx = 0
@@ -123,9 +128,21 @@ func (cc CrossCutEditor) ToManifestCrossCutPillar() manifest.CrossCutPillar {
 		}
 	}
 	if cc.docsEnabled {
+		protos := cc.docsProtocols
+		if len(protos) == 0 {
+			protos = []string{"REST"}
+		}
+		formats := make(map[string]string, len(protos))
+		for _, proto := range protos {
+			key := docsFormatFieldKey(proto)
+			if v := fieldGet(cc.docsFields, key); v != "" && v != "None" {
+				formats[proto] = v
+			}
+		}
 		p.Docs = manifest.DocsConfig{
-			APIDocs:      fieldGet(cc.docsFields, "api_docs"),
-			AutoGenerate: fieldGet(cc.docsFields, "auto_generate") == "true",
+			PerProtocolFormats: formats,
+			AutoGenerate:       fieldGet(cc.docsFields, "auto_generate") == "true",
+			Changelog:          fieldGet(cc.docsFields, "changelog"),
 		}
 	}
 	if cc.standardsEnabled {
@@ -155,16 +172,36 @@ func (cc CrossCutEditor) FromCrossCutPillar(p manifest.CrossCutPillar) CrossCutE
 	}
 
 	d := p.Docs
-	if d.APIDocs != "" {
+	if len(d.PerProtocolFormats) > 0 || d.APIDocs != "" || d.Changelog != "" {
 		cc.docsEnabled = true
-		cc.docsFields = setFieldValue(cc.docsFields, "api_docs", d.APIDocs)
 		boolStr := func(b bool) string {
 			if b {
 				return "true"
 			}
 			return "false"
 		}
+		if len(d.PerProtocolFormats) > 0 {
+			// Rebuild fields for the saved protocols so per-protocol keys exist.
+			order := []string{"REST", "GraphQL", "gRPC", "WebSocket message", "Event"}
+			var protos []string
+			for _, proto := range order {
+				if _, ok := d.PerProtocolFormats[proto]; ok {
+					protos = append(protos, proto)
+				}
+			}
+			cc.docsProtocols = protos
+			cc.rebuildDocsFields()
+			for proto, format := range d.PerProtocolFormats {
+				cc.docsFields = setFieldValue(cc.docsFields, docsFormatFieldKey(proto), format)
+			}
+		} else if d.APIDocs != "" {
+			// Migrate legacy single-format field to REST.
+			cc.docsFields = setFieldValue(cc.docsFields, docsFormatFieldKey("REST"), d.APIDocs)
+		}
 		cc.docsFields = setFieldValue(cc.docsFields, "auto_generate", boolStr(d.AutoGenerate))
+		if d.Changelog != "" {
+			cc.docsFields = setFieldValue(cc.docsFields, "changelog", d.Changelog)
+		}
 	}
 
 	if p.DependencyUpdates != "" || p.BackendLinter != "" || p.FrontendLinter != "" {

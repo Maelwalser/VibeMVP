@@ -123,6 +123,27 @@ func (ce *ContractsEditor) SetWAFRateLimitStrategy(strategy string) {
 	ce.wafRateLimitStrategy = strategy
 }
 
+// ActiveDocProtocols returns the distinct endpoint protocols present in the
+// current endpoints list, in a stable order. Used by CrossCutEditor to build
+// per-protocol documentation format fields. Falls back to ["REST"] when empty.
+func (ce ContractsEditor) ActiveDocProtocols() []string {
+	order := []string{"REST", "GraphQL", "gRPC", "WebSocket message", "Event"}
+	seen := make(map[string]bool)
+	for _, ep := range ce.endpoints {
+		seen[ep.Protocol] = true
+	}
+	var result []string
+	for _, p := range order {
+		if seen[p] {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return []string{"REST"}
+	}
+	return result
+}
+
 // protocolsForService returns the protocol options valid for the named service
 // based on its registered technologies. Returns nil when no filter applies.
 // SetDomainDefs updates the full domain definitions for attribute injection.

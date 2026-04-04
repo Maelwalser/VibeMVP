@@ -128,6 +128,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 					m.frontendEditor.Language(),
 					m.frontendEditor.Framework(),
 				)
+				m.crossCutEditor.SetDocsContext(m.contractsEditor.ActiveDocProtocols())
 				var cmd tea.Cmd
 				m.crossCutEditor, cmd = m.crossCutEditor.Update(msg)
 				return cmd

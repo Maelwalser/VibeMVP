@@ -15,8 +15,13 @@ type TestingConfig struct {
 
 // DocsConfig describes documentation tooling.
 type DocsConfig struct {
-	APIDocs      string `json:"api_docs"`
-	AutoGenerate bool   `json:"auto_generate"`
+	// PerProtocolFormats maps each API protocol (e.g. "REST", "GraphQL", "gRPC")
+	// to its documentation format (e.g. "OpenAPI/Swagger", "GraphQL Playground").
+	PerProtocolFormats map[string]string `json:"per_protocol_formats,omitempty"`
+	AutoGenerate       bool              `json:"auto_generate"`
+	Changelog          string            `json:"changelog,omitempty"`
+	// APIDocs is a legacy single-format field retained for JSON backwards compatibility.
+	APIDocs string `json:"api_docs,omitempty"`
 }
 
 // CrossCutPillar groups cross-cutting concerns.

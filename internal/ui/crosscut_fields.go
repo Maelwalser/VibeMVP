@@ -279,20 +279,132 @@ func defaultStandardsFields() []Field {
 	}
 }
 
-func defaultDocsFields() []Field {
+// docsByProtocol maps each API protocol to its supported documentation formats.
+var docsByProtocol = map[string][]string{
+	"REST":              {"OpenAPI/Swagger", "None"},
+	"GraphQL":           {"GraphQL Playground", "GraphQL SDL", "None"},
+	"gRPC":              {"gRPC reflection", "Protobuf docs (buf.build)", "None"},
+	"WebSocket message": {"AsyncAPI", "None"},
+	"Event":             {"AsyncAPI", "CloudEvents spec", "None"},
+}
+
+// docsFormatFieldKey returns the field key for a per-protocol docs format field.
+func docsFormatFieldKey(proto string) string {
+	if proto == "WebSocket message" {
+		return "docs_WebSocket"
+	}
+	return "docs_" + proto
+}
+
+// docsFormatLabel returns the display label for a per-protocol docs format field.
+func docsFormatLabel(proto string) string {
+	switch proto {
+	case "REST":
+		return "REST docs     "
+	case "GraphQL":
+		return "GraphQL docs  "
+	case "gRPC":
+		return "gRPC docs     "
+	case "WebSocket message":
+		return "WebSocket docs"
+	case "Event":
+		return "Event docs    "
+	default:
+		return proto + " docs  "
+	}
+}
+
+// defaultDocsTailFields returns the shared docs fields (auto_generate + changelog).
+func defaultDocsTailFields() []Field {
 	return []Field{
-		{
-			Key: "api_docs", Label: "api_docs      ", Kind: KindSelect,
-			Options: []string{
-				"OpenAPI/Swagger", "GraphQL Playground",
-				"gRPC reflection", "None",
-			},
-			Value: "OpenAPI/Swagger",
-		},
 		{
 			Key: "auto_generate", Label: "auto_generate ", Kind: KindSelect,
 			Options: OptionsOffOn, Value: "true", SelIdx: 1,
 		},
+		{
+			Key: "changelog", Label: "changelog     ", Kind: KindSelect,
+			Options: []string{"Conventional Commits", "Manual", "None"},
+			Value:   "None", SelIdx: 2,
+		},
+	}
+}
+
+// defaultDocsFields returns an initial docs field list assuming REST as the
+// only protocol. rebuildDocsFields() replaces this with the correct per-protocol set.
+func defaultDocsFields() []Field {
+	restOpts := docsByProtocol["REST"]
+	formatField := Field{
+		Key: docsFormatFieldKey("REST"), Label: docsFormatLabel("REST"),
+		Kind: KindSelect, Options: restOpts, Value: restOpts[0],
+	}
+	return append([]Field{formatField}, defaultDocsTailFields()...)
+}
+
+// rebuildDocsFields rebuilds the docs field slice to show one format selector
+// per active API protocol, followed by shared fields. Existing values are preserved.
+func (cc *CrossCutEditor) rebuildDocsFields() {
+	saved := make(map[string]string, len(cc.docsFields))
+	for _, f := range cc.docsFields {
+		saved[f.Key] = f.DisplayValue()
+	}
+
+	protos := cc.docsProtocols
+	if len(protos) == 0 {
+		protos = []string{"REST"}
+	}
+
+	var fields []Field
+	for _, proto := range protos {
+		opts := docsByProtocol[proto]
+		if opts == nil {
+			continue
+		}
+		key := docsFormatFieldKey(proto)
+		cur, hasSaved := saved[key]
+		f := Field{
+			Key: key, Label: docsFormatLabel(proto),
+			Kind: KindSelect, Options: opts, Value: opts[0],
+		}
+		if hasSaved {
+			for j, opt := range opts {
+				if opt == cur {
+					f.SelIdx = j
+					f.Value = opt
+					break
+				}
+			}
+		}
+		fields = append(fields, f)
+	}
+
+	tail := defaultDocsTailFields()
+	for i := range tail {
+		if v, ok := saved[tail[i].Key]; ok && v != "" {
+			tail[i].Value = v
+			for j, opt := range tail[i].Options {
+				if opt == v {
+					tail[i].SelIdx = j
+					break
+				}
+			}
+		}
+	}
+	cc.docsFields = append(fields, tail...)
+
+	if cc.docsFormIdx >= len(cc.docsFields) {
+		cc.docsFormIdx = len(cc.docsFields) - 1
+	}
+}
+
+// SetDocsContext updates the docs fields when the set of active API protocols changes.
+// A no-op when the protocol list is unchanged.
+func (cc *CrossCutEditor) SetDocsContext(protocols []string) {
+	if stringSlicesEqual(cc.docsProtocols, protocols) {
+		return
+	}
+	cc.docsProtocols = protocols
+	if cc.docsEnabled {
+		cc.rebuildDocsFields()
 	}
 }
 
