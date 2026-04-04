@@ -137,6 +137,18 @@ func (dt DataTabEditor) CacheAliases() []string {
 	return out
 }
 
+// AllDBSourceAliases returns the aliases of every configured database source
+// (both regular and cache), for use by the backend health_deps multiselect.
+func (dt DataTabEditor) AllDBSourceAliases() []string {
+	var out []string
+	for _, src := range dt.dbEditor.Sources {
+		if src.Alias != "" {
+			out = append(out, src.Alias)
+		}
+	}
+	return out
+}
+
 // dbNames returns the aliases of all created databases for use as dropdown options.
 func (dt DataTabEditor) dbNames() []string {
 	names := make([]string, 0, len(dt.dbEditor.Sources))

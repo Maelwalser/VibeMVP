@@ -55,6 +55,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
 				m.backendEditor.SetEndpointNames(m.contractsEditor.EndpointNames())
 				m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
+				m.backendEditor.SetDBSourceAliases(m.dataTabEditor.AllDBSourceAliases())
 				m.backendEditor.SetEnvironmentNames(m.infraEditor.EnvironmentNames())
 				m.backendEditor.SetOrchestrator(m.infraEditor.PrimaryOrchestrator())
 				var cmd tea.Cmd
@@ -71,8 +72,9 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.dataTabEditor.SetDTONames(m.contractsEditor.DTONames())
 				var cmd tea.Cmd
 				m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)
-				// Refresh rate_limit_backend options whenever cache sources change.
+				// Refresh rate_limit_backend and health_deps options whenever data sources change.
 				m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
+				m.backendEditor.SetDBSourceAliases(m.dataTabEditor.AllDBSourceAliases())
 				return cmd
 			},
 		},

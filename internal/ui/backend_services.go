@@ -21,6 +21,10 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 		svc := manifest.ServiceDef{}
 		be.Services = append(be.Services, svc)
 		newFields := defaultServiceFields()
+		// Monolith: health deps are global (CONFIG tab), not per-service.
+		if be.currentArch() == "monolith" {
+			newFields = withoutField(newFields, "health_deps")
+		}
 		be.applyServiceDiscoveryOpts(newFields)
 		ed.items = append(ed.items, newFields)
 		ed.itemIdx = len(ed.items) - 1

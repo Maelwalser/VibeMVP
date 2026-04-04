@@ -75,6 +75,8 @@ func defaultEnvFields() []Field {
 			Options: []string{"(no environments configured)"},
 			Value:   "(no environments configured)",
 		},
+		// Monolith-only: global health dependencies for the entire application.
+		{Key: "health_deps", Label: "Health Deps   ", Kind: KindMultiSelect},
 	}
 }
 
@@ -145,7 +147,7 @@ func defaultServiceFields() []Field {
 			},
 			Value: "Microservice",
 		},
-		{Key: "healthcheck_path", Label: "Healthcheck   ", Kind: KindText, Value: "/healthz"},
+		{Key: "health_deps", Label: "Health Deps   ", Kind: KindMultiSelect},
 		{
 			Key: "error_format", Label: "Error Format  ", Kind: KindSelect,
 			Options: []string{"RFC 7807 (Problem Details)", "Custom JSON envelope", "Platform default"},
@@ -230,20 +232,37 @@ func serviceFieldsFromDef(s manifest.ServiceDef) []Field {
 	if s.Environment != "" {
 		f = setFieldValue(f, "environment", s.Environment)
 	}
+	// Restore health_deps selections — options are populated dynamically later
+	// via SetDBSourceAliases; store names in Value for lazy restoration.
+	if len(s.HealthDeps) > 0 {
+		for i := range f {
+			if f[i].Key == "health_deps" {
+				f[i].Value = strings.Join(s.HealthDeps, ", ")
+				break
+			}
+		}
+	}
 	return f
 }
 
 func serviceDefFromFields(fields []Field) manifest.ServiceDef {
 	// Read technologies multiselect
 	var techs []string
+	var healthDeps []string
 	for _, f := range fields {
-		if f.Key == "technologies" {
+		switch f.Key {
+		case "technologies":
 			for _, idx := range f.SelectedIdxs {
 				if idx < len(f.Options) {
 					techs = append(techs, f.Options[idx])
 				}
 			}
-			break
+		case "health_deps":
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					healthDeps = append(healthDeps, f.Options[idx])
+				}
+			}
 		}
 	}
 	env := fieldGet(fields, "environment")
@@ -264,7 +283,7 @@ func serviceDefFromFields(fields []Field) manifest.ServiceDef {
 		FrameworkVersion: fieldGet(fields, "framework_version"),
 		PatternTag:       fieldGet(fields, "pattern_tag"),
 		Technologies:     techs,
-		HealthcheckPath:  fieldGet(fields, "healthcheck_path"),
+		HealthDeps:       healthDeps,
 		ErrorFormat:      fieldGet(fields, "error_format"),
 		ServiceDiscovery: fieldGet(fields, "service_discovery"),
 		Environment:      env,
