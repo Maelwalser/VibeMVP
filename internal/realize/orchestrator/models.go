@@ -55,7 +55,18 @@ var providerDefaults = map[string]string{
 	"Llama":   "llama-3.3-70b-versatile",
 }
 
-// resolveModelID returns the model ID string for a given provider, tier, and version.
+// providerTierNames maps each provider to [Fast, Medium, Slow] tier name strings.
+// These names are the keys used in providerModels for that provider.
+// Order must match ModelTier constants: TierFast=0, TierMedium=1, TierSlow=2.
+var providerTierNames = map[string][3]string{
+	"Claude":  {"Haiku", "Sonnet", "Opus"},
+	"ChatGPT": {"Mini", "4o", "o1"},
+	"Gemini":  {"Flash", "Pro", "Ultra"},
+	"Mistral": {"Nemo", "Small", "Large"},
+	"Llama":   {"8B", "70B", "405B"},
+}
+
+// resolveModelID returns the model ID string for a given provider, tier name, and version.
 // Falls back to the provider default when the tier or version is not found.
 func resolveModelID(provider, tier, version string) string {
 	tiers, ok := providerModels[provider]
@@ -76,6 +87,41 @@ func resolveModelID(provider, tier, version string) string {
 		return id
 	}
 	return spec.fallback
+}
+
+// resolveModelIDForTier returns the model ID for a given provider, abstract ModelTier,
+// and optional version string. Translates the abstract tier to a provider-specific tier
+// name using providerTierNames before looking up in providerModels.
+func resolveModelIDForTier(provider string, tier ModelTier, version string) string {
+	names, ok := providerTierNames[provider]
+	if !ok {
+		return resolveModelID(provider, "", version)
+	}
+	return resolveModelID(provider, names[tier], version)
+}
+
+// buildAgentForTier constructs the appropriate agent for the given ProviderAssignment
+// and ModelTier. For Claude with no Credential, falls back to the env-var API key.
+// Add new providers to the switch without touching any other file.
+func buildAgentForTier(pa manifest.ProviderAssignment, tier ModelTier, maxTokens int64, verbose bool) agent.Agent {
+	model := resolveModelIDForTier(pa.Provider, tier, pa.Version)
+	switch pa.Provider {
+	case "Claude":
+		if pa.Credential != "" {
+			return agent.NewClaudeAgentWithKey(model, maxTokens, verbose, pa.Credential)
+		}
+		return agent.NewClaudeAgent(model, maxTokens, verbose)
+	case "ChatGPT":
+		return agent.NewOpenAIAgent("https://api.openai.com", pa.Credential, model, maxTokens, verbose)
+	case "Mistral":
+		return agent.NewOpenAIAgent("https://api.mistral.ai", pa.Credential, model, maxTokens, verbose)
+	case "Llama":
+		return agent.NewOpenAIAgent("https://api.groq.com/openai", pa.Credential, model, maxTokens, verbose)
+	case "Gemini":
+		return agent.NewGeminiAgent(pa.Credential, model, maxTokens, verbose)
+	default:
+		return agent.NewClaudeAgent(model, maxTokens, verbose)
+	}
 }
 
 // ── Provider selection ────────────────────────────────────────────────────────
@@ -120,14 +166,14 @@ func providerFor(taskID string, providers manifest.ProviderAssignments) (manifes
 
 // describeProvider returns a human-readable model label for dry-run output.
 // For manifest-configured providers it shows the provider name/tier; for
-// default-agent tasks it shows the tier-selected model.
-func describeProvider(taskID string, providers manifest.ProviderAssignments, kind dag.TaskKind) string {
+// default-agent tasks it shows the model ID resolved from defaultPA.
+func describeProvider(taskID string, providers manifest.ProviderAssignments, kind dag.TaskKind, defaultPA manifest.ProviderAssignment) string {
 	if kind == dag.TaskKindDependencyResolution {
 		return "(package manager — no LLM)"
 	}
 	pa, ok := providerFor(taskID, providers)
 	if !ok || pa.Credential == "" {
-		return tierForKind(kind)
+		return resolveModelIDForTier(defaultPA.Provider, tierForKind(kind), defaultPA.Version)
 	}
 	s := pa.Provider
 	if pa.Model != "" {

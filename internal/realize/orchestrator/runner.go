@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/agent"
 	"github.com/vibe-menu/internal/realize/config"
 	"github.com/vibe-menu/internal/realize/dag"
@@ -69,9 +70,12 @@ type TaskRunner struct {
 	maxRetries int
 	verbose    bool
 	logFn      func(string) // optional; nil falls back to os.Stderr
-	// baseModel is the tier-selected model for this task (empty = use agent as-is).
-	// When set, each retry attempt escalates through Haiku → Sonnet → Opus.
-	baseModel string
+	// providerAssignment is the provider config for this task (Provider, Credential, Version).
+	// For the default Claude path, Provider="Claude" with empty Credential (uses env var).
+	providerAssignment manifest.ProviderAssignment
+	// initialTier is the baseline model tier for this task (from tierForKind).
+	// Each retry escalates: TierFast → TierMedium → TierSlow, regardless of provider.
+	initialTier ModelTier
 	// depsContext is pre-computed dependency & API reference text injected into
 	// the system prompt to prevent module version hallucination.
 	depsContext string
@@ -402,20 +406,23 @@ func runGoModTidy(ctx context.Context, dir string) {
 }
 
 // agentForAttempt returns the agent to use for a given attempt number.
-// When baseModel is set (default Claude agent path), the model escalates on
-// retry: Haiku → Sonnet → Opus. Per-section manifest overrides are not escalated.
+// Attempt 0 reuses the pre-built r.agent. Each subsequent retry escalates the
+// ModelTier (TierFast → TierMedium → TierSlow) and rebuilds the agent via
+// buildAgentForTier — which works for any configured provider, not just Claude.
 func (r *TaskRunner) agentForAttempt(attempt int) agent.Agent {
-	if r.baseModel == "" {
+	if attempt == 0 {
 		return r.agent
 	}
-	model := escalateModel(r.baseModel, attempt)
-	if model == r.baseModel && attempt == 0 {
-		return r.agent
+	tier := r.initialTier
+	for i := 0; i < attempt; i++ {
+		next, _ := escalateTier(tier)
+		tier = next
 	}
-	if r.verbose && attempt > 0 && model != r.baseModel {
-		r.log("[%s] escalating model to %s for attempt %d", r.task.ID, model, attempt)
+	if r.verbose {
+		model := resolveModelIDForTier(r.providerAssignment.Provider, tier, r.providerAssignment.Version)
+		r.log("[%s] escalating to %s (%s) for attempt %d", r.task.ID, model, r.providerAssignment.Provider, attempt)
 	}
-	return agent.NewClaudeAgent(model, defaultMaxTokens, r.verbose)
+	return buildAgentForTier(r.providerAssignment, tier, defaultMaxTokens, r.verbose)
 }
 
 // serviceSlug extracts the service slug from a task ID of the form "svc.<slug>.<layer>".

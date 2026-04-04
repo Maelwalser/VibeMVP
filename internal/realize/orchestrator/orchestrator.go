@@ -36,6 +36,13 @@ type Config struct {
 	Parallelism  int
 	DryRun       bool
 	Verbose      bool
+	// Provider overrides the default LLM provider for all tasks that have no
+	// per-section manifest assignment (e.g. "Gemini", "ChatGPT", "Mistral").
+	// Ignored when empty — falls back to Claude via the ANTHROPIC_API_KEY env var.
+	Provider string
+	// APIKey is the credential for Provider. When empty, the standard env var
+	// for that provider is tried (GEMINI_API_KEY, OPENAI_API_KEY, etc.).
+	APIKey string
 	// LogFunc, if non-nil, receives status lines instead of os.Stderr.
 	LogFunc func(string)
 }
@@ -58,6 +65,32 @@ type Orchestrator struct {
 // New returns a configured Orchestrator.
 func New(cfg Config) *Orchestrator {
 	return &Orchestrator{cfg: cfg}
+}
+
+// providerEnvVars maps provider names to their conventional API key env vars.
+var providerEnvVars = map[string]string{
+	"Claude":  "ANTHROPIC_API_KEY",
+	"ChatGPT": "OPENAI_API_KEY",
+	"Gemini":  "GEMINI_API_KEY",
+	"Mistral": "MISTRAL_API_KEY",
+	"Llama":   "GROQ_API_KEY",
+}
+
+// resolveDefaultProvider returns the ProviderAssignment to use for tasks that
+// have no per-section manifest override.
+// Priority: --provider + --api-key flags → env vars → default Claude (env-var key).
+func (o *Orchestrator) resolveDefaultProvider() manifest.ProviderAssignment {
+	provider := o.cfg.Provider
+	if provider == "" {
+		provider = "Claude"
+	}
+	key := o.cfg.APIKey
+	if key == "" {
+		if envVar, ok := providerEnvVars[provider]; ok {
+			key = os.Getenv(envVar)
+		}
+	}
+	return manifest.ProviderAssignment{Provider: provider, Credential: key}
 }
 
 // Run loads the manifest, builds the DAG, and executes all tasks.
@@ -107,8 +140,9 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	verifiers := verify.NewRegistry()
 	mem := memory.New()
 
-	// Build a default agent; per-section agents are resolved below.
-	defaultAgent := agent.NewClaudeAgent(defaultModel, defaultMaxTokens, o.cfg.Verbose)
+	// defaultProvider is used for tasks that have no per-section manifest override.
+	// Priority: --provider flag → env vars → Claude (uses ANTHROPIC_API_KEY).
+	defaultProvider := o.resolveDefaultProvider()
 
 	// Resolve the minimum Go runtime version from the Go module proxy once here
 	// so every task — plan, infra, frontend — uses the same consistent version.
@@ -141,7 +175,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	for waveIdx, wave := range d.Levels() {
 		o.log("realize: wave %d (%d tasks): %v", waveIdx, len(wave), wave)
 
-		if err := o.runWave(ctx, wave, d, providers, reg, defaultAgent, verifiers, writer, st, mem, resolvedGoVersion, resolvedGoModules); err != nil {
+		if err := o.runWave(ctx, wave, d, providers, reg, defaultProvider, verifiers, writer, st, mem, resolvedGoVersion, resolvedGoModules); err != nil {
 			return fmt.Errorf("wave %d: %w", waveIdx, err)
 		}
 	}
@@ -178,7 +212,7 @@ func (o *Orchestrator) runWave(
 	d *dag.DAG,
 	providers manifest.ProviderAssignments,
 	reg *skills.FileRegistry,
-	defaultAgent agent.Agent,
+	defaultProvider manifest.ProviderAssignment,
 	verifiers *verify.Registry,
 	writer *output.Writer,
 	st *state.Store,
@@ -208,12 +242,12 @@ func (o *Orchestrator) runWave(
 			o.log("[%s] starting: %s", task.ID, task.Label)
 
 			// Dependency resolution tasks run a package manager directly — no LLM.
-			// All other tasks resolve a provider (Claude / OpenAI / etc.) and apply
-			// model tiering for the default Claude path.
-			var (
-				a         agent.Agent
-				baseModel string
-			)
+			// All other tasks resolve a provider (manifest override or default Claude)
+			// and apply abstract model tiering for provider-agnostic tier escalation.
+			var a agent.Agent
+			initialTier := tierForKind(task.Kind)
+			pa := defaultProvider
+
 			if task.Kind == dag.TaskKindDependencyResolution {
 				var svcTmpDir string
 				if slug, ok := serviceSlug(task.ID); ok {
@@ -221,26 +255,27 @@ func (o *Orchestrator) runWave(
 				}
 				a = deps.New(svcTmpDir, o.cfg.Verbose)
 			} else {
-				a = resolveAgent(task.ID, providers, defaultAgent, o.cfg.Verbose)
-				if a == defaultAgent {
-					baseModel = tierForKind(task.Kind)
-					a = agent.NewClaudeAgent(baseModel, defaultMaxTokens, o.cfg.Verbose)
+				// Use per-section manifest override when configured; otherwise default.
+				if override, ok := providerFor(task.ID, providers); ok && override.Credential != "" {
+					pa = override
 				}
+				a = buildAgentForTier(pa, initialTier, defaultMaxTokens, o.cfg.Verbose)
 			}
 
 			runner := &TaskRunner{
-				task:        task,
-				agent:       a,
-				verifier:    verifiers.ForTask(task),
-				writer:      writer,
-				state:       st,
-				memory:      mem,
-				skillDocs:   skillDocs,
-				maxRetries:  o.cfg.MaxRetries,
-				verbose:     o.cfg.Verbose,
-				logFn:       o.cfg.LogFunc,
-				baseModel:   baseModel,
-				depsContext: buildDepsContext(gctx, task, resolvedGoVersion, resolvedGoModules),
+				task:               task,
+				agent:              a,
+				verifier:           verifiers.ForTask(task),
+				writer:             writer,
+				state:              st,
+				memory:             mem,
+				skillDocs:          skillDocs,
+				maxRetries:         o.cfg.MaxRetries,
+				verbose:            o.cfg.Verbose,
+				logFn:              o.cfg.LogFunc,
+				providerAssignment: pa,
+				initialTier:        initialTier,
+				depsContext:        buildDepsContext(gctx, task, resolvedGoVersion, resolvedGoModules),
 			}
 			return runner.Run(gctx)
 		})
@@ -250,15 +285,14 @@ func (o *Orchestrator) runWave(
 }
 
 // printPlan prints the task DAG in dry-run mode without invoking any agents.
-// Only tasks whose section has a configured provider show the model label;
-// unconfigured tasks show the default model.
 func (o *Orchestrator) printPlan(d *dag.DAG, providers manifest.ProviderAssignments) error {
+	defaultPA := o.resolveDefaultProvider()
 	fmt.Printf("Execution plan (%d tasks, %d waves):\n\n", len(d.Tasks), len(d.Levels()))
 	for i, wave := range d.Levels() {
 		fmt.Printf("Wave %d:\n", i)
 		for _, id := range wave {
 			task := d.Tasks[id]
-			model := describeProvider(id, providers, task.Kind)
+			model := describeProvider(id, providers, task.Kind, defaultPA)
 			fmt.Printf("  [%s] %s  →  %s\n", task.Kind, task.Label, model)
 			if len(task.Dependencies) > 0 {
 				fmt.Printf("    deps: %v\n", task.Dependencies)
