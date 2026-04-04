@@ -177,6 +177,14 @@ func (be BackendEditor) tryEnterInsert() (BackendEditor, tea.Cmd) {
 	return be, nil
 }
 
+func (be BackendEditor) clearAndEnterInsert() (BackendEditor, tea.Cmd) {
+	be, cmd := be.tryEnterInsert()
+	if be.internalMode == ModeInsert {
+		be.formInput.SetValue("")
+	}
+	return be, cmd
+}
+
 func (be *BackendEditor) saveInput() {
 	val := be.formInput.Value()
 

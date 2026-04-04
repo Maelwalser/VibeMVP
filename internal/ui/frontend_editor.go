@@ -103,6 +103,8 @@ type FrontendEditor struct {
 	formTextArea textarea.Model
 	inTextArea   bool
 	width        int
+
+	cBuf bool
 }
 
 func newFrontendEditor() FrontendEditor {
@@ -528,6 +530,19 @@ func (fe FrontendEditor) Update(msg tea.Msg) (FrontendEditor, tea.Cmd) {
 		return fe, nil
 	}
 
+	// cc detection: clear field and enter insert mode
+	if !fe.dd.Open && !fe.inTextArea {
+		if key.String() == "c" {
+			if fe.cBuf {
+				fe.cBuf = false
+				return fe.clearAndEnterInsert()
+			}
+			fe.cBuf = true
+			return fe, nil
+		}
+		fe.cBuf = false
+	}
+
 	switch fe.activeTab {
 	case feTabTech:
 		return fe.updateTech(key)
@@ -716,6 +731,14 @@ func (fe *FrontendEditor) saveInput() {
 			fe.saveAssetForm()
 		}
 	}
+}
+
+func (fe FrontendEditor) clearAndEnterInsert() (FrontendEditor, tea.Cmd) {
+	fe, cmd := fe.tryEnterInsert()
+	if fe.internalMode == ModeInsert {
+		fe.formInput.SetValue("")
+	}
+	return fe, cmd
 }
 
 func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {

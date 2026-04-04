@@ -34,7 +34,8 @@ type DBEditor struct {
 	formIdx   int
 	formInput textinput.Model
 
-	dd DropdownState
+	dd   DropdownState
+	cBuf bool
 
 	width        int
 	envNames     []string // injected from InfraPillar.Environments
@@ -116,6 +117,17 @@ func (db DBEditor) Update(msg tea.Msg) (DBEditor, tea.Cmd) {
 	case ModeInsert:
 		return db.updateInsert(msg)
 	default:
+		if key, ok := msg.(tea.KeyMsg); ok && !db.dd.Open {
+			if key.String() == "c" {
+				if db.cBuf {
+					db.cBuf = false
+					return db.clearDBFormInsert()
+				}
+				db.cBuf = true
+				return db, nil
+			}
+			db.cBuf = false
+		}
 		return db.updateNormal(msg)
 	}
 }
@@ -294,6 +306,17 @@ func (db DBEditor) updateDBDropdown(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 	}
 	db.saveFormBack()
 	return db, nil
+}
+
+func (db DBEditor) clearDBFormInsert() (DBEditor, tea.Cmd) {
+	if db.view != dbeViewForm {
+		return db, nil
+	}
+	db, cmd := db.enterDBFormInsert()
+	if db.internalMode == ModeInsert {
+		db.formInput.SetValue("")
+	}
+	return db, cmd
 }
 
 func (db DBEditor) enterDBFormInsert() (DBEditor, tea.Cmd) {

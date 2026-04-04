@@ -45,7 +45,8 @@ type CrossCutEditor struct {
 	dd DropdownState
 
 	// Vim motion state
-	nav VimNav
+	nav  VimNav
+	cBuf bool
 
 	// Context from other editors — used to filter testing options.
 	backendLangs        []string
@@ -306,6 +307,17 @@ func (cc CrossCutEditor) Update(msg tea.Msg) (CrossCutEditor, tea.Cmd) {
 		return cc, nil
 	}
 
+	// cc detection: clear field and enter insert mode
+	if key.String() == "c" {
+		if cc.cBuf {
+			cc.cBuf = false
+			return cc.clearAndEnterInsert()
+		}
+		cc.cBuf = true
+		return cc, nil
+	}
+	cc.cBuf = false
+
 	switch cc.activeTab {
 	case ccTabTesting:
 		return cc.updateFields(key)
@@ -447,6 +459,14 @@ func (cc *CrossCutEditor) saveInput() {
 			cc.standardsFields[cc.standardsFormIdx].SaveTextInput(val)
 		}
 	}
+}
+
+func (cc CrossCutEditor) clearAndEnterInsert() (CrossCutEditor, tea.Cmd) {
+	cc, cmd := cc.tryEnterInsert()
+	if cc.internalMode == ModeInsert {
+		cc.formInput.SetValue("")
+	}
+	return cc, cmd
 }
 
 func (cc CrossCutEditor) tryEnterInsert() (CrossCutEditor, tea.Cmd) {

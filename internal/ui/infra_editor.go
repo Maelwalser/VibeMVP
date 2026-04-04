@@ -44,7 +44,8 @@ type InfraEditor struct {
 	width        int
 
 	// Vim motion state
-	nav VimNav
+	nav  VimNav
+	cBuf bool
 
 	dd DropdownState
 
@@ -331,6 +332,19 @@ func (ie InfraEditor) Update(msg tea.Msg) (InfraEditor, tea.Cmd) {
 		return ie, nil
 	}
 
+	// cc detection: clear field and enter insert mode
+	if !ie.dd.Open {
+		if key.String() == "c" {
+			if ie.cBuf {
+				ie.cBuf = false
+				return ie.clearAndEnterInsert()
+			}
+			ie.cBuf = true
+			return ie, nil
+		}
+		ie.cBuf = false
+	}
+
 	switch ie.activeTab {
 	case infraTabNetworking:
 		return ie.updateFields(key)
@@ -549,6 +563,14 @@ func (ie *InfraEditor) saveInput() {
 			ie.envForm[ie.envFormIdx].SaveTextInput(val)
 		}
 	}
+}
+
+func (ie InfraEditor) clearAndEnterInsert() (InfraEditor, tea.Cmd) {
+	ie, cmd := ie.tryEnterInsert()
+	if ie.internalMode == ModeInsert {
+		ie.formInput.SetValue("")
+	}
+	return ie, cmd
 }
 
 func (ie InfraEditor) tryEnterInsert() (InfraEditor, tea.Cmd) {

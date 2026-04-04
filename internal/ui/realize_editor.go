@@ -108,6 +108,7 @@ type RealizeEditor struct {
 	formInput textinput.Model
 	width     int
 	dd        DropdownState
+	cBuf      bool
 }
 
 func newRealizeEditor() RealizeEditor {
@@ -305,8 +306,17 @@ func (r RealizeEditor) Update(msg tea.Msg) (RealizeEditor, tea.Cmd) {
 		}
 	case "i":
 		return r.tryEnterInsert()
+	case "c":
+		if r.cBuf {
+			r.cBuf = false
+			return r.clearAndEnterInsert()
+		}
+		r.cBuf = true
+		return r, nil
 	case "R":
 		return r, func() tea.Msg { return RealizeMsg{} }
+	default:
+		r.cBuf = false
 	}
 	return r, nil
 }
@@ -366,6 +376,14 @@ func (r *RealizeEditor) saveInput() {
 	if r.activeIdx < len(r.fields) && r.fields[r.activeIdx].CanEditAsText() {
 		r.fields[r.activeIdx].SaveTextInput(r.formInput.Value())
 	}
+}
+
+func (r RealizeEditor) clearAndEnterInsert() (RealizeEditor, tea.Cmd) {
+	r, cmd := r.tryEnterInsert()
+	if r.mode == ModeInsert {
+		r.formInput.SetValue("")
+	}
+	return r, cmd
 }
 
 func (r RealizeEditor) tryEnterInsert() (RealizeEditor, tea.Cmd) {

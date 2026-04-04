@@ -88,6 +88,8 @@ type ContractsEditor struct {
 	internalMode Mode
 	formInput    textinput.Model
 	width        int
+
+	cBuf bool
 }
 
 func newContractsEditor() ContractsEditor {
@@ -428,6 +430,19 @@ func (ce ContractsEditor) Update(msg tea.Msg) (ContractsEditor, tea.Cmd) {
 		return ce, nil
 	}
 
+	// cc detection: clear field and enter insert mode
+	if !ce.dd.Open {
+		if key.String() == "c" {
+			if ce.cBuf {
+				ce.cBuf = false
+				return ce.clearAndEnterInsert()
+			}
+			ce.cBuf = true
+			return ce, nil
+		}
+		ce.cBuf = false
+	}
+
 	switch ce.activeTab {
 	case contractsTabDTOs:
 		return ce.updateDTOs(key)
@@ -554,6 +569,14 @@ func (ce *ContractsEditor) saveInput() {
 			}
 		}
 	}
+}
+
+func (ce ContractsEditor) clearAndEnterInsert() (ContractsEditor, tea.Cmd) {
+	ce, cmd := ce.tryEnterInsert()
+	if ce.internalMode == ModeInsert {
+		ce.formInput.SetValue("")
+	}
+	return ce, cmd
 }
 
 func (ce ContractsEditor) tryEnterInsert() (ContractsEditor, tea.Cmd) {

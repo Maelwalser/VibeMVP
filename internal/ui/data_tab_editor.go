@@ -129,6 +129,8 @@ type DataTabEditor struct {
 
 	// Dropdown state for multiselect fields in domain/caching/fs forms
 	dd DropdownState
+
+	cBuf bool
 }
 
 func newDataTabEditor() DataTabEditor {
@@ -445,6 +447,20 @@ func (dt DataTabEditor) Update(msg tea.Msg) (DataTabEditor, tea.Cmd) {
 		return dt, nil
 	}
 
+	// cc detection: clear field and enter insert mode (only for non-database sub-tabs;
+	// DBEditor handles cc for the databases sub-tab itself)
+	if dt.activeTab != dataTabDatabases && !dt.dd.Open {
+		if key.String() == "c" {
+			if dt.cBuf {
+				dt.cBuf = false
+				return dt.clearAndEnterInsert()
+			}
+			dt.cBuf = true
+			return dt, nil
+		}
+		dt.cBuf = false
+	}
+
 	switch dt.activeTab {
 	case dataTabDatabases:
 		var cmd tea.Cmd
@@ -633,6 +649,14 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 		dt.advanceFormField(1)
 	}
 	return dt, nil
+}
+
+func (dt DataTabEditor) clearAndEnterInsert() (DataTabEditor, tea.Cmd) {
+	dt, cmd := dt.tryEnterInsert()
+	if dt.internalMode == ModeInsert {
+		dt.formInput.SetValue("")
+	}
+	return dt, cmd
 }
 
 func (dt DataTabEditor) View(w, h int) string {

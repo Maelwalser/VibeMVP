@@ -206,6 +206,7 @@ type BackendEditor struct {
 	// Vim motion state
 	countBuf string
 	gBuf     bool
+	cBuf     bool
 }
 
 func newBackendEditor() BackendEditor {
@@ -977,6 +978,17 @@ func (be BackendEditor) Update(msg tea.Msg) (BackendEditor, tea.Cmd) {
 			return be.updateDropdown(key)
 		}
 		return be, nil
+	}
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if key.String() == "c" {
+			if be.cBuf {
+				be.cBuf = false
+				return be.clearAndEnterInsert()
+			}
+			be.cBuf = true
+			return be, nil
+		}
+		be.cBuf = false
 	}
 	return be.updateNormal(msg)
 }
