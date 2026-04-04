@@ -2,6 +2,50 @@ package ui
 
 import "strings"
 
+// ── Meta-tag injection options per framework ─────────────────────────────────
+
+var metaTagByFramework = map[string][]string{
+	"React":   {"Manual", "react-helmet", "Framework-native", "None"},
+	"Vue":     {"Manual", "@vueuse/head", "Framework-native", "None"},
+	"Svelte":  {"Manual", "svelte:head", "Framework-native", "None"},
+	"Angular": {"Manual", "Framework-native", "None"},
+	"Solid":   {"Manual", "@solidjs/meta", "Framework-native", "None"},
+	"Preact":  {"Manual", "react-helmet", "Framework-native", "None"},
+	"Lit":     {"Manual", "Framework-native", "None"},
+}
+
+// refreshMetaTagOptions rebuilds the Options (and clamps SelIdx/Value) for the
+// meta_tag_injection field inside the supplied a11y field slice.
+func refreshMetaTagOptions(fields []Field, framework string) []Field {
+	opts, ok := metaTagByFramework[framework]
+	if !ok {
+		opts = []string{"Manual", "Framework-native", "None"}
+	}
+	updated := make([]Field, len(fields))
+	copy(updated, fields)
+	for i, f := range updated {
+		if f.Key != "meta_tag_injection" {
+			continue
+		}
+		f.Options = opts
+		found := false
+		for j, o := range opts {
+			if o == f.Value {
+				f.SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			f.SelIdx = len(opts) - 1
+			f.Value = opts[len(opts)-1]
+		}
+		updated[i] = f
+		break
+	}
+	return updated
+}
+
 // ── SEO render strategy options per meta-framework ───────────────────────────
 
 var seoRenderByMetaFramework = map[string][]string{
@@ -370,8 +414,8 @@ func defaultA11ySEOFields() []Field {
 		},
 		{
 			Key: "meta_tag_injection", Label: "meta_tags     ", Kind: KindSelect,
-			Options: []string{"Manual", "Automatic (react-helmet)", "Framework-native", "None"},
-			Value:   "None", SelIdx: 3,
+			Options: []string{"Manual", "Framework-native", "None"},
+			Value:   "None", SelIdx: 2,
 		},
 		{
 			Key: "analytics", Label: "analytics     ", Kind: KindSelect,
@@ -810,6 +854,9 @@ func (fe *FrontendEditor) updateFEDependentOptions() {
 	} else {
 		fe.setTechFieldOptions("meta_framework", []string{"None"})
 	}
+
+	// meta_tag_injection ← framework
+	fe.a11yFields = refreshMetaTagOptions(fe.a11yFields, framework)
 
 	// pkg_manager ← language
 	if opts, ok := fePkgManagerByLanguage[lang]; ok {
