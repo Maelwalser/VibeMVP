@@ -845,6 +845,9 @@ func (be BackendEditor) FromBackendPillar(bp manifest.BackendPillar) BackendEdit
 		be.AuthFields = restoreMultiSelectValue(be.AuthFields, "token_storage", bp.Auth.TokenStorage)
 		be.AuthFields = setFieldValue(be.AuthFields, "session_mgmt", bp.Auth.SessionMgmt)
 		be.AuthFields = setFieldValue(be.AuthFields, "refresh_token", bp.Auth.RefreshToken)
+		// Recompute dynamic options after restoring strategy and provider.
+		be.updateAuthTokenStorageOptions()
+		be.updateAuthMFAOptions()
 		be.AuthFields = setFieldValue(be.AuthFields, "mfa", bp.Auth.MFA)
 	}
 

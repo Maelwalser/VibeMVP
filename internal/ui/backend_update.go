@@ -114,6 +114,9 @@ func (be *BackendEditor) toggleMultiSelectOption() {
 	if f := be.mutableFieldPtr(); f != nil && f.Kind == KindMultiSelect {
 		f.ToggleMultiSelect(be.dd.OptIdx)
 		f.DDCursor = be.dd.OptIdx
+		if be.activeTab() == beTabAuth && be.authSubView == beAuthViewConfig && f.Key == "strategy" {
+			be.updateAuthTokenStorageOptions()
+		}
 	}
 }
 
@@ -278,6 +281,8 @@ func (be *BackendEditor) applyDropdown() bool {
 			}
 		} else if be.activeTab() == beTabAPIGW && f.Key == "environment" {
 			be.updateAPIGWTechOptions()
+		} else if be.activeTab() == beTabAuth && be.authSubView == beAuthViewConfig && f.Key == "provider" {
+			be.updateAuthMFAOptions()
 		}
 	}
 	return applyTo(be.mutableFieldPtr())
@@ -590,6 +595,8 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 				}
 			} else if be.activeTab() == beTabAPIGW && f.Key == "environment" {
 				be.updateAPIGWTechOptions()
+			} else if be.activeTab() == beTabAuth && be.authSubView == beAuthViewConfig && f.Key == "provider" {
+				be.updateAuthMFAOptions()
 			}
 		}
 	case "i", "a":

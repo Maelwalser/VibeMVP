@@ -9,25 +9,158 @@ import (
 )
 
 // isAuthFieldHidden returns true when an auth config field should be hidden
-// given the currently selected strategy options.
-// session_mgmt is irrelevant when no session-bearing strategy is active.
+// given the currently selected strategy and provider.
 func (be BackendEditor) isAuthFieldHidden(key string) bool {
-	if key != "session_mgmt" {
+	switch key {
+	case "session_mgmt":
+		// Hide when no session-bearing strategy is active.
+		for _, f := range be.AuthFields {
+			if f.Key != "strategy" {
+				continue
+			}
+			for _, idx := range f.SelectedIdxs {
+				if idx >= 0 && idx < len(f.Options) && f.Options[idx] == "Session-based" {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	case "token_storage":
+		// Hide when no token-bearing strategy is selected (API Key, mTLS, None only).
+		tokenBearing := map[string]bool{
+			"JWT (stateless)":  true,
+			"Session-based":    true,
+			"OAuth 2.0 / OIDC": true,
+		}
+		for _, f := range be.AuthFields {
+			if f.Key != "strategy" {
+				continue
+			}
+			for _, idx := range f.SelectedIdxs {
+				if idx >= 0 && idx < len(f.Options) && tokenBearing[f.Options[idx]] {
+					return false
+				}
+			}
+			return true
+		}
 		return false
 	}
-	// Find the strategy multiselect field.
+	return false
+}
+
+// updateAuthTokenStorageOptions recomputes token_storage options as the union
+// of options applicable to the currently selected auth strategies.
+func (be *BackendEditor) updateAuthTokenStorageOptions() {
+	// Per-strategy option sets (in canonical display order).
+	canShowCookie := false
+	canShowBearer := false
+	canShowOther := false
+
 	for _, f := range be.AuthFields {
 		if f.Key != "strategy" {
 			continue
 		}
 		for _, idx := range f.SelectedIdxs {
-			if idx >= 0 && idx < len(f.Options) && f.Options[idx] == "Session-based" {
-				return false
+			if idx < 0 || idx >= len(f.Options) {
+				continue
+			}
+			switch f.Options[idx] {
+			case "JWT (stateless)":
+				canShowCookie = true
+				canShowBearer = true
+				canShowOther = true
+			case "Session-based":
+				canShowCookie = true
+			case "OAuth 2.0 / OIDC":
+				canShowCookie = true
+				canShowBearer = true
 			}
 		}
-		return true
+		break
 	}
-	return false
+
+	var opts []string
+	if canShowCookie {
+		opts = append(opts, "HttpOnly cookie")
+	}
+	if canShowBearer {
+		opts = append(opts, "Authorization header (Bearer)")
+	}
+	if canShowOther {
+		opts = append(opts, "Other")
+	}
+	if len(opts) == 0 {
+		// No token-bearing strategy — field is hidden anyway; keep a safe default.
+		opts = []string{"HttpOnly cookie", "Authorization header (Bearer)", "Other"}
+	}
+
+	for i := range be.AuthFields {
+		if be.AuthFields[i].Key != "token_storage" {
+			continue
+		}
+		// Preserve currently-selected values that still exist in new option set.
+		optSet := make(map[string]int, len(opts))
+		for j, o := range opts {
+			optSet[o] = j
+		}
+		var kept []int
+		for _, sel := range be.AuthFields[i].SelectedIdxs {
+			if sel >= 0 && sel < len(be.AuthFields[i].Options) {
+				if j, ok := optSet[be.AuthFields[i].Options[sel]]; ok {
+					kept = append(kept, j)
+				}
+			}
+		}
+		be.AuthFields[i].Options = opts
+		be.AuthFields[i].SelectedIdxs = kept
+		break
+	}
+}
+
+// mfaOptionsForProvider returns the MFA options appropriate for a given auth provider.
+func mfaOptionsForProvider(provider string) []string {
+	switch provider {
+	case "Self-managed":
+		return []string{"None", "TOTP", "Email"}
+	case "Auth0", "Clerk", "Firebase Auth":
+		return []string{"None", "TOTP", "SMS", "Email", "Passkeys/WebAuthn"}
+	case "Keycloak":
+		return []string{"None", "TOTP", "WebAuthn"}
+	case "Supabase Auth":
+		return []string{"None", "TOTP", "Phone (Twilio)"}
+	case "AWS Cognito":
+		return []string{"None", "TOTP", "SMS", "Email"}
+	default:
+		return []string{"None", "TOTP", "SMS", "Email", "Passkeys/WebAuthn"}
+	}
+}
+
+// updateAuthMFAOptions recomputes the mfa field options based on the selected provider.
+func (be *BackendEditor) updateAuthMFAOptions() {
+	provider := fieldGet(be.AuthFields, "provider")
+	opts := mfaOptionsForProvider(provider)
+	cur := fieldGet(be.AuthFields, "mfa")
+	for i := range be.AuthFields {
+		if be.AuthFields[i].Key != "mfa" {
+			continue
+		}
+		be.AuthFields[i].Options = opts
+		// Keep current value when still valid; otherwise reset to "None".
+		valid := false
+		for j, o := range opts {
+			if o == cur {
+				be.AuthFields[i].SelIdx = j
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			be.AuthFields[i].SelIdx = 0
+			be.AuthFields[i].Value = opts[0]
+		}
+		break
+	}
 }
 
 // nextAuthFieldIdx advances activeField by delta, skipping hidden auth fields.
@@ -201,6 +334,9 @@ func (be BackendEditor) updateAuthConfig(key tea.KeyMsg) (BackendEditor, tea.Cmd
 					be.refreshAuthServiceUnitOptions(f)
 				}
 				f.CyclePrev()
+				if f.Key == "provider" {
+					be.updateAuthMFAOptions()
+				}
 			}
 		}
 	case "i", "a":
