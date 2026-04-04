@@ -577,9 +577,43 @@ func (ce *ContractsEditor) extFormFieldByKey(key string) *Field {
 	return nil
 }
 
-// updateExtDependentFields clamps extFormIdx to the visible field range after a
-// protocol change.
+// failureStrategyByProtocol maps each external API protocol to its valid
+// failure strategies. Circuit breaker is only relevant for synchronous
+// protocols; async protocols (Webhook) use retry/DLQ semantics instead.
+var failureStrategyByProtocol = map[string][]string{
+	"REST":      {"Circuit Breaker", "Retry with backoff", "Fallback value", "Timeout + fail", "None"},
+	"GraphQL":   {"Circuit Breaker", "Retry with backoff", "Fallback value", "Timeout + fail", "None"},
+	"gRPC":      {"Circuit Breaker", "Retry with backoff", "Timeout + fail", "None"},
+	"WebSocket": {"Reconnect with backoff", "Fallback value", "None"},
+	"Webhook":   {"Retry with backoff", "DLQ", "None"},
+	"SOAP":      {"Circuit Breaker", "Retry with backoff", "Timeout + fail", "None"},
+}
+
+// updateExtDependentFields filters failure_strategy options by protocol and
+// clamps extFormIdx to the visible field range after a protocol change.
 func (ce *ContractsEditor) updateExtDependentFields() {
+	protocol := fieldGet(ce.extForm, "protocol")
+	if opts, ok := failureStrategyByProtocol[protocol]; ok {
+		for i := range ce.extForm {
+			if ce.extForm[i].Key == "failure_strategy" {
+				ce.extForm[i].Options = opts
+				// Reset to first valid option if current value is no longer valid.
+				current := ce.extForm[i].Value
+				valid := false
+				for _, o := range opts {
+					if o == current {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					ce.extForm[i].Value = opts[0]
+					ce.extForm[i].SelIdx = 0
+				}
+				break
+			}
+		}
+	}
 	visible := ce.visibleExtFormFields()
 	if len(visible) > 0 && ce.extFormIdx >= len(visible) {
 		ce.extFormIdx = len(visible) - 1
