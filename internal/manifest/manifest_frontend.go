@@ -23,7 +23,6 @@ type FrontendTechConfig struct {
 	AuthFlowType       string `json:"auth_flow_type,omitempty"`
 	ErrorBoundary      string `json:"error_boundary,omitempty"`
 	BundleOptimization string `json:"bundle_optimization,omitempty"`
-	FrontendLinter     string `json:"frontend_linter,omitempty"`
 }
 
 // FrontendTheme describes the visual theme settings.

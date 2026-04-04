@@ -127,11 +127,6 @@ func defaultFETechFields() []Field {
 			Options: []string{"Code splitting (route-based)", "Dynamic imports", "Tree shaking only", "None"},
 			Value:   "None", SelIdx: 3,
 		},
-		{
-			Key: "fe_linter", Label: "Linter        ", Kind: KindSelect,
-			Options: []string{"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
-			Value:   "None", SelIdx: 5,
-		},
 	}
 }
 
@@ -742,11 +737,5 @@ func (fe *FrontendEditor) updateFEDependentOptions() {
 		fe.setTechFieldOptions("bundle_opt", []string{"None"})
 	}
 
-	// fe_linter ← language
-	if opts, ok := feLinterByLanguage[lang]; ok {
-		fe.setTechFieldOptions("fe_linter", opts)
-	} else {
-		fe.setTechFieldOptions("fe_linter", []string{"Custom", "None"})
-	}
 }
 
