@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/vibe-menu/internal/manifest"
@@ -107,7 +108,7 @@ func (dt DataTabEditor) updateCachingForm(key tea.KeyMsg) (DataTabEditor, tea.Cm
 // complianceAutoUpgrade upgrades pii_encryption from "None" to "Field-level AES-256"
 // when HIPAA, GDPR, or PCI-DSS is selected in compliance_frameworks.
 func (dt DataTabEditor) complianceAutoUpgrade() DataTabEditor {
-	selected := fieldGetSelectedSlice(dt.governanceFields, "compliance_frameworks")
+	selected := fieldGetSelectedSlice(dt.govForm, "compliance_frameworks")
 	sensitive := false
 	for _, f := range selected {
 		if f == "HIPAA" || f == "GDPR" || f == "PCI-DSS" {
@@ -118,32 +119,82 @@ func (dt DataTabEditor) complianceAutoUpgrade() DataTabEditor {
 	if !sensitive {
 		return dt
 	}
-	pii := fieldGet(dt.governanceFields, "pii_encryption")
+	pii := fieldGet(dt.govForm, "pii_encryption")
 	if pii == "None" {
-		dt.governanceFields = setFieldValue(dt.governanceFields, "pii_encryption", "Field-level AES-256")
+		dt.govForm = setFieldValue(dt.govForm, "pii_encryption", "Field-level AES-256")
 	}
 	return dt
 }
 
 func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
-	if !dt.govEnabled {
-		if key.String() == "a" {
-			dt.govEnabled = true
-			dt.govFormIdx = 0
-		}
-		return dt, nil
+	switch dt.govSubView {
+	case govViewList:
+		return dt.updateGovList(key)
+	case govViewForm:
+		return dt.updateGovForm(key)
 	}
+	return dt, nil
+}
+
+func (dt DataTabEditor) updateGovList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	n := len(dt.governances)
 	switch key.String() {
 	case "j", "down":
-		if dt.govFormIdx < len(dt.governanceFields)-1 {
-			dt.govFormIdx++
+		if n > 0 && dt.govIdx < n-1 {
+			dt.govIdx++
 		}
 	case "k", "up":
-		if dt.govFormIdx > 0 {
-			dt.govFormIdx--
+		if dt.govIdx > 0 {
+			dt.govIdx--
 		}
+	case "a":
+		dt.governances = append(dt.governances, manifest.DataGovernanceConfig{})
+		dt.govIdx = len(dt.governances) - 1
+		dbAliases := dt.dbNames()
+		dt.govForm = defaultGovFormFields(dbAliases)
+		existing := make([]string, 0, len(dt.governances)-1)
+		for i, g := range dt.governances {
+			if i != dt.govIdx {
+				existing = append(existing, g.Name)
+			}
+		}
+		dt.govForm = setFieldValue(dt.govForm, "name", uniqueName("policy", existing))
+		dt.govForm = dt.withRefreshedGovOptions(dt.govForm)
+		dt.govFormIdx = 0
+		dt.govSubView = govViewForm
+	case "d":
+		if n > 0 {
+			dt.governances = append(dt.governances[:dt.govIdx], dt.governances[dt.govIdx+1:]...)
+			if dt.govIdx > 0 && dt.govIdx >= len(dt.governances) {
+				dt.govIdx = len(dt.governances) - 1
+			}
+		}
+	case "enter":
+		if n > 0 {
+			dt.govForm = govFormFromDef(dt.governances[dt.govIdx], dt.dbNames())
+			dt.govForm = dt.withRefreshedGovOptions(dt.govForm)
+			dt.govFormIdx = 0
+			dt.govSubView = govViewForm
+		}
+	}
+	return dt, nil
+}
+
+func (dt DataTabEditor) updateGovForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
+	// Persist current form state continuously.
+	if dt.govIdx < len(dt.governances) {
+		dt.governances[dt.govIdx] = govDefFromForm(dt.govForm)
+	}
+
+	isDisabled := func(f []Field, i int) bool { return dt.isGovFieldDisabled(f, i) }
+
+	switch key.String() {
+	case "j", "down":
+		dt.govFormIdx = nextFormIdx(dt.govForm, dt.govFormIdx, isDisabled)
+	case "k", "up":
+		dt.govFormIdx = prevFormIdx(dt.govForm, dt.govFormIdx, isDisabled)
 	case "enter", " ":
-		f := &dt.governanceFields[dt.govFormIdx]
+		f := &dt.govForm[dt.govFormIdx]
 		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
@@ -155,19 +206,27 @@ func (dt DataTabEditor) updateGovernance(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 			return dt.tryEnterInsert()
 		}
 	case "H", "shift+left":
-		f := &dt.governanceFields[dt.govFormIdx]
+		f := &dt.govForm[dt.govFormIdx]
 		if f.Kind == KindSelect {
 			f.CyclePrev()
 		}
-	case "D":
-		dt.govEnabled = false
-		dt.governanceFields = defaultGovernanceFields()
-		dt.govFormIdx = 0
 	case "i", "a":
-		if dt.governanceFields[dt.govFormIdx].CanEditAsText() {
+		if dt.govForm[dt.govFormIdx].CanEditAsText() {
 			return dt.tryEnterInsert()
 		}
+	case "b", "esc":
+		if dt.govIdx < len(dt.governances) {
+			dt.governances[dt.govIdx] = govDefFromForm(dt.govForm)
+		}
+		dt.govSubView = govViewList
+		return dt, nil
 	}
+
+	// Refresh DB-aware options whenever databases selection may have changed.
+	if dt.govFormIdx < len(dt.govForm) && dt.govForm[dt.govFormIdx].Key == "databases" {
+		dt.govForm = dt.withRefreshedGovOptions(dt.govForm)
+	}
+
 	return dt, nil
 }
 
@@ -341,13 +400,59 @@ func (dt DataTabEditor) viewFileStorage(w int) []string {
 
 func (dt DataTabEditor) viewGovernance(w int) []string {
 	var lines []string
-	lines = append(lines, StyleSectionDesc.Render("  # Data Governance & Privacy"), "")
-	if !dt.govEnabled {
-		lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))
-		return lines
+	lines = append(lines, StyleSectionDesc.Render("  # Data Governance Policies"), "")
+	switch dt.govSubView {
+	case govViewList:
+		lines = append(lines, StyleSectionDesc.Render("  — a: add  d: delete  Enter: edit"), "")
+		if len(dt.governances) == 0 {
+			lines = append(lines, StyleSectionDesc.Render("  (no governance policies yet — press 'a' to add)"))
+		} else {
+			for i, g := range dt.governances {
+				name := g.Name
+				if name == "" {
+					name = fmt.Sprintf("(policy #%d)", i+1)
+				}
+				var detail string
+				if len(g.Databases) > 0 {
+					detail = strings.Join(g.Databases, ", ")
+				} else {
+					detail = "all databases"
+				}
+				lines = append(lines, renderListItem(w, i == dt.govIdx, "  ▶ ", name, detail))
+			}
+		}
+	case govViewForm:
+		refreshed := dt.withRefreshedGovOptions(dt.govForm)
+		name := fieldGet(refreshed, "name")
+		if name == "" {
+			name = "(new policy)"
+		}
+		lines = append(lines, StyleSectionDesc.Render("  ← ")+StyleFieldKey.Render(name), "")
+		visible := dt.govVisibleFields(refreshed)
+		visIdx := dt.govVisibleIdx(refreshed, dt.govFormIdx)
+		lines = append(lines, renderFormFields(w, visible, visIdx, dt.internalMode == ModeInsert, dt.formInput, dt.dd.Open, dt.dd.OptIdx)...)
 	}
-	lines = append(lines, renderFormFields(w, dt.governanceFields, dt.govFormIdx, dt.internalMode == ModeInsert, dt.formInput, dt.dd.Open, dt.dd.OptIdx)...)
 	return lines
+}
+
+func (dt DataTabEditor) govVisibleFields(form []Field) []Field {
+	out := make([]Field, 0, len(form))
+	for i, f := range form {
+		if !dt.isGovFieldDisabled(form, i) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func (dt DataTabEditor) govVisibleIdx(form []Field, fullIdx int) int {
+	vis := 0
+	for i := range fullIdx {
+		if !dt.isGovFieldDisabled(form, i) {
+			vis++
+		}
+	}
+	return vis
 }
 
 // Expose db sources for syncing into the DataEditor.

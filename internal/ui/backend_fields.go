@@ -680,16 +680,69 @@ func defaultSecurityFields() []Field {
 	}
 }
 
-func defaultJobQueueFormFields(services, dtos []string) []Field {
+var jobQueueTechByLang = map[string][]string{
+	"Go":              {"Asynq", "River", "Temporal", "Faktory", "Custom"},
+	"TypeScript/Node": {"BullMQ", "Temporal", "Custom"},
+	"Python":          {"Celery", "Temporal", "Custom"},
+	"Ruby":            {"Sidekiq", "Temporal", "Custom"},
+	"Java":            {"Temporal", "Custom"},
+	"Kotlin":          {"Temporal", "Custom"},
+	"C#/.NET":         {"Hangfire", "Temporal", "Custom"},
+	"Rust":            {"Temporal", "Custom"},
+	"PHP":             {"Laravel Queues", "Temporal", "Custom"},
+	"Elixir":          {"Oban", "Temporal", "Custom"},
+	"Other":           {"Temporal", "Custom"},
+}
+
+// jobQueueTechOptions returns filtered technology options based on languages.
+// When no languages are configured, returns the full set.
+func jobQueueTechOptions(langs []string) ([]string, string) {
+	if len(langs) == 0 {
+		return []string{"Temporal", "BullMQ", "Sidekiq", "Celery", "Faktory", "Asynq", "River", "Custom"}, "Temporal"
+	}
+	seen := make(map[string]bool)
+	var opts []string
+	for _, lang := range langs {
+		for _, tech := range jobQueueTechByLang[lang] {
+			if !seen[tech] {
+				seen[tech] = true
+				opts = append(opts, tech)
+			}
+		}
+	}
+	if len(opts) == 0 {
+		return []string{"Temporal", "Custom"}, "Temporal"
+	}
+	return opts, opts[0]
+}
+
+func defaultJobQueueFormFields(services, dtos, langs, configNames []string) []Field {
 	workerOpts, workerVal := noneOrPlaceholder(services, "(no services configured)")
 	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
-	return []Field{
+	techOpts, techVal := jobQueueTechOptions(langs)
+
+	fields := []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "description", Label: "description   ", Kind: KindText},
+	}
+
+	// config_ref: only shown for non-monolith arches that have stack configs defined.
+	if len(configNames) > 0 {
+		cfgOpts := append([]string{"(any)"}, configNames...)
+		fields = append(fields, Field{
+			Key:     "config_ref",
+			Label:   "stack config  ",
+			Kind:    KindSelect,
+			Options: cfgOpts,
+			Value:   "(any)",
+		})
+	}
+
+	fields = append(fields, []Field{
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
-			Options: []string{"Temporal", "BullMQ", "Sidekiq", "Celery", "Faktory", "Asynq", "River", "Custom"},
-			Value:   "BullMQ", SelIdx: 1,
+			Options: techOpts,
+			Value:   techVal,
 		},
 		{Key: "concurrency", Label: "concurrency   ", Kind: KindText, Value: "10"},
 		{Key: "max_retries", Label: "max_retries   ", Kind: KindText, Value: "3"},
@@ -710,7 +763,8 @@ func defaultJobQueueFormFields(services, dtos []string) []Field {
 			Key: "payload_dto", Label: "payload_dto   ", Kind: KindSelect,
 			Options: payloadOpts, Value: payloadVal,
 		},
-	}
+	}...)
+	return fields
 }
 
 // defaultRoleFormFields returns form fields for a role, wiring permissions and

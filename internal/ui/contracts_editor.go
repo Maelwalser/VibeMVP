@@ -74,11 +74,12 @@ type ContractsEditor struct {
 	extIntFormIdx int
 
 	// Cross-editor reference data (set by model.go before each Update)
-	availableDomains     []string               // from DataTabEditor.domainNames()
-	availableDomainDefs  []manifest.DomainDef   // from DataTabEditor.domains
-	availableServices    []string               // from BackendEditor.ServiceNames()
-	availableServiceDefs []manifest.ServiceDef  // from BackendEditor.ServiceDefs()
-	availableAuthRoles   []string               // from BackendEditor.AuthRoleOptions()
+	availableDomains       []string               // from DataTabEditor.domainNames()
+	availableDomainDefs    []manifest.DomainDef   // from DataTabEditor.domains
+	availableServices      []string               // from BackendEditor.ServiceNames()
+	availableServiceDefs   []manifest.ServiceDef  // from BackendEditor.ServiceDefs()
+	availableAuthRoles     []string               // from BackendEditor.AuthRoleOptions()
+	wafRateLimitStrategy   string                 // from BackendEditor.WAFRateLimitStrategy()
 
 	// Dropdown state for KindSelect/KindMultiSelect fields
 	dd DropdownState
@@ -116,6 +117,33 @@ func (ce *ContractsEditor) SetAuthRoles(roles []string) {
 	ce.availableAuthRoles = roles
 }
 
+// SetWAFRateLimitStrategy updates the backend WAF rate-limit strategy so that
+// new endpoint forms can default rate_limit appropriately.
+func (ce *ContractsEditor) SetWAFRateLimitStrategy(strategy string) {
+	ce.wafRateLimitStrategy = strategy
+}
+
+// ActiveDocProtocols returns the distinct endpoint protocols present in the
+// current endpoints list, in a stable order. Used by CrossCutEditor to build
+// per-protocol documentation format fields. Falls back to ["REST"] when empty.
+func (ce ContractsEditor) ActiveDocProtocols() []string {
+	order := []string{"REST", "GraphQL", "gRPC", "WebSocket message", "Event"}
+	seen := make(map[string]bool)
+	for _, ep := range ce.endpoints {
+		seen[ep.Protocol] = true
+	}
+	var result []string
+	for _, p := range order {
+		if seen[p] {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return []string{"REST"}
+	}
+	return result
+}
+
 // protocolsForService returns the protocol options valid for the named service
 // based on its registered technologies. Returns nil when no filter applies.
 // SetDomainDefs updates the full domain definitions for attribute injection.
@@ -132,10 +160,17 @@ func (ce ContractsEditor) ToManifestContractsPillar() manifest.ContractsPillar {
 		ExternalAPIs: ce.externalAPIs,
 	}
 	if ce.versioningEnabled {
+		strategies := make(map[string]string)
+		for _, proto := range []string{"REST", "GraphQL", "gRPC"} {
+			key := versioningStrategyFieldKey(proto)
+			if v := fieldGet(ce.versioningFields, key); v != "" {
+				strategies[proto] = v
+			}
+		}
 		p.Versioning = manifest.APIVersioning{
-			Strategy:          fieldGet(ce.versioningFields, "strategy"),
-			CurrentVersion:    fieldGet(ce.versioningFields, "current_version"),
-			DeprecationPolicy: fieldGet(ce.versioningFields, "deprecation"),
+			PerProtocolStrategies: strategies,
+			CurrentVersion:        fieldGet(ce.versioningFields, "current_version"),
+			DeprecationPolicy:     fieldGet(ce.versioningFields, "deprecation"),
 		}
 	}
 	return p
@@ -150,9 +185,13 @@ func (ce ContractsEditor) FromContractsPillar(cp manifest.ContractsPillar) Contr
 	ce.externalAPIs = cp.ExternalAPIs
 
 	// Versioning fields.
-	if cp.Versioning.Strategy != "" {
+	if len(cp.Versioning.PerProtocolStrategies) > 0 || cp.Versioning.CurrentVersion != "" {
 		ce.versioningEnabled = true
-		ce.versioningFields = setFieldValue(ce.versioningFields, "strategy", cp.Versioning.Strategy)
+		// Rebuild fields based on stored protocols.
+		ce.rebuildVersioningFields()
+		for proto, strategy := range cp.Versioning.PerProtocolStrategies {
+			ce.versioningFields = setFieldValue(ce.versioningFields, versioningStrategyFieldKey(proto), strategy)
+		}
 		ce.versioningFields = setFieldValue(ce.versioningFields, "current_version", cp.Versioning.CurrentVersion)
 		ce.versioningFields = setFieldValue(ce.versioningFields, "deprecation", cp.Versioning.DeprecationPolicy)
 	}
@@ -383,6 +422,9 @@ func (ce ContractsEditor) Update(msg tea.Msg) (ContractsEditor, tea.Cmd) {
 	switch key.String() {
 	case "h", "left", "l", "right":
 		ce.activeTab = contractsTabIdx(NavigateTab(key.String(), int(ce.activeTab), len(contractsTabLabels)))
+		if ce.activeTab == contractsTabVersioning && ce.versioningEnabled {
+			ce.rebuildVersioningFields()
+		}
 		return ce, nil
 	}
 

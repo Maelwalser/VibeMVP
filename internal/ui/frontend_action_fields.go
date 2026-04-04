@@ -31,19 +31,19 @@ func actionTypesForComponent(compType string) []string {
 // actionTypeVisibleExtras maps each action_type to the set of conditional
 // form fields that should be visible for that type.
 var actionTypeVisibleExtras = map[string]map[string]bool{
-	"Submit Form":  {"form_target": true, "endpoint": true, "http_method": true, "request_body": true, "success_action": true, "error_action": true},
-	"Fetch Data":   {"endpoint": true, "http_method": true, "success_action": true, "error_action": true},
+	"Submit Form":  {"form_target": true, "endpoint": true, "success_action": true, "error_action": true},
+	"Fetch Data":   {"endpoint": true, "success_action": true, "error_action": true},
 	"Navigate":     {"target_page": true},
 	"Show Toast":   {"toast_message": true, "toast_type": true},
 	"Open Modal":   {"modal_target": true},
 	"Close Modal":  {"modal_target": true},
 	"Update State": {"state_key": true, "state_value": true},
 	"Reset Form":   {"form_target": true},
-	"Download":     {"endpoint": true, "http_method": true, "success_action": true, "error_action": true},
-	"Upload":       {"endpoint": true, "http_method": true, "request_body": true, "success_action": true, "error_action": true},
-	"Delete":       {"endpoint": true, "http_method": true, "confirm_dialog": true, "success_action": true, "error_action": true},
-	"Refresh":      {"endpoint": true, "http_method": true, "success_action": true, "error_action": true},
-	"Export":       {"endpoint": true, "http_method": true, "success_action": true, "error_action": true},
+	"Download":     {"endpoint": true, "success_action": true, "error_action": true},
+	"Upload":       {"endpoint": true, "success_action": true, "error_action": true},
+	"Delete":       {"endpoint": true, "confirm_dialog": true, "success_action": true, "error_action": true},
+	"Refresh":      {"endpoint": true, "success_action": true, "error_action": true},
+	"Export":       {"endpoint": true, "success_action": true, "error_action": true},
 	"Custom":       {"custom_handler": true},
 }
 

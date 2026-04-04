@@ -392,7 +392,87 @@ func narrowOrchestratorOptions(computeEnv string) []string {
 	return allOrchestratorOptions
 }
 
+// alertingByMetrics maps the selected metrics backend to compatible alerting tools.
+// Keeps native integrations first; cross-platform options (PagerDuty, OpsGenie) follow.
+var alertingByMetrics = map[string][]string{
+	"Prometheus + Grafana": {"Grafana Alerting", "PagerDuty", "OpsGenie", "None"},
+	"Datadog":              {"Datadog Monitors", "PagerDuty", "OpsGenie", "None"},
+	"CloudWatch":           {"CloudWatch Alarms", "PagerDuty", "OpsGenie", "None"},
+	"Cloud Monitoring":     {"Cloud Monitoring Alerting", "PagerDuty", "OpsGenie", "None"},
+	"Azure Monitor":        {"Azure Monitor Alerts", "PagerDuty", "OpsGenie", "None"},
+	"New Relic":            {"New Relic Alerts", "PagerDuty", "OpsGenie", "None"},
+}
+
+// tracingByMetrics maps the selected metrics backend to compatible tracing backends.
+var tracingByMetrics = map[string][]string{
+	"Prometheus + Grafana": {"OpenTelemetry + Jaeger", "OpenTelemetry + Tempo", "None"},
+	"Datadog":              {"Datadog APM", "OpenTelemetry + Jaeger", "None"},
+	"CloudWatch":           {"AWS X-Ray", "OpenTelemetry + Jaeger", "None"},
+	"Cloud Monitoring":     {"Cloud Trace", "OpenTelemetry + Jaeger", "None"},
+	"Azure Monitor":        {"Azure App Insights", "OpenTelemetry + Jaeger", "None"},
+	"New Relic":            {"New Relic Distributed Tracing", "OpenTelemetry + Jaeger", "None"},
+}
+
+// allAlertingOptions is the full union shown when no metrics backend is selected.
+var allAlertingOptions = []string{
+	"Grafana Alerting", "Datadog Monitors", "CloudWatch Alarms",
+	"Cloud Monitoring Alerting", "Azure Monitor Alerts", "New Relic Alerts",
+	"PagerDuty", "OpsGenie", "None",
+}
+
+// allTracingOptions is the full union shown when no metrics backend is selected.
+var allTracingOptions = []string{
+	"OpenTelemetry + Jaeger", "OpenTelemetry + Tempo",
+	"Datadog APM", "AWS X-Ray", "Cloud Trace",
+	"Azure App Insights", "New Relic Distributed Tracing", "None",
+}
+
+// applyMetricsToObsFields narrows the alerting and tracing options in the
+// observability field slice to those compatible with the current metrics selection.
+// Returns a new slice; the input is not modified.
+func applyMetricsToObsFields(fields []Field) []Field {
+	metrics := fieldGet(fields, "metrics")
+	out := make([]Field, len(fields))
+	copy(out, fields)
+	for i := range out {
+		var opts []string
+		switch out[i].Key {
+		case "alerting":
+			if o, ok := alertingByMetrics[metrics]; ok {
+				opts = o
+			} else {
+				opts = allAlertingOptions
+			}
+		case "tracing":
+			if o, ok := tracingByMetrics[metrics]; ok {
+				opts = o
+			} else {
+				opts = allTracingOptions
+			}
+		default:
+			continue
+		}
+		out[i].Options = opts
+		found := false
+		for j, o := range opts {
+			if o == out[i].Value {
+				out[i].SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found && len(opts) > 0 {
+			out[i].Value = opts[0]
+			out[i].SelIdx = 0
+		}
+	}
+	return out
+}
+
 func defaultObservabilityFields() []Field {
+	// Default metrics is "Prometheus + Grafana"; derive compatible tracing/alerting options.
+	defaultTracing := tracingByMetrics["Prometheus + Grafana"]
+	defaultAlerting := alertingByMetrics["Prometheus + Grafana"]
 	return []Field{
 		{
 			Key:     "logging",
@@ -410,10 +490,8 @@ func defaultObservabilityFields() []Field {
 		},
 		{
 			Key: "tracing", Label: "tracing       ", Kind: KindSelect,
-			Options: []string{
-				"OpenTelemetry + Jaeger", "OpenTelemetry + Tempo", "Datadog APM", "None",
-			},
-			Value: "OpenTelemetry + Jaeger",
+			Options: defaultTracing,
+			Value:   "OpenTelemetry + Jaeger",
 		},
 		{
 			Key: "error_tracking", Label: "error_tracking", Kind: KindSelect,
@@ -425,12 +503,11 @@ func defaultObservabilityFields() []Field {
 			Options: OptionsOffOn, Value: "true", SelIdx: 1,
 		},
 		{
-			Key: "alerting", Label: "alerting      ", Kind: KindSelect,
-			Options: []string{
-				"Grafana Alerting", "PagerDuty", "OpsGenie",
-				"CloudWatch Alarms", "None",
-			},
-			Value: "Grafana Alerting",
+			Key:     "alerting",
+			Label:   "alerting      ",
+			Kind:    KindSelect,
+			Options: defaultAlerting,
+			Value:   "Grafana Alerting",
 		},
 		{
 			Key: "log_retention", Label: "Log Retention ", Kind: KindSelect,

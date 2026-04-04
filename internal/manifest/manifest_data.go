@@ -147,26 +147,28 @@ type FileStorageDef struct {
 	AllowedTypes string `json:"allowed_types,omitempty"`
 }
 
-// DataGovernanceConfig describes data lifecycle, privacy, and compliance settings.
+// DataGovernanceConfig describes data lifecycle, privacy, and compliance settings
+// for a specific set of databases.
 type DataGovernanceConfig struct {
-	RetentionPolicy      string `json:"retention_policy,omitempty"`
-	DeleteStrategy       string `json:"delete_strategy,omitempty"`
-	PIIEncryption        string `json:"pii_encryption,omitempty"`
-	ComplianceFrameworks string `json:"compliance_frameworks,omitempty"`
-	DataResidency        string `json:"data_residency,omitempty"`
-	ArchivalStorage      string `json:"archival_storage,omitempty"`
+	Name                 string   `json:"name,omitempty"`
+	Databases            []string `json:"databases,omitempty"`
+	RetentionPolicy      string   `json:"retention_policy,omitempty"`
+	DeleteStrategy       string   `json:"delete_strategy,omitempty"`
+	PIIEncryption        string   `json:"pii_encryption,omitempty"`
+	ComplianceFrameworks string   `json:"compliance_frameworks,omitempty"`
+	DataResidency        string   `json:"data_residency,omitempty"`
+	ArchivalStorage      string   `json:"archival_storage,omitempty"`
+	MigrationTool        string   `json:"migration_tool,omitempty"`
+	BackupStrategy       string   `json:"backup_strategy,omitempty"`
+	SearchTech           string   `json:"search_tech,omitempty"`
 }
 
 // DataPillar groups all data-related configuration.
 type DataPillar struct {
-	Databases         []DBSourceDef        `json:"databases,omitempty"`
-	Domains           []DomainDef          `json:"domains,omitempty"`
-	Entities          []EntityDef          `json:"entities,omitempty"` // legacy
-	Cachings          []CachingConfig      `json:"cachings,omitempty"`
-	FileStorages      []FileStorageDef     `json:"file_storages,omitempty"`
-	Governance        DataGovernanceConfig `json:"governance,omitempty"`
-	MigrationTool     string               `json:"migration_tool,omitempty"`
-	BackupStrategy    string               `json:"backup_strategy,omitempty"`
-	SearchTech        string               `json:"search_tech,omitempty"`
-	SearchableDomains []string             `json:"searchable_domains,omitempty"`
+	Databases    []DBSourceDef          `json:"databases,omitempty"`
+	Domains      []DomainDef            `json:"domains,omitempty"`
+	Entities     []EntityDef            `json:"entities,omitempty"` // legacy
+	Cachings     []CachingConfig        `json:"cachings,omitempty"`
+	FileStorages []FileStorageDef       `json:"file_storages,omitempty"`
+	Governances  []DataGovernanceConfig `json:"governances,omitempty"`
 }

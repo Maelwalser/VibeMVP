@@ -2,6 +2,50 @@ package ui
 
 import "strings"
 
+// ── Meta-tag injection options per framework ─────────────────────────────────
+
+var metaTagByFramework = map[string][]string{
+	"React":   {"Manual", "react-helmet", "Framework-native", "None"},
+	"Vue":     {"Manual", "@vueuse/head", "Framework-native", "None"},
+	"Svelte":  {"Manual", "svelte:head", "Framework-native", "None"},
+	"Angular": {"Manual", "Framework-native", "None"},
+	"Solid":   {"Manual", "@solidjs/meta", "Framework-native", "None"},
+	"Preact":  {"Manual", "react-helmet", "Framework-native", "None"},
+	"Lit":     {"Manual", "Framework-native", "None"},
+}
+
+// refreshMetaTagOptions rebuilds the Options (and clamps SelIdx/Value) for the
+// meta_tag_injection field inside the supplied a11y field slice.
+func refreshMetaTagOptions(fields []Field, framework string) []Field {
+	opts, ok := metaTagByFramework[framework]
+	if !ok {
+		opts = []string{"Manual", "Framework-native", "None"}
+	}
+	updated := make([]Field, len(fields))
+	copy(updated, fields)
+	for i, f := range updated {
+		if f.Key != "meta_tag_injection" {
+			continue
+		}
+		f.Options = opts
+		found := false
+		for j, o := range opts {
+			if o == f.Value {
+				f.SelIdx = j
+				found = true
+				break
+			}
+		}
+		if !found {
+			f.SelIdx = len(opts) - 1
+			f.Value = opts[len(opts)-1]
+		}
+		updated[i] = f
+		break
+	}
+	return updated
+}
+
 // ── SEO render strategy options per meta-framework ───────────────────────────
 
 var seoRenderByMetaFramework = map[string][]string{
@@ -370,8 +414,8 @@ func defaultA11ySEOFields() []Field {
 		},
 		{
 			Key: "meta_tag_injection", Label: "meta_tags     ", Kind: KindSelect,
-			Options: []string{"Manual", "Automatic (react-helmet)", "Framework-native", "None"},
-			Value:   "None", SelIdx: 3,
+			Options: []string{"Manual", "Framework-native", "None"},
+			Value:   "None", SelIdx: 2,
 		},
 		{
 			Key: "analytics", Label: "analytics     ", Kind: KindSelect,
@@ -679,6 +723,53 @@ var feImageOptByPlatform = map[string][]string{
 	"Desktop":                 {"None"},
 }
 
+// webOnlyTechFields is the set of tech field keys that are only meaningful for
+// web platforms (SPA / SSR/SSG). They are hidden for mobile and desktop targets.
+var webOnlyTechFields = map[string]bool{
+	"meta_framework": true,
+	"styling":        true,
+	"component_lib":  true,
+	"pwa_support":    true,
+	"image_opt":      true,
+	"bundle_opt":     true,
+}
+
+// visibleTechFields returns the subset of techFields that are relevant to the
+// currently selected language, framework, and platform.
+//
+// Two rules are applied in order:
+//  1. Web-only fields (styling, component_lib, pwa_support, image_opt,
+//     bundle_opt, meta_framework) are hidden for mobile/desktop platforms.
+//  2. Any remaining field whose options list has been narrowed to exactly
+//     ["None"] by updateFEDependentOptions is hidden — it carries no
+//     information and would confuse the realization agent.
+func (fe FrontendEditor) visibleTechFields() []Field {
+	platform := fieldGet(fe.techFields, "platform")
+	isWeb := platform == "Web (SPA)" || platform == "Web (SSR/SSG)"
+	var visible []Field
+	for _, f := range fe.techFields {
+		if webOnlyTechFields[f.Key] && !isWeb {
+			continue
+		}
+		if len(f.Options) == 1 && f.Options[0] == "None" {
+			continue
+		}
+		visible = append(visible, f)
+	}
+	return visible
+}
+
+// techFieldByKey returns a pointer to the tech field with the given key in the
+// authoritative techFields slice (not the visible projection).
+func (fe *FrontendEditor) techFieldByKey(key string) *Field {
+	for i := range fe.techFields {
+		if fe.techFields[i].Key == key {
+			return &fe.techFields[i]
+		}
+	}
+	return nil
+}
+
 // ── Runtime field population ──────────────────────────────────────────────────
 
 // setTechFieldOptions updates a tech field's options, preserving the current
@@ -763,6 +854,9 @@ func (fe *FrontendEditor) updateFEDependentOptions() {
 	} else {
 		fe.setTechFieldOptions("meta_framework", []string{"None"})
 	}
+
+	// meta_tag_injection ← framework
+	fe.a11yFields = refreshMetaTagOptions(fe.a11yFields, framework)
 
 	// pkg_manager ← language
 	if opts, ok := fePkgManagerByLanguage[lang]; ok {
@@ -861,6 +955,12 @@ func (fe *FrontendEditor) updateFEDependentOptions() {
 		fe.setI18nFieldOptions("translation_strategy", opts)
 	} else {
 		fe.setI18nFieldOptions("translation_strategy", []string{"i18next", "Custom", "None"})
+	}
+
+	// Clamp techFormIdx to visible field count so a platform switch from web to
+	// mobile/desktop never leaves the cursor on a now-hidden field index.
+	if n := len(fe.visibleTechFields()); fe.techFormIdx >= n && n > 0 {
+		fe.techFormIdx = n - 1
 	}
 
 }

@@ -124,6 +124,10 @@ func (fe FrontendEditor) updateA11ySEO(key tea.KeyMsg) (FrontendEditor, tea.Cmd)
 				fe.a11yFields = refreshSEORenderOptions(fe.a11yFields, fe.Platform(), fieldGet(fe.techFields, "meta_framework"))
 				f = &fe.a11yFields[fe.a11yFormIdx]
 			}
+			if f.Key == "meta_tag_injection" {
+				fe.a11yFields = refreshMetaTagOptions(fe.a11yFields, fieldGet(fe.techFields, "framework"))
+				f = &fe.a11yFields[fe.a11yFormIdx]
+			}
 			fe.dd.Open = true
 			fe.dd.OptIdx = f.SelIdx
 		} else {

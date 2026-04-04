@@ -224,6 +224,10 @@ func (ie InfraEditor) FromInfraPillar(ip manifest.InfraPillar) InfraEditor {
 		ie.obsEnabled = true
 		ie.obsFields = setFieldValue(ie.obsFields, "logging", o.Logging)
 		ie.obsFields = setFieldValue(ie.obsFields, "metrics", o.Metrics)
+		// Narrow alerting/tracing options to those compatible with the saved metrics
+		// backend before restoring their values, so SelIdx is computed from the
+		// correct (narrowed) option list.
+		ie.obsFields = applyMetricsToObsFields(ie.obsFields)
 		ie.obsFields = setFieldValue(ie.obsFields, "tracing", o.Tracing)
 		ie.obsFields = setFieldValue(ie.obsFields, "error_tracking", o.ErrorTracking)
 		boolStr := func(b bool) string {
@@ -339,6 +343,7 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 	n := len(fields)
 	k := key.String()
 
+	metricsChanged := false
 	if newIdx, consumed := ie.nav.Handle(k, idx, n); consumed {
 		idx = newIdx
 	} else {
@@ -369,7 +374,11 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 			if idx < n {
 				f := &fields[idx]
 				if f.Kind == KindSelect {
+					prev := f.Value
 					f.CyclePrev()
+					if ie.activeTab == infraTabObservability && f.Key == "metrics" && f.Value != prev {
+						metricsChanged = true
+					}
 				}
 			}
 		case "D":
@@ -401,6 +410,9 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 	case infraTabObservability:
 		ie.obsFields = fields
 		ie.obsFormIdx = idx
+		if metricsChanged {
+			ie.obsFields = applyMetricsToObsFields(ie.obsFields)
+		}
 	}
 	return ie, nil
 }
@@ -433,6 +445,9 @@ func (ie InfraEditor) updateInfraDropdown(key tea.KeyMsg) (InfraEditor, tea.Cmd)
 			f.Value = f.Options[ie.dd.OptIdx]
 		}
 		ie.dd.Open = false
+		if ie.activeTab == infraTabObservability && f.Key == "metrics" {
+			ie.obsFields = applyMetricsToObsFields(ie.obsFields)
+		}
 		if f.PrepareCustomEntry() {
 			return ie.tryEnterInsert()
 		}

@@ -8,6 +8,18 @@ import (
 	"github.com/vibe-menu/internal/manifest"
 )
 
+// epRateLimitDefault returns the smart default for a new endpoint's rate_limit
+// field based on the backend WAF rate-limit strategy. When no strategy is
+// configured ("None" or empty), rate limiting makes no sense at the endpoint
+// level, so "None" is returned. Otherwise "Default (global)" defers to the
+// WAF policy.
+func (ce ContractsEditor) epRateLimitDefault() string {
+	if ce.wafRateLimitStrategy == "" || ce.wafRateLimitStrategy == "None" {
+		return "None"
+	}
+	return "Default (global)"
+}
+
 // ── Endpoint updates ──────────────────────────────────────────────────────────
 
 func (ce ContractsEditor) updateEndpoints(key tea.KeyMsg) (ContractsEditor, tea.Cmd) {
@@ -42,6 +54,7 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 			}
 		}
 		ce.epForm = setFieldValue(ce.epForm, "name_path", uniqueName("endpoint", existing))
+		ce.epForm = setFieldValue(ce.epForm, "rate_limit", ce.epRateLimitDefault())
 		ce.epFormIdx = 0
 		ce.epSubView = ceViewForm
 		return ce.tryEnterInsert()
@@ -96,6 +109,8 @@ func (ce ContractsEditor) updateEPList(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 			}
 			if ep.RateLimit != "" {
 				ce.epForm = setFieldValue(ce.epForm, "rate_limit", ep.RateLimit)
+			} else {
+				ce.epForm = setFieldValue(ce.epForm, "rate_limit", ce.epRateLimitDefault())
 			}
 			ce.epForm = setFieldValue(ce.epForm, "description", ep.Description)
 			ce.epFormIdx = 0
@@ -187,6 +202,7 @@ func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea
 		if key.String() == "a" {
 			ce.versioningEnabled = true
 			ce.verFormIdx = 0
+			ce.rebuildVersioningFields()
 		}
 		return ce, nil
 	}

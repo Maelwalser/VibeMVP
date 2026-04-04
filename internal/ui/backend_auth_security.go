@@ -8,6 +8,44 @@ import (
 	"github.com/vibe-menu/internal/manifest"
 )
 
+// isAuthFieldHidden returns true when an auth config field should be hidden
+// given the currently selected strategy options.
+// session_mgmt is irrelevant when no session-bearing strategy is active.
+func (be BackendEditor) isAuthFieldHidden(key string) bool {
+	if key != "session_mgmt" {
+		return false
+	}
+	// Find the strategy multiselect field.
+	for _, f := range be.AuthFields {
+		if f.Key != "strategy" {
+			continue
+		}
+		for _, idx := range f.SelectedIdxs {
+			if idx >= 0 && idx < len(f.Options) && f.Options[idx] == "Session-based" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// nextAuthFieldIdx advances activeField by delta, skipping hidden auth fields.
+func (be BackendEditor) nextAuthFieldIdx(delta int) int {
+	n := len(be.AuthFields)
+	if n == 0 {
+		return 0
+	}
+	idx := be.activeField
+	for i := 0; i < n; i++ {
+		idx = (idx + delta + n) % n
+		if !be.isAuthFieldHidden(be.AuthFields[idx].Key) {
+			return idx
+		}
+	}
+	return be.activeField
+}
+
 // ── Auth updates ──────────────────────────────────────────────────────────────
 
 func (be BackendEditor) updateAuth(key tea.KeyMsg) (BackendEditor, tea.Cmd) {
@@ -70,18 +108,14 @@ func (be BackendEditor) updateAuthConfig(key tea.KeyMsg) (BackendEditor, tea.Cmd
 		be.countBuf = ""
 		be.gBuf = false
 		for i := 0; i < count; i++ {
-			if be.activeField < n-1 {
-				be.activeField++
-			}
+			be.activeField = be.nextAuthFieldIdx(+1)
 		}
 	case "k", "up":
 		count := parseVimCount(be.countBuf)
 		be.countBuf = ""
 		be.gBuf = false
 		for i := 0; i < count; i++ {
-			if be.activeField > 0 {
-				be.activeField--
-			}
+			be.activeField = be.nextAuthFieldIdx(-1)
 		}
 	case "g":
 		if be.gBuf {
@@ -497,7 +531,22 @@ func (be BackendEditor) viewAuth(w int) []string {
 	}
 	switch be.authSubView {
 	case beAuthViewConfig:
-		lines := renderFormFields(w, be.AuthFields, be.activeField, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
+		var visibleAuthFields []Field
+		skippedBefore := 0
+		for i, f := range be.AuthFields {
+			if be.isAuthFieldHidden(f.Key) {
+				if i < be.activeField {
+					skippedBefore++
+				}
+				continue
+			}
+			visibleAuthFields = append(visibleAuthFields, f)
+		}
+		filteredActiveIdx := be.activeField - skippedBefore
+		if filteredActiveIdx < 0 {
+			filteredActiveIdx = 0
+		}
+		lines := renderFormFields(w, visibleAuthFields, filteredActiveIdx, be.internalMode == ModeInsert, be.formInput, be.dd.Open, be.dd.OptIdx)
 		permCount := fmt.Sprintf("%d", len(be.authPerms))
 		roleCount := fmt.Sprintf("%d", len(be.authRoles))
 		lines = append(lines,

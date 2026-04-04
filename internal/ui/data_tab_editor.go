@@ -44,6 +44,15 @@ const (
 	fsViewForm
 )
 
+// ── governance list+form types ────────────────────────────────────────────────
+
+type govView int
+
+const (
+	govViewList govView = iota
+	govViewForm
+)
+
 // ── caching list+form types ───────────────────────────────────────────────────
 
 type cachingView int
@@ -96,9 +105,11 @@ type DataTabEditor struct {
 	fsFormIdx    int
 
 	// GOVERNANCE sub-tab
-	governanceFields []Field
-	govFormIdx       int
-	govEnabled       bool
+	governances []manifest.DataGovernanceConfig
+	govSubView  govView
+	govIdx      int
+	govForm     []Field
+	govFormIdx  int
 
 	// Context from backend — used to filter migration tool options.
 	backendLangs []string
@@ -118,10 +129,9 @@ type DataTabEditor struct {
 
 func newDataTabEditor() DataTabEditor {
 	return DataTabEditor{
-		dbEditor:         newDBEditor(),
-		dataEditor:       newDataEditor(),
-		governanceFields: defaultGovernanceFields(),
-		formInput:        newFormInput(),
+		dbEditor:   newDBEditor(),
+		dataEditor: newDataEditor(),
+		formInput:  newFormInput(),
 	}
 }
 
@@ -174,27 +184,14 @@ func (dt DataTabEditor) domainNames() []string {
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
 func (dt DataTabEditor) ToManifestDataPillar() manifest.DataPillar {
-	p := manifest.DataPillar{
+	return manifest.DataPillar{
 		Databases:    dt.dbEditor.Sources,
 		Domains:      dt.domains,
 		Entities:     dt.dataEditor.Entities,
 		FileStorages: dt.fileStorages,
+		Cachings:     dt.cachings,
+		Governances:  dt.governances,
 	}
-	p.Cachings = dt.cachings
-	if dt.govEnabled {
-		p.Governance = manifest.DataGovernanceConfig{
-			RetentionPolicy:      fieldGet(dt.governanceFields, "retention_policy"),
-			DeleteStrategy:       fieldGet(dt.governanceFields, "delete_strategy"),
-			PIIEncryption:        fieldGet(dt.governanceFields, "pii_encryption"),
-			ComplianceFrameworks: fieldGetMulti(dt.governanceFields, "compliance_frameworks"),
-			DataResidency:        fieldGet(dt.governanceFields, "data_residency"),
-			ArchivalStorage:      fieldGet(dt.governanceFields, "archival_storage"),
-		}
-		p.MigrationTool = fieldGet(dt.governanceFields, "migration_tool")
-		p.BackupStrategy = fieldGet(dt.governanceFields, "backup_strategy")
-		p.SearchTech = fieldGet(dt.governanceFields, "search_tech")
-	}
-	return p
 }
 
 // FromDataPillar populates the editor from a saved manifest DataPillar,
@@ -215,20 +212,8 @@ func (dt DataTabEditor) FromDataPillar(dp manifest.DataPillar) DataTabEditor {
 	// Caching strategies.
 	dt.cachings = dp.Cachings
 
-	// Governance fields.
-	dt.updateSearchTechOptions()
-	if dp.Governance.RetentionPolicy != "" || dp.Governance.DeleteStrategy != "" || dp.MigrationTool != "" {
-		dt.govEnabled = true
-		dt.governanceFields = setFieldValue(dt.governanceFields, "retention_policy", dp.Governance.RetentionPolicy)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "delete_strategy", dp.Governance.DeleteStrategy)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "pii_encryption", dp.Governance.PIIEncryption)
-		dt.governanceFields = restoreMultiSelectValue(dt.governanceFields, "compliance_frameworks", dp.Governance.ComplianceFrameworks)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "data_residency", dp.Governance.DataResidency)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "archival_storage", dp.Governance.ArchivalStorage)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "migration_tool", dp.MigrationTool)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "backup_strategy", dp.BackupStrategy)
-		dt.governanceFields = setFieldValue(dt.governanceFields, "search_tech", dp.SearchTech)
-	}
+	// Governance policies.
+	dt.governances = dp.Governances
 
 	return dt
 }
@@ -277,10 +262,12 @@ func (dt DataTabEditor) HintLine() string {
 			return StyleInsertMode.Render(" -- INSERT -- ") +
 				StyleHelpDesc.Render("  Esc: normal  Tab: next field")
 		}
-		if !dt.govEnabled {
-			return hintBar("a", "configure", "h/l", "sub-tab")
+		switch dt.govSubView {
+		case govViewList:
+			return hintBar("j/k", "navigate", "a", "add policy", "d", "delete", "Enter", "edit", "h/l", "sub-tab")
+		case govViewForm:
+			return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "i/a", "edit", "b/Esc", "back")
 		}
-		return hintBar("j/k", "navigate", "Space/Enter", "cycle", "H", "cycle back", "D", "delete config", "a/i", "edit", "h/l", "sub-tab")
 	}
 	return ""
 }
@@ -350,8 +337,8 @@ func (dt *DataTabEditor) activeDTFieldPtr() *Field {
 			return &dt.fsForm[dt.fsFormIdx]
 		}
 	case dataTabGovernance:
-		if dt.govFormIdx < len(dt.governanceFields) {
-			return &dt.governanceFields[dt.govFormIdx]
+		if dt.govSubView == govViewForm && dt.govFormIdx < len(dt.govForm) {
+			return &dt.govForm[dt.govFormIdx]
 		}
 	}
 	return nil
@@ -539,7 +526,7 @@ func (dt *DataTabEditor) advanceFormField(delta int) {
 			dt.fsFormIdx = (dt.fsFormIdx + delta + n) % n
 		}
 	case dataTabGovernance:
-		n := len(dt.governanceFields)
+		n := len(dt.govForm)
 		if n > 0 {
 			dt.govFormIdx = (dt.govFormIdx + delta + n) % n
 		}
@@ -573,8 +560,8 @@ func (dt *DataTabEditor) saveInput() {
 			dt.fsForm[dt.fsFormIdx].SaveTextInput(val)
 		}
 	case dataTabGovernance:
-		if dt.govFormIdx < len(dt.governanceFields) && dt.governanceFields[dt.govFormIdx].CanEditAsText() {
-			dt.governanceFields[dt.govFormIdx].SaveTextInput(val)
+		if dt.govFormIdx < len(dt.govForm) && dt.govForm[dt.govFormIdx].CanEditAsText() {
+			dt.govForm[dt.govFormIdx].SaveTextInput(val)
 		}
 	}
 }
@@ -596,7 +583,7 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 	case dataTabFileStorage:
 		n = len(dt.fsForm)
 	case dataTabGovernance:
-		n = len(dt.governanceFields)
+		n = len(dt.govForm)
 	}
 	for range n {
 		var f *Field
@@ -625,8 +612,8 @@ func (dt DataTabEditor) tryEnterInsert() (DataTabEditor, tea.Cmd) {
 				f = &dt.fsForm[dt.fsFormIdx]
 			}
 		case dataTabGovernance:
-			if dt.govFormIdx < len(dt.governanceFields) {
-				f = &dt.governanceFields[dt.govFormIdx]
+			if dt.govFormIdx < len(dt.govForm) {
+				f = &dt.govForm[dt.govFormIdx]
 			}
 		}
 		if f == nil {
@@ -683,6 +670,9 @@ func (dt DataTabEditor) View(w, h int) string {
 		contentLines = dt.viewFileStorage(w)
 	case dataTabGovernance:
 		contentLines = dt.viewGovernance(w)
+		if dt.govSubView == govViewList {
+			contentLines = appendViewport(contentLines, 2, dt.govIdx, contentH)
+		}
 	}
 
 	lines = append(lines, contentLines...)

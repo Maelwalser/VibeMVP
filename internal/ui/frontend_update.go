@@ -18,7 +18,7 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 	}
 	switch key.String() {
 	case "j", "down":
-		if fe.techFormIdx < len(fe.techFields)-1 {
+		if fe.techFormIdx < len(fe.visibleTechFields())-1 {
 			fe.techFormIdx++
 		}
 	case "k", "up":
@@ -26,7 +26,14 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 			fe.techFormIdx--
 		}
 	case "enter", " ":
-		f := &fe.techFields[fe.techFormIdx]
+		visible := fe.visibleTechFields()
+		if fe.techFormIdx >= len(visible) {
+			return fe, nil
+		}
+		f := fe.techFieldByKey(visible[fe.techFormIdx].Key)
+		if f == nil {
+			return fe, nil
+		}
 		if f.Kind == KindSelect {
 			fe.dd.Open = true
 			fe.dd.OptIdx = f.SelIdx
@@ -34,8 +41,12 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 			return fe.tryEnterInsert()
 		}
 	case "H", "shift+left":
-		f := &fe.techFields[fe.techFormIdx]
-		if f.Kind == KindSelect {
+		visible := fe.visibleTechFields()
+		if fe.techFormIdx >= len(visible) {
+			return fe, nil
+		}
+		f := fe.techFieldByKey(visible[fe.techFormIdx].Key)
+		if f != nil && f.Kind == KindSelect {
 			f.CyclePrev()
 			if f.Key == "language" || f.Key == "platform" || f.Key == "framework" || f.Key == "language_version" {
 				fe.updateFEDependentOptions()
@@ -52,11 +63,16 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 }
 
 func (fe FrontendEditor) updateTechDropdown(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
-	if fe.techFormIdx >= len(fe.techFields) {
+	visible := fe.visibleTechFields()
+	if fe.techFormIdx >= len(visible) {
 		fe.dd.Open = false
 		return fe, nil
 	}
-	f := &fe.techFields[fe.techFormIdx]
+	f := fe.techFieldByKey(visible[fe.techFormIdx].Key)
+	if f == nil {
+		fe.dd.Open = false
+		return fe, nil
+	}
 	fe.dd.OptIdx = NavigateDropdown(key.String(), fe.dd.OptIdx, len(f.Options))
 	switch key.String() {
 	case " ", "enter":
@@ -589,7 +605,7 @@ func (fe FrontendEditor) View(w, h int) string {
 	switch fe.activeTab {
 	case feTabTech:
 		if fe.techEnabled {
-			fl := renderFormFields(w, fe.techFields, fe.techFormIdx, fe.internalMode == ModeInsert, fe.formInput, fe.dd.Open, fe.dd.OptIdx)
+			fl := renderFormFields(w, fe.visibleTechFields(), fe.techFormIdx, fe.internalMode == ModeInsert, fe.formInput, fe.dd.Open, fe.dd.OptIdx)
 			lines = append(lines, appendViewport(fl, 0, fe.techFormIdx, h-feHeaderH)...)
 		} else {
 			lines = append(lines, StyleSectionDesc.Render("  (not configured — press 'a' to configure)"))

@@ -379,6 +379,65 @@ func (be *BackendEditor) SetEndpointNames(names []string) {
 	}
 }
 
+// stackConfigNames returns the names of all defined stack configs.
+func (be BackendEditor) stackConfigNames() []string {
+	var names []string
+	for _, item := range be.stackConfigEditor.items {
+		if n := fieldGet(item, "name"); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
+// langForConfig returns the language of the stack config with the given name,
+// or "" if the name is empty, "(any)", or not found.
+func (be BackendEditor) langForConfig(configName string) string {
+	if configName == "" || configName == "(any)" {
+		return ""
+	}
+	for _, item := range be.stackConfigEditor.items {
+		if fieldGet(item, "name") == configName {
+			return fieldGet(item, "language")
+		}
+	}
+	return ""
+}
+
+// updateJobQueueTechOptions refreshes the technology options in the active jobs
+// form based on the currently selected config_ref. Called after config_ref changes.
+func (be *BackendEditor) updateJobQueueTechOptions() {
+	lang := be.langForConfig(fieldGet(be.jobsForm, "config_ref"))
+	var langs []string
+	if lang != "" {
+		langs = []string{lang}
+	} else {
+		langs = be.Languages()
+	}
+	opts, defaultVal := jobQueueTechOptions(langs)
+	cur := fieldGet(be.jobsForm, "technology")
+	for i := range be.jobsForm {
+		if be.jobsForm[i].Key != "technology" {
+			continue
+		}
+		be.jobsForm[i].Options = opts
+		found := false
+		for j, o := range opts {
+			if o == cur {
+				be.jobsForm[i].SelIdx = j
+				be.jobsForm[i].Value = o
+				found = true
+				break
+			}
+		}
+		if !found {
+			be.jobsForm[i].SelIdx = 0
+			be.jobsForm[i].Value = defaultVal
+		}
+		break
+	}
+}
+
 // applyStackConfigNamesToServices updates the config_ref dropdown in all service
 // forms to reflect the current set of stack config names. Called whenever stack
 // configs are added, renamed, or deleted.
@@ -891,6 +950,12 @@ func (be BackendEditor) Orchestrator() string {
 	return be.orchestrator
 }
 
+// WAFRateLimitStrategy returns the configured WAF rate-limit strategy so that
+// the Contracts editor can set a sensible default for endpoint rate_limit.
+func (be BackendEditor) WAFRateLimitStrategy() string {
+	return fieldGet(be.securityFields, "rate_limit_strategy")
+}
+
 // AuthRoleOptions returns role names for use in frontend page forms.
 // Returns only explicitly configured roles; empty slice means none configured.
 func (be BackendEditor) AuthRoleOptions() []string {
@@ -969,6 +1034,22 @@ func (be BackendEditor) ServiceFrameworks() []string {
 		}
 	}
 	return fws
+}
+
+// AuthStrategy returns the selected backend auth strategies for cross-editor use.
+func (be BackendEditor) AuthStrategy() []string {
+	raw := fieldGetMulti(be.AuthFields, "strategy")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ", ")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 // CommProtocols returns the unique set of protocols used across all communication links.

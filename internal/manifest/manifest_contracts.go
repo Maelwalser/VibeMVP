@@ -73,10 +73,12 @@ type EndpointDef struct {
 
 // APIVersioning describes how the API handles versioning.
 type APIVersioning struct {
-	Strategy           string `json:"strategy"`
-	CurrentVersion     string `json:"current_version,omitempty"`
-	DeprecationPolicy  string `json:"deprecation_policy,omitempty"`
-	PaginationStrategy string `json:"pagination_strategy,omitempty"`
+	// PerProtocolStrategies holds a versioning strategy for each endpoint
+	// protocol in use (e.g. "REST" → "URL path (/v1/)", "gRPC" → "Package versioning").
+	PerProtocolStrategies map[string]string `json:"per_protocol_strategies,omitempty"`
+	CurrentVersion        string            `json:"current_version,omitempty"`
+	DeprecationPolicy     string            `json:"deprecation_policy,omitempty"`
+	PaginationStrategy    string            `json:"pagination_strategy,omitempty"`
 }
 
 // ExternalAPIInteraction describes a single call/operation to an external API.

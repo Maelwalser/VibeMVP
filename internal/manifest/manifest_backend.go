@@ -134,6 +134,7 @@ type CronJobDef struct {
 type JobQueueDef struct {
 	Name          string       `json:"name"`
 	Description   string       `json:"description,omitempty"`
+	ConfigRef     string       `json:"config_ref,omitempty"` // references a StackConfig.Name (non-monolith)
 	Technology    string       `json:"technology"`
 	Concurrency   string       `json:"concurrency,omitempty"`
 	MaxRetries    string       `json:"max_retries,omitempty"`

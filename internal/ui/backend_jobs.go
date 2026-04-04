@@ -23,7 +23,7 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	case "a":
 		be.jobQueues = append(be.jobQueues, manifest.JobQueueDef{})
 		be.jobsIdx = len(be.jobQueues) - 1
-		be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs)
+		be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs, be.Languages(), be.stackConfigNames())
 		existing := make([]string, 0, len(be.jobQueues)-1)
 		for i, jq := range be.jobQueues {
 			if i != be.jobsIdx {
@@ -44,9 +44,20 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	case "enter":
 		if n > 0 {
 			jq := be.jobQueues[be.jobsIdx]
-			be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs)
+			// Determine effective language for technology filtering.
+			lang := be.langForConfig(jq.ConfigRef)
+			var langs []string
+			if lang != "" {
+				langs = []string{lang}
+			} else {
+				langs = be.Languages()
+			}
+			be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs, langs, be.stackConfigNames())
 			be.jobsForm = setFieldValue(be.jobsForm, "name", jq.Name)
 			be.jobsForm = setFieldValue(be.jobsForm, "description", jq.Description)
+			if jq.ConfigRef != "" {
+				be.jobsForm = setFieldValue(be.jobsForm, "config_ref", jq.ConfigRef)
+			}
 			be.jobsForm = setFieldValue(be.jobsForm, "technology", jq.Technology)
 			be.jobsForm = setFieldValue(be.jobsForm, "concurrency", jq.Concurrency)
 			be.jobsForm = setFieldValue(be.jobsForm, "max_retries", jq.MaxRetries)
@@ -103,6 +114,9 @@ func (be BackendEditor) updateJobsForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 			f := &be.jobsForm[be.jobsFormIdx]
 			if f.Kind == KindSelect {
 				f.CyclePrev()
+				if f.Key == "config_ref" {
+					be.updateJobQueueTechOptions()
+				}
 			}
 		}
 	case "i", "a":
@@ -148,6 +162,12 @@ func (be *BackendEditor) saveJobsForm() {
 	jq := &be.jobQueues[be.jobsIdx]
 	jq.Name = fieldGet(be.jobsForm, "name")
 	jq.Description = fieldGet(be.jobsForm, "description")
+	cfgRef := fieldGet(be.jobsForm, "config_ref")
+	if cfgRef == "(any)" || cfgRef == "" {
+		jq.ConfigRef = ""
+	} else {
+		jq.ConfigRef = cfgRef
+	}
 	jq.Technology = fieldGet(be.jobsForm, "technology")
 	jq.Concurrency = fieldGet(be.jobsForm, "concurrency")
 	jq.MaxRetries = fieldGet(be.jobsForm, "max_retries")

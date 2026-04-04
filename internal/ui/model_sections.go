@@ -87,6 +87,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.contractsEditor.SetServices(m.backendEditor.ServiceNames())
 				m.contractsEditor.SetServiceDefs(m.backendEditor.ServiceDefs())
 				m.contractsEditor.SetAuthRoles(m.backendEditor.AuthRoleOptions())
+				m.contractsEditor.SetWAFRateLimitStrategy(m.backendEditor.WAFRateLimitStrategy())
 				var cmd tea.Cmd
 				m.contractsEditor, cmd = m.contractsEditor.Update(msg)
 				return cmd
@@ -97,6 +98,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 			update: func(m *Model, msg tea.Msg) tea.Cmd {
 				m.frontendEditor.SetAuthRoles(m.backendEditor.AuthRoleOptions())
 				m.frontendEditor.SetBackendProtocols(m.backendEditor.CommProtocols(), m.backendEditor.ServiceFrameworks())
+				m.frontendEditor.SetBackendAuthStrategy(m.backendEditor.AuthStrategy())
 				m.frontendEditor.SetAvailableEndpoints(m.contractsEditor.EndpointNames())
 				var cmd tea.Cmd
 				m.frontendEditor, cmd = m.frontendEditor.Update(msg)
@@ -126,6 +128,7 @@ func buildSectionRegistry() map[string]sectionEntry {
 					m.frontendEditor.Language(),
 					m.frontendEditor.Framework(),
 				)
+				m.crossCutEditor.SetDocsContext(m.contractsEditor.ActiveDocProtocols())
 				var cmd tea.Cmd
 				m.crossCutEditor, cmd = m.crossCutEditor.Update(msg)
 				return cmd

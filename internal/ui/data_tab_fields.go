@@ -164,31 +164,11 @@ func searchTechForSources(sources []manifest.DBSourceDef) []string {
 	return opts
 }
 
-// updateSearchTechOptions recomputes the search_tech governance field options
-// from the current database sources, preserving the selection when still valid.
+// updateSearchTechOptions refreshes search_tech options in the active governance
+// form when it is open (called after the DATABASES sub-tab changes).
 func (dt *DataTabEditor) updateSearchTechOptions() {
-	opts := searchTechForSources(dt.dbEditor.Sources)
-	for i := range dt.governanceFields {
-		if dt.governanceFields[i].Key != "search_tech" {
-			continue
-		}
-		current := dt.governanceFields[i].DisplayValue()
-		dt.governanceFields[i].Options = opts
-		found := false
-		for j, opt := range opts {
-			if opt == current {
-				dt.governanceFields[i].SelIdx = j
-				dt.governanceFields[i].Value = opt
-				found = true
-				break
-			}
-		}
-		if !found {
-			last := len(opts) - 1
-			dt.governanceFields[i].SelIdx = last
-			dt.governanceFields[i].Value = opts[last]
-		}
-		break
+	if dt.govSubView == govViewForm {
+		dt.govForm = dt.withRefreshedGovOptions(dt.govForm)
 	}
 }
 
@@ -202,35 +182,14 @@ func (dt *DataTabEditor) SetServiceNames(names []string) {
 }
 
 // SetMigrationContext updates the backend languages used to filter migration tool
-// options. Recomputes the governance field options immediately, preserving the
-// current selection when it remains valid.
+// options. Refreshes the active governance form if it is open.
 func (dt *DataTabEditor) SetMigrationContext(langs []string) {
 	if stringSlicesEqual(dt.backendLangs, langs) {
 		return
 	}
 	dt.backendLangs = langs
-	opts := migrationToolsForLangs(langs)
-	for i := range dt.governanceFields {
-		if dt.governanceFields[i].Key != "migration_tool" {
-			continue
-		}
-		current := dt.governanceFields[i].DisplayValue()
-		dt.governanceFields[i].Options = opts
-		found := false
-		for j, opt := range opts {
-			if opt == current {
-				dt.governanceFields[i].SelIdx = j
-				dt.governanceFields[i].Value = opt
-				found = true
-				break
-			}
-		}
-		if !found {
-			last := len(opts) - 1
-			dt.governanceFields[i].SelIdx = last
-			dt.governanceFields[i].Value = opts[last]
-		}
-		break
+	if dt.govSubView == govViewForm {
+		dt.govForm = dt.withRefreshedGovOptions(dt.govForm)
 	}
 }
 
@@ -249,22 +208,209 @@ func (dt *DataTabEditor) SetEnvironmentNames(names []string) {
 	dt.dbEditor.SetEnvironmentNames(names)
 }
 
-func defaultGovernanceFields() []Field {
+// ── Governance form fields ─────────────────────────────────────────────────────
+
+// govDbCategory classifies a database type string into a broad category used
+// for governance option filtering.
+func govDbCategory(dbType string, isCache bool) string {
+	if isCache {
+		return "cache"
+	}
+	switch dbType {
+	case "PostgreSQL", "MySQL", "SQLite":
+		return "relational"
+	case "MongoDB", "DynamoDB":
+		return "document"
+	case "Redis", "Memcached":
+		return "cache"
+	case "ClickHouse":
+		return "analytics"
+	case "Elasticsearch":
+		return "analytics"
+	case "Cassandra":
+		return "wide-column"
+	default:
+		return "relational"
+	}
+}
+
+func allGovCategories(cats []string, cat string) bool {
+	if len(cats) == 0 {
+		return false
+	}
+	for _, c := range cats {
+		if c != cat {
+			return false
+		}
+	}
+	return true
+}
+
+func govRetentionOptions(cats []string) []string {
+	if allGovCategories(cats, "cache") {
+		return []string{"1 hour", "24 hours", "7 days", "30 days", "Custom"}
+	}
+	if allGovCategories(cats, "analytics") {
+		return []string{"7 days", "30 days", "90 days", "1 year", "3 years", "Indefinite", "Custom"}
+	}
+	return []string{"30 days", "90 days", "1 year", "3 years", "7 years", "Indefinite", "Custom"}
+}
+
+func govDeleteStrategyOptions(cats []string) []string {
+	if allGovCategories(cats, "cache") {
+		return []string{"TTL expiry", "Manual flush", "LRU eviction"}
+	}
+	if allGovCategories(cats, "analytics") {
+		return []string{"Time-based drop", "Compaction", "Archival", "Manual purge"}
+	}
+	return []string{"Soft-delete", "Hard-delete", "Archival", "Soft + periodic purge"}
+}
+
+func govBackupStrategyOptions(cats []string) []string {
+	if allGovCategories(cats, "cache") {
+		return []string{"RDB snapshot", "AOF persistence", "None"}
+	}
+	return []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"}
+}
+
+// govSelectedCategories returns the DB categories for the databases selected
+// in the governance form.
+func (dt DataTabEditor) govSelectedCategories(form []Field) []string {
+	var aliases []string
+	for _, f := range form {
+		if f.Key == "databases" {
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					aliases = append(aliases, f.Options[idx])
+				}
+			}
+			break
+		}
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+	var cats []string
+	for _, alias := range aliases {
+		for _, src := range dt.dbEditor.Sources {
+			if src.Alias == alias {
+				cats = append(cats, govDbCategory(string(src.Type), src.IsCache))
+				break
+			}
+		}
+	}
+	return cats
+}
+
+// isGovFieldDisabled returns true when a governance form field should be hidden
+// based on the selected database categories.
+func (dt DataTabEditor) isGovFieldDisabled(form []Field, idx int) bool {
+	key := form[idx].Key
+	if key != "migration_tool" && key != "archival_storage" {
+		return false
+	}
+	cats := dt.govSelectedCategories(form)
+	if len(cats) == 0 {
+		return false
+	}
+	switch key {
+	case "migration_tool":
+		return allGovCategories(cats, "cache") || allGovCategories(cats, "analytics")
+	case "archival_storage":
+		return allGovCategories(cats, "cache")
+	}
+	return false
+}
+
+// withRefreshedGovOptions returns a copy of the governance form with all
+// DB-aware field options recomputed from the currently selected databases.
+func (dt DataTabEditor) withRefreshedGovOptions(form []Field) []Field {
+	cats := dt.govSelectedCategories(form)
+	retentionOpts := govRetentionOptions(cats)
+	deleteOpts := govDeleteStrategyOptions(cats)
+	backupOpts := govBackupStrategyOptions(cats)
+	searchOpts := searchTechForSources(dt.dbEditor.Sources)
+
+	migrationOpts := migrationToolsForLangs(dt.backendLangs)
+	if allGovCategories(cats, "cache") || allGovCategories(cats, "analytics") {
+		migrationOpts = []string{"N/A"}
+	}
+
+	// Also refresh the databases multiselect options from current DB aliases.
+	dbAliases := dt.dbNames()
+
+	newForm := make([]Field, len(form))
+	copy(newForm, form)
+	for i := range newForm {
+		switch newForm[i].Key {
+		case "databases":
+			newForm[i] = refreshMultiSelectOptions(newForm[i], dbAliases, "(no databases configured)")
+		case "retention_policy":
+			newForm[i] = preserveSelectOption(newForm[i], retentionOpts)
+		case "delete_strategy":
+			newForm[i] = preserveSelectOption(newForm[i], deleteOpts)
+		case "backup_strategy":
+			newForm[i] = preserveSelectOption(newForm[i], backupOpts)
+		case "migration_tool":
+			newForm[i] = preserveSelectOption(newForm[i], migrationOpts)
+		case "search_tech":
+			newForm[i] = preserveSelectOption(newForm[i], searchOpts)
+		}
+	}
+	return newForm
+}
+
+// preserveSelectOption updates a KindSelect field's Options, keeping the
+// current Value selected if still present; otherwise selects the last option.
+func preserveSelectOption(f Field, opts []string) Field {
+	cur := f.DisplayValue()
+	f.Options = opts
+	for j, opt := range opts {
+		if opt == cur {
+			f.SelIdx = j
+			f.Value = opt
+			return f
+		}
+	}
+	if len(opts) > 0 {
+		last := len(opts) - 1
+		f.SelIdx = last
+		f.Value = opts[last]
+	}
+	return f
+}
+
+// refreshMultiSelectOptions updates a KindMultiSelect field's Options,
+// re-mapping existing selections by value rather than by index.
+func refreshMultiSelectOptions(f Field, opts []string, placeholder string) Field {
+	oldOpts := f.Options
+	f.Options = opts
+	f.Value = placeholderFor(opts, placeholder)
+	newSelected := make([]int, 0, len(f.SelectedIdxs))
+	for _, oldIdx := range f.SelectedIdxs {
+		if oldIdx >= len(oldOpts) {
+			continue
+		}
+		oldVal := oldOpts[oldIdx]
+		for j, newOpt := range opts {
+			if newOpt == oldVal {
+				newSelected = append(newSelected, j)
+				break
+			}
+		}
+	}
+	f.SelectedIdxs = newSelected
+	return f
+}
+
+func defaultGovFormFields(dbAliases []string) []Field {
+	dbPlaceholder := placeholderFor(dbAliases, "(no databases configured)")
 	return []Field{
+		{Key: "name", Label: "policy name   ", Kind: KindText},
 		{
-			Key: "migration_tool", Label: "Migration     ", Kind: KindSelect,
-			Options: allMigrationTools,
-			Value:   "None", SelIdx: 6,
-		},
-		{
-			Key: "backup_strategy", Label: "Backup Strat. ", Kind: KindSelect,
-			Options: []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"},
-			Value:   "None", SelIdx: 4,
-		},
-		{
-			Key: "search_tech", Label: "Search Tech   ", Kind: KindSelect,
-			Options: []string{"Elasticsearch", "Meilisearch", "Algolia", "Typesense", "None"},
-			Value:   "None", SelIdx: 4,
+			Key: "databases", Label: "applies to    ", Kind: KindMultiSelect,
+			Options: dbAliases,
+			Value:   dbPlaceholder,
 		},
 		{
 			Key: "retention_policy", Label: "retention     ", Kind: KindSelect,
@@ -272,12 +418,12 @@ func defaultGovernanceFields() []Field {
 			Value:   "Indefinite", SelIdx: 5,
 		},
 		{
-			Key: "delete_strategy", Label: "delete_strat  ", Kind: KindSelect,
+			Key: "delete_strategy", Label: "delete strat. ", Kind: KindSelect,
 			Options: []string{"Soft-delete", "Hard-delete", "Archival", "Soft + periodic purge"},
 			Value:   "Soft-delete",
 		},
 		{
-			Key: "pii_encryption", Label: "pii_encryption", Kind: KindSelect,
+			Key: "pii_encryption", Label: "pii encryption", Kind: KindSelect,
 			Options: []string{"Field-level AES-256", "Full database encryption", "Application-level", "None"},
 			Value:   "None", SelIdx: 3,
 		},
@@ -286,7 +432,7 @@ func defaultGovernanceFields() []Field {
 			Options: []string{"GDPR", "HIPAA", "SOC2 Type II", "PCI-DSS", "ISO-27001", "CCPA", "PIPEDA"},
 		},
 		{
-			Key: "data_residency", Label: "data_residency", Kind: KindSelect,
+			Key: "data_residency", Label: "data residency", Kind: KindSelect,
 			Options: []string{"US", "EU", "APAC", "US + EU", "Global", "Custom"},
 			Value:   "Global", SelIdx: 4,
 		},
@@ -295,6 +441,84 @@ func defaultGovernanceFields() []Field {
 			Options: []string{"S3 Glacier", "GCS Archive", "Azure Archive", "On-premise", "None"},
 			Value:   "None", SelIdx: 4,
 		},
+		{
+			Key: "migration_tool", Label: "migration     ", Kind: KindSelect,
+			Options: allMigrationTools,
+			Value:   "None", SelIdx: len(allMigrationTools) - 1,
+		},
+		{
+			Key: "backup_strategy", Label: "backup strat. ", Kind: KindSelect,
+			Options: []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"},
+			Value:   "None", SelIdx: 4,
+		},
+		{
+			Key: "search_tech", Label: "search tech   ", Kind: KindSelect,
+			Options: []string{"Elasticsearch", "Meilisearch", "Algolia", "Typesense", "None"},
+			Value:   "None", SelIdx: 4,
+		},
+	}
+}
+
+func govFormFromDef(def manifest.DataGovernanceConfig, dbAliases []string) []Field {
+	f := defaultGovFormFields(dbAliases)
+	f = setFieldValue(f, "name", def.Name)
+	if len(def.Databases) > 0 {
+		f = restoreMultiSelectValue(f, "databases", strings.Join(def.Databases, ", "))
+	}
+	if def.RetentionPolicy != "" {
+		f = setFieldValue(f, "retention_policy", def.RetentionPolicy)
+	}
+	if def.DeleteStrategy != "" {
+		f = setFieldValue(f, "delete_strategy", def.DeleteStrategy)
+	}
+	if def.PIIEncryption != "" {
+		f = setFieldValue(f, "pii_encryption", def.PIIEncryption)
+	}
+	if def.ComplianceFrameworks != "" {
+		f = restoreMultiSelectValue(f, "compliance_frameworks", def.ComplianceFrameworks)
+	}
+	if def.DataResidency != "" {
+		f = setFieldValue(f, "data_residency", def.DataResidency)
+	}
+	if def.ArchivalStorage != "" {
+		f = setFieldValue(f, "archival_storage", def.ArchivalStorage)
+	}
+	if def.MigrationTool != "" {
+		f = setFieldValue(f, "migration_tool", def.MigrationTool)
+	}
+	if def.BackupStrategy != "" {
+		f = setFieldValue(f, "backup_strategy", def.BackupStrategy)
+	}
+	if def.SearchTech != "" {
+		f = setFieldValue(f, "search_tech", def.SearchTech)
+	}
+	return f
+}
+
+func govDefFromForm(fields []Field) manifest.DataGovernanceConfig {
+	var dbs []string
+	for _, f := range fields {
+		if f.Key == "databases" {
+			for _, idx := range f.SelectedIdxs {
+				if idx < len(f.Options) {
+					dbs = append(dbs, f.Options[idx])
+				}
+			}
+			break
+		}
+	}
+	return manifest.DataGovernanceConfig{
+		Name:                 fieldGet(fields, "name"),
+		Databases:            dbs,
+		RetentionPolicy:      fieldGet(fields, "retention_policy"),
+		DeleteStrategy:       fieldGet(fields, "delete_strategy"),
+		PIIEncryption:        fieldGet(fields, "pii_encryption"),
+		ComplianceFrameworks: fieldGetMulti(fields, "compliance_frameworks"),
+		DataResidency:        fieldGet(fields, "data_residency"),
+		ArchivalStorage:      fieldGet(fields, "archival_storage"),
+		MigrationTool:        fieldGet(fields, "migration_tool"),
+		BackupStrategy:       fieldGet(fields, "backup_strategy"),
+		SearchTech:           fieldGet(fields, "search_tech"),
 	}
 }
 

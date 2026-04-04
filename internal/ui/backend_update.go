@@ -50,6 +50,11 @@ func (be BackendEditor) updateDropdown(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	} else if be.authSubView == beAuthViewPermForm {
 		be.saveAuthPermForm()
 	}
+	// If strategy changed and the cursor now sits on a hidden auth field, advance it.
+	if be.authSubView == beAuthViewConfig && be.activeField < len(be.AuthFields) &&
+		be.isAuthFieldHidden(be.AuthFields[be.activeField].Key) {
+		be.activeField = be.nextAuthFieldIdx(+1)
+	}
 	return be, nil
 }
 
@@ -237,7 +242,12 @@ func (be *BackendEditor) applyDropdown() bool {
 	}
 	if be.jobsSubView == beViewForm {
 		if be.jobsFormIdx < len(be.jobsForm) {
-			return applyTo(&be.jobsForm[be.jobsFormIdx])
+			f := &be.jobsForm[be.jobsFormIdx]
+			custom := applyTo(f)
+			if f.Key == "config_ref" {
+				be.updateJobQueueTechOptions()
+			}
+			return custom
 		}
 		return false
 	}
