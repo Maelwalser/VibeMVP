@@ -326,6 +326,65 @@ func (be *BackendEditor) SetEndpointNames(names []string) {
 	}
 }
 
+// stackConfigNames returns the names of all defined stack configs.
+func (be BackendEditor) stackConfigNames() []string {
+	var names []string
+	for _, item := range be.stackConfigEditor.items {
+		if n := fieldGet(item, "name"); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
+// langForConfig returns the language of the stack config with the given name,
+// or "" if the name is empty, "(any)", or not found.
+func (be BackendEditor) langForConfig(configName string) string {
+	if configName == "" || configName == "(any)" {
+		return ""
+	}
+	for _, item := range be.stackConfigEditor.items {
+		if fieldGet(item, "name") == configName {
+			return fieldGet(item, "language")
+		}
+	}
+	return ""
+}
+
+// updateJobQueueTechOptions refreshes the technology options in the active jobs
+// form based on the currently selected config_ref. Called after config_ref changes.
+func (be *BackendEditor) updateJobQueueTechOptions() {
+	lang := be.langForConfig(fieldGet(be.jobsForm, "config_ref"))
+	var langs []string
+	if lang != "" {
+		langs = []string{lang}
+	} else {
+		langs = be.Languages()
+	}
+	opts, defaultVal := jobQueueTechOptions(langs)
+	cur := fieldGet(be.jobsForm, "technology")
+	for i := range be.jobsForm {
+		if be.jobsForm[i].Key != "technology" {
+			continue
+		}
+		be.jobsForm[i].Options = opts
+		found := false
+		for j, o := range opts {
+			if o == cur {
+				be.jobsForm[i].SelIdx = j
+				be.jobsForm[i].Value = o
+				found = true
+				break
+			}
+		}
+		if !found {
+			be.jobsForm[i].SelIdx = 0
+			be.jobsForm[i].Value = defaultVal
+		}
+		break
+	}
+}
+
 // applyStackConfigNamesToServices updates the config_ref dropdown in all service
 // forms to reflect the current set of stack config names. Called whenever stack
 // configs are added, renamed, or deleted.

@@ -652,13 +652,29 @@ func jobQueueTechOptions(langs []string) ([]string, string) {
 	return opts, opts[0]
 }
 
-func defaultJobQueueFormFields(services, dtos, langs []string) []Field {
+func defaultJobQueueFormFields(services, dtos, langs, configNames []string) []Field {
 	workerOpts, workerVal := noneOrPlaceholder(services, "(no services configured)")
 	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
 	techOpts, techVal := jobQueueTechOptions(langs)
-	return []Field{
+
+	fields := []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "description", Label: "description   ", Kind: KindText},
+	}
+
+	// config_ref: only shown for non-monolith arches that have stack configs defined.
+	if len(configNames) > 0 {
+		cfgOpts := append([]string{"(any)"}, configNames...)
+		fields = append(fields, Field{
+			Key:     "config_ref",
+			Label:   "stack config  ",
+			Kind:    KindSelect,
+			Options: cfgOpts,
+			Value:   "(any)",
+		})
+	}
+
+	fields = append(fields, []Field{
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
 			Options: techOpts,
@@ -683,7 +699,8 @@ func defaultJobQueueFormFields(services, dtos, langs []string) []Field {
 			Key: "payload_dto", Label: "payload_dto   ", Kind: KindSelect,
 			Options: payloadOpts, Value: payloadVal,
 		},
-	}
+	}...)
+	return fields
 }
 
 // defaultRoleFormFields returns form fields for a role, wiring permissions and

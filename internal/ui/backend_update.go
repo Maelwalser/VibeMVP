@@ -234,7 +234,12 @@ func (be *BackendEditor) applyDropdown() bool {
 	}
 	if be.jobsSubView == beViewForm {
 		if be.jobsFormIdx < len(be.jobsForm) {
-			return applyTo(&be.jobsForm[be.jobsFormIdx])
+			f := &be.jobsForm[be.jobsFormIdx]
+			custom := applyTo(f)
+			if f.Key == "config_ref" {
+				be.updateJobQueueTechOptions()
+			}
+			return custom
 		}
 		return false
 	}
