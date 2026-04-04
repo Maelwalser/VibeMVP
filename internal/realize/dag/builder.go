@@ -206,6 +206,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	modPath := deriveModulePath(svc.Name)
 	svcCopy := *svc
 	links := commLinksFor(svc.Name, m.Backend.CommLinks)
+	jobQueues := jobQueuesForService(svc.Name, m.Backend.JobQueues)
+	cronJobs := cronJobsForService(svc.Name, m.Backend.JobQueues)
 	outputDir := svcDirs[slug]
 
 	planID := svcPlanID(slug)
@@ -225,15 +227,17 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — project skeleton (interfaces + go.mod)", svc.Name),
 		Dependencies: dataDeps,
 		Payload: TaskPayload{
-			ModulePath:  modPath,
-			ArchPattern: m.Backend.ArchPattern,
-			EnvConfig:   m.Backend.Env,
-			Service:     &svcCopy,
-			Domains:     m.Data.Domains,
-			Databases:   m.Data.Databases,
-			Auth:        &m.Backend.Auth,
-			ServiceDirs: svcDirs,
-			OutputDir:   outputDir,
+			ModulePath:   modPath,
+			ArchPattern:  m.Backend.ArchPattern,
+			EnvConfig:    m.Backend.Env,
+			Service:      &svcCopy,
+			Domains:      m.Data.Domains,
+			Databases:    m.Data.Databases,
+			Cachings:     m.Data.Cachings,
+			FileStorages: m.Data.FileStorages,
+			Auth:         &m.Backend.Auth,
+			ServiceDirs:  svcDirs,
+			OutputDir:    outputDir,
 		},
 	})
 
@@ -269,6 +273,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Service:     &svcCopy,
 			Domains:     m.Data.Domains,
 			Databases:   m.Data.Databases,
+			Cachings:    m.Data.Cachings,
 			ServiceDirs: svcDirs,
 			OutputDir:   outputDir,
 		},
@@ -282,12 +287,16 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — service layer", svc.Name),
 		Dependencies: []string{repoID},
 		Payload: TaskPayload{
-			ModulePath:  modPath,
-			ArchPattern: m.Backend.ArchPattern,
-			Service:     &svcCopy,
-			Domains:     m.Data.Domains,
-			ServiceDirs: svcDirs,
-			OutputDir:   outputDir,
+			ModulePath:   modPath,
+			ArchPattern:  m.Backend.ArchPattern,
+			Service:      &svcCopy,
+			Domains:      m.Data.Domains,
+			Cachings:     m.Data.Cachings,
+			FileStorages: m.Data.FileStorages,
+			JobQueues:    jobQueues,
+			CronJobs:     cronJobs,
+			ServiceDirs:  svcDirs,
+			OutputDir:    outputDir,
 		},
 	})
 
@@ -300,15 +309,18 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — handler layer", svc.Name),
 		Dependencies: []string{svcID},
 		Payload: TaskPayload{
-			ModulePath:  modPath,
-			ArchPattern: m.Backend.ArchPattern,
-			Service:     &svcCopy,
-			Domains:     m.Data.Domains,
-			Endpoints:   m.Contracts.Endpoints,
-			CommLinks:   links,
-			Auth:        &m.Backend.Auth,
-			ServiceDirs: svcDirs,
-			OutputDir:   outputDir,
+			ModulePath:   modPath,
+			ArchPattern:  m.Backend.ArchPattern,
+			Service:      &svcCopy,
+			Domains:      m.Data.Domains,
+			Endpoints:    m.Contracts.Endpoints,
+			CommLinks:    links,
+			Auth:         &m.Backend.Auth,
+			FileStorages: m.Data.FileStorages,
+			JobQueues:    jobQueues,
+			CronJobs:     cronJobs,
+			ServiceDirs:  svcDirs,
+			OutputDir:    outputDir,
 		},
 	})
 
@@ -320,15 +332,19 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — bootstrap", svc.Name),
 		Dependencies: []string{handlerID},
 		Payload: TaskPayload{
-			ModulePath:  modPath,
-			ArchPattern: m.Backend.ArchPattern,
-			EnvConfig:   m.Backend.Env,
-			Service:     &svcCopy,
-			AllServices: m.Backend.Services,
-			Databases:   m.Data.Databases,
-			Auth:        &m.Backend.Auth,
-			ServiceDirs: svcDirs,
-			OutputDir:   outputDir,
+			ModulePath:   modPath,
+			ArchPattern:  m.Backend.ArchPattern,
+			EnvConfig:    m.Backend.Env,
+			Service:      &svcCopy,
+			AllServices:  m.Backend.Services,
+			Databases:    m.Data.Databases,
+			Cachings:     m.Data.Cachings,
+			FileStorages: m.Data.FileStorages,
+			Auth:         &m.Backend.Auth,
+			JobQueues:    jobQueues,
+			CronJobs:     cronJobs,
+			ServiceDirs:  svcDirs,
+			OutputDir:    outputDir,
 		},
 	})
 }
@@ -339,6 +355,31 @@ func commLinksFor(name string, links []manifest.CommLink) []manifest.CommLink {
 	for _, l := range links {
 		if l.From == name || l.To == name {
 			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// jobQueuesForService returns job queues belonging to the given service.
+// If a queue has no WorkerService set, it is included for all services.
+func jobQueuesForService(name string, queues []manifest.JobQueueDef) []manifest.JobQueueDef {
+	out := make([]manifest.JobQueueDef, 0)
+	for _, q := range queues {
+		if q.WorkerService == "" || q.WorkerService == name {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
+// cronJobsForService collects all cron jobs nested within the job queues that
+// belong to the given service. CronJobDef has no direct service linkage field —
+// it is always a child of a JobQueueDef, so we filter by the queue's WorkerService.
+func cronJobsForService(name string, queues []manifest.JobQueueDef) []manifest.CronJobDef {
+	out := make([]manifest.CronJobDef, 0)
+	for _, q := range queues {
+		if q.WorkerService == "" || q.WorkerService == name {
+			out = append(out, q.CronJobs...)
 		}
 	}
 	return out

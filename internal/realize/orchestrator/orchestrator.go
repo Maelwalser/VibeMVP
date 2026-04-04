@@ -332,5 +332,54 @@ func technologiesFor(task *dag.Task) []string {
 		techs = append(techs, task.Payload.Infra.CICD.IaCTool)
 	}
 
+	// Job queue technologies so job queue skills get injected.
+	for _, jq := range task.Payload.JobQueues {
+		if jq.Technology != "" {
+			techs = append(techs, jq.Technology)
+		}
+	}
+
+	// Caching technologies.
+	for _, c := range task.Payload.Cachings {
+		if c.CacheDB != "" {
+			techs = append(techs, c.CacheDB)
+		}
+	}
+
+	// File storage technologies.
+	for _, fs := range task.Payload.FileStorages {
+		if fs.Technology != "" {
+			techs = append(techs, fs.Technology)
+		}
+	}
+
+	// Auth strategy.
+	if task.Payload.Auth != nil && task.Payload.Auth.Strategy != "" {
+		techs = append(techs, task.Payload.Auth.Strategy)
+	}
+
+	// Cross-cutting: testing frameworks and docs formats.
+	if task.Payload.CrossCut != nil {
+		t := task.Payload.CrossCut.Testing
+		for _, fw := range []string{t.Unit, t.Integration, t.E2E, t.API, t.Load, t.Contract, t.FrontendTesting} {
+			if fw != "" && fw != "none" {
+				techs = append(techs, fw)
+			}
+		}
+		if task.Payload.CrossCut.Docs.Changelog != "" {
+			techs = append(techs, task.Payload.CrossCut.Docs.Changelog)
+		}
+	}
+
+	// Frontend: realtime strategy, bundle optimization, error boundary.
+	if task.Payload.Frontend != nil {
+		ft := task.Payload.Frontend.Tech
+		for _, v := range []string{ft.RealtimeStrategy, ft.BundleOptimization, ft.ErrorBoundary} {
+			if v != "" && v != "none" {
+				techs = append(techs, v)
+			}
+		}
+	}
+
 	return techs
 }

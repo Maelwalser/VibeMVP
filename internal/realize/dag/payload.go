@@ -28,6 +28,12 @@ type TaskPayload struct {
 	APIGateway  *manifest.APIGatewayConfig `json:"api_gateway,omitempty"`
 	Auth        *manifest.AuthConfig     `json:"auth,omitempty"`
 
+	// JobQueues and CronJobs are the background task configurations assigned to
+	// this service. Populated for service-layer and bootstrap tasks so agents
+	// know which job technologies to wire in.
+	JobQueues []manifest.JobQueueDef `json:"job_queues,omitempty"`
+	CronJobs  []manifest.CronJobDef  `json:"cron_jobs,omitempty"`
+
 	// Contracts pillar
 	DTOs       []manifest.DTODef      `json:"dtos,omitempty"`
 	Endpoints  []manifest.EndpointDef `json:"endpoints,omitempty"`
