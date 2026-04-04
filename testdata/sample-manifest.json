@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-02T18:02:00Z",
+  "created_at": "2026-04-04T12:00:00Z",
   "data": {
     "databases": [
       {
@@ -11,29 +11,12 @@
     "domains": [
       {
         "name": "User",
-        "description": "System users",
+        "description": "System users requiring authentication",
         "databases": "primary",
         "attributes": [
           {"name": "id", "type": "UUID", "constraints": "Primary Key, Auto-generated"},
-          {"name": "email", "type": "String", "constraints": "Required, Unique"}
-        ]
-      },
-      {
-        "name": "Blog",
-        "description": "Blog posts created by users",
-        "databases": "primary",
-        "attributes": [
-          {"name": "id", "type": "UUID", "constraints": "Primary Key, Auto-generated"},
-          {"name": "title", "type": "String", "constraints": "Required"},
-          {"name": "content", "type": "Text", "constraints": "Required"},
-          {"name": "author_id", "type": "UUID", "constraints": "Required"}
-        ],
-        "relationships": [
-          {
-            "related_domain": "User",
-            "rel_type": "ManyToOne",
-            "foreign_key": "author_id"
-          }
+          {"name": "email", "type": "String", "constraints": "Required, Unique"},
+          {"name": "password_hash", "type": "String", "constraints": "Required"}
         ]
       }
     ],
@@ -52,8 +35,8 @@
     },
     "services": [
       {
-        "name": "core-api",
-        "responsibility": "Handles all user and blog operations",
+        "name": "auth-api",
+        "responsibility": "Handles user registration and login",
         "language": "Go",
         "framework": "Fiber",
         "interfaces": [
@@ -73,11 +56,18 @@
     "dtos": [],
     "endpoints": [
       {
-        "service_unit": "core-api",
-        "name_path": "/api/v1/blogs",
+        "service_unit": "auth-api",
+        "name_path": "/api/v1/auth/register",
         "protocol": "REST",
         "auth_required": "No",
-        "http_method": "GET"
+        "http_method": "POST"
+      },
+      {
+        "service_unit": "auth-api",
+        "name_path": "/api/v1/auth/login",
+        "protocol": "REST",
+        "auth_required": "No",
+        "http_method": "POST"
       }
     ],
     "versioning": {
@@ -96,10 +86,22 @@
     },
     "pages": [
       {
-        "name": "Home",
-        "route": "/",
+        "name": "Register",
+        "route": "/register",
         "auth_required": "No",
-        "core_actions": "View list of blogs"
+        "layout": "AuthLayout",
+        "core_actions": "Submit registration form with email and password",
+        "loading": "Spinner",
+        "error_handling": "Inline form errors and Toast"
+      },
+      {
+        "name": "Login",
+        "route": "/login",
+        "auth_required": "No",
+        "layout": "AuthLayout",
+        "core_actions": "Submit login credentials",
+        "loading": "Spinner",
+        "error_handling": "Inline form errors and Toast"
       }
     ]
   }

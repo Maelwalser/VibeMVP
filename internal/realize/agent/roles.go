@@ -44,7 +44,10 @@ STRICT SCOPE:
 - A database connection/pool setup file (internal/repository/postgres/db.go)
 - Table-driven _test.go files alongside each implementation
 - Use the module path from the payload's module_path field for all imports
-- DO NOT generate: domain structs (already in internal/domain/), service layer, handlers, main.go, or go.mod`,
+- DO NOT generate: domain structs (already in internal/domain/), service layer, handlers, main.go, or go.mod
+
+For ArchModularMonolith: group by module instead of by layer —
+use internal/modules/{module-name}/repository/ and internal/modules/{module-name}/repository/postgres/`,
 
 	dag.TaskKindServiceLogic: `You are an expert Go backend engineer. Generate ONLY the service (business logic) layer.
 
@@ -53,7 +56,9 @@ STRICT SCOPE:
 - Services accept repository interfaces as constructor arguments (dependency injection)
 - Table-driven _test.go with mocked repositories for each service file
 - Use the module path from the payload's module_path field for all imports
-- DO NOT generate: domain structs, repository code, handlers, main.go, or go.mod`,
+- DO NOT generate: domain structs, repository code, handlers, main.go, or go.mod
+
+For ArchModularMonolith: group by module — use internal/modules/{module-name}/service/`,
 
 	dag.TaskKindServiceHandler: `You are an expert Go backend engineer. Generate ONLY the HTTP handler and routing layer.
 
@@ -63,7 +68,10 @@ STRICT SCOPE:
 - Auth middleware if auth strategy is defined (internal/middleware/auth.go)
 - Table-driven _test.go for each handler file
 - Use the module path from the payload's module_path field for all imports
-- DO NOT generate: domain structs, repository code, service code, main.go, or go.mod`,
+- DO NOT generate: domain structs, repository code, service code, main.go, or go.mod
+
+For ArchModularMonolith: group by module — use internal/modules/{module-name}/handler/
+and a single internal/router/router.go that imports all module handlers`,
 
 	dag.TaskKindServiceBootstrap: `You are an expert Go backend engineer. Generate ONLY the application bootstrap files.
 
@@ -77,7 +85,22 @@ STRICT SCOPE:
 	dag.TaskKindMessaging: "You are an expert distributed systems engineer. Generate message broker configuration, event producer/consumer boilerplate, and event schema definitions.",
 	dag.TaskKindGateway:   "You are an expert platform engineer. Generate API gateway configuration including routing rules, rate limiting, and middleware configuration.",
 
-	dag.TaskKindContracts: "You are an expert API designer. Generate DTO types, request/response models, and an OpenAPI specification from the endpoint definitions.",
+	dag.TaskKindContracts: `You are an expert API designer. Generate DTO types, request/response models, and an OpenAPI specification from the endpoint definitions.
+
+PATH RULES — determined by arch_pattern in the payload:
+
+Monolith / Modular Monolith:
+  - Go types: internal/contracts/<entity>.go (package contracts)
+  - OpenAPI spec: openapi.yaml (at the root of your OutputDir)
+
+Microservices / Event-Driven / Hybrid:
+  - Go types: contracts/<entity>.go (package contracts) — this becomes a shared Go module
+  - OpenAPI spec: contracts/openapi.yaml
+  - go.mod: contracts/go.mod with module path "{app_name}/shared/contracts"
+
+The pipeline places all files under the correct subdirectory — output ONLY relative paths
+(e.g. "internal/contracts/user.go" for monolith, "contracts/user.go" for microservices).
+Do NOT prefix paths with "backend/", "shared/", or any service name.`,
 	dag.TaskKindFrontend: `You are an expert frontend engineer. Generate a complete frontend application with pages, components, API client integration, and routing.
 
 CRITICAL RULES:
@@ -103,33 +126,58 @@ DO NOT generate any of these — they are already written by service agents:
   - package.json, tsconfig.json, next.config.*, tailwind.config.*
   - go.mod, go.sum
 
+PATH RULES — CRITICAL OVERRIDE:
+  This task outputs files for the ENTIRE project from the root, not a single component.
+  The pipeline does NOT add any directory prefix for this task.
+  You MUST include the full path from the project root for every file.
+
+  CORRECT (include service directory prefix):
+    "backend/Dockerfile"       ← Go service Dockerfile inside backend/
+    "frontend/Dockerfile"      ← frontend Dockerfile inside frontend/
+    "backend/.air.toml"        ← air config alongside the Go module
+    "backend/.dockerignore"    ← dockerignore scoped to Go build context
+    "docker-compose.yml"       ← always at project root
+    "scripts/init-db.sql"      ← always at project root
+
+  WRONG (missing prefix — Docker can't find the file):
+    "Dockerfile"               ← ambiguous; docker-compose can't resolve it
+    ".air.toml"                ← wrong location, air won't find it
+
+  The general output format rule "do NOT prefix paths" applies to per-component tasks
+  (backend, frontend, service layers) that each have their own OutputDir. This task has
+  NO OutputDir — you are writing all infrastructure files yourself from the project root.
+
 BUILD CONTEXT RULES — this is critical for Docker to find the source files:
   The payload field "service_dirs" maps each service slug AND "frontend" to the directory
   where their generated files live, relative to the output root. Use these values EXACTLY
   as the docker-compose build context. Do NOT invent subdirectories that are not in service_dirs.
 
-  Example: if service_dirs = {"monolith": "backend", "frontend": "frontend"}, then docker-compose must be:
-    services:
-      core-api:
-        build:
-          context: ./backend   ← value from service_dirs["monolith"]
-          dockerfile: Dockerfile
-      frontend:
-        build:
-          context: ./frontend  ← value from service_dirs["frontend"]
-          dockerfile: Dockerfile
+  Example: if service_dirs = {"monolith": "backend", "frontend": "frontend"}, then:
+    docker-compose.yml must use:
+      services:
+        core-api:
+          build:
+            context: ./backend   ← value from service_dirs["monolith"]
+            dockerfile: Dockerfile
+        frontend:
+          build:
+            context: ./frontend  ← value from service_dirs["frontend"]
+            dockerfile: Dockerfile
+    And the file paths in your output must be:
+      "backend/Dockerfile"     ← placed inside the ./backend build context
+      "frontend/Dockerfile"    ← placed inside the ./frontend build context
+      "backend/.air.toml"      ← placed inside the ./backend build context
 
-  Example: if service_dirs = {"monolith": "."} (backend-only), then:
-    services:
-      core-api:
-        build:
-          context: .
-          dockerfile: Dockerfile
-
-  Place each Dockerfile INSIDE its service's build context directory so that
-  Docker can find it relative to the context:
-    - backend/Dockerfile for the Go service when context is "./backend"
-    - frontend/Dockerfile for the frontend when context is "./frontend"
+  Example: if service_dirs = {"monolith": "."} (backend-only monolith), then:
+    docker-compose.yml must use:
+      services:
+        core-api:
+          build:
+            context: .
+            dockerfile: Dockerfile
+    And the file paths in your output must be:
+      "Dockerfile"             ← at project root (same as build context)
+      ".air.toml"              ← at project root
 
   The Dockerfile for the Go service must use COPY paths relative to its build context:
     COPY go.mod go.sum ./   ← correct when context is "./backend" (go.mod is at backend/go.mod)
@@ -151,8 +199,31 @@ REQUIRED Go Dockerfile layer order:
 	dag.TaskKindInfraTerraform: "You are an expert infrastructure engineer. Generate IaC configuration files (Terraform/Pulumi) for all cloud resources.",
 	dag.TaskKindInfraCI:        "You are an expert DevOps engineer. Generate CI/CD pipeline configuration including build, test, and deployment stages.",
 
-	dag.TaskKindCrossCutTesting: "You are an expert test engineer. Generate test scaffolding including unit tests, integration tests, and E2E test setup. Use table-driven tests and the RED-GREEN-REFACTOR TDD cycle. Target 80%+ coverage on business logic.",
-	dag.TaskKindCrossCutDocs:    "You are an expert technical writer. Generate API documentation, OpenAPI specs, and changelog files.",
+	dag.TaskKindCrossCutTesting: `You are an expert test engineer. Generate test scaffolding including shared test helpers, integration test setup, and E2E configuration. Use table-driven tests and the RED-GREEN-REFACTOR TDD cycle. Target 80%+ coverage on business logic.
+
+PATH RULES — determined by arch_pattern in the payload:
+
+Monolith / Modular Monolith:
+  - Shared test helpers: internal/testutil/<helper>.go (package testutil)
+  - Integration test config: testdata/ at the root of your OutputDir
+  - E2E config (e.g. playwright.config.ts): at the root of your OutputDir
+
+Microservices / Event-Driven / Hybrid:
+  - Shared test helpers: testutil/<helper>.go (package testutil) at project root
+  - E2E config: at the project root (".")
+
+Do NOT generate _test.go files for code owned by other tasks (service, handler, repository tasks
+already generate their own tests). Focus on shared utilities, test fixtures, and E2E setup.`,
+
+	dag.TaskKindCrossCutDocs: `You are an expert technical writer. Generate API documentation and project-level documentation files.
+
+PATH RULES (always output to project root regardless of arch_pattern):
+  - README.md at root
+  - docs/architecture.md for architecture overview
+  - docs/api/ for per-service API docs (Microservices) or a single openapi.yaml at root (Monolith)
+  - CHANGELOG.md at root
+
+Do NOT regenerate openapi.yaml if the contracts task already produced one — link to it from README instead.`,
 }
 
 // roleDescription returns the role section of the system prompt for a task kind.

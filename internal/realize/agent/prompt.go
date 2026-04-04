@@ -217,6 +217,11 @@ The pipeline places your files under the correct subdirectory automatically — 
 like "go.mod", "internal/service/user.go", "src/components/Button.tsx". Do NOT prefix paths with
 directory names like "backend/", "frontend/", or "services/user-api/" — those are added by the pipeline.
 
+EXCEPTION — infra.docker task: this task outputs files for the entire project from the project root.
+It has no component directory, so paths MUST include the service subdirectory prefix:
+  "backend/Dockerfile", "frontend/Dockerfile", "backend/.air.toml", "docker-compose.yml", etc.
+See the Role section for full path rules when you are the infra.docker task.
+
 Example:
 <files>
 [
@@ -264,5 +269,62 @@ Rules:
 - Config files: use next.config.mjs (ESM) — works universally across Next.js versions.
   next.config.ts is only supported from Next.js 15.3+.
 - Always use EXACTLY the versions from the "Infrastructure & Dependency Reference" section.
-  Do NOT guess or use @latest for any package.`
+  Do NOT guess or use @latest for any package.
+
+### Architecture-Specific Directory Layout
+
+The arch_pattern in your payload determines the expected project structure. Use this as a
+reference when choosing file paths — your OutputDir prefix is added by the pipeline automatically.
+
+Monolith (with frontend):
+  backend/          ← OutputDir for backend tasks; go.mod lives here
+    main.go
+    Dockerfile      ← infra.docker task (path: "backend/Dockerfile")
+    .air.toml       ← infra.docker task (path: "backend/.air.toml")
+    .dockerignore   ← infra.docker task (path: "backend/.dockerignore")
+    internal/
+      domain/       ← data schemas task
+      contracts/    ← contracts task (Go types)
+      repository/
+      service/
+      handler/
+    db/migrations/
+  frontend/         ← OutputDir for frontend task
+    Dockerfile      ← infra.docker task (path: "frontend/Dockerfile")
+  docker-compose.yml  ← infra.docker task (path: "docker-compose.yml")
+  openapi.yaml        ← contracts task (spec, at project root)
+
+Monolith (no frontend):
+  .                 ← OutputDir is "." for all backend tasks
+    main.go
+    go.mod
+    internal/
+      domain/
+      contracts/
+      repository/
+      service/
+      handler/
+
+Modular Monolith:
+  backend/ (or root)
+    internal/
+      modules/{module-name}/
+        domain/
+        repository/
+        service/
+        handler/
+      router/       ← single router wiring all modules
+
+Microservices / Event-Driven / Hybrid:
+  services/{name}/  ← OutputDir per service; each has its own go.mod
+    internal/
+      domain/
+      repository/
+      service/
+      handler/
+  shared/           ← OutputDir for contracts task
+    contracts/      ← shared Go types (package contracts)
+    contracts/openapi.yaml
+  frontend/
+  docker-compose.yml`
 }

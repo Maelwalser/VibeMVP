@@ -398,6 +398,7 @@ func (b *Builder) addContractsTask(m *manifest.Manifest, d *DAG) {
 		deps = append(deps, "backend.auth")
 	}
 
+	svcDirs := serviceOutputDirs(m)
 	add(d, &Task{
 		ID:           "contracts",
 		Kind:         TaskKindContracts,
@@ -412,6 +413,8 @@ func (b *Builder) addContractsTask(m *manifest.Manifest, d *DAG) {
 			Endpoints:   m.Contracts.Endpoints,
 			Versioning:  m.Contracts.Versioning,
 			Auth:        &m.Backend.Auth,
+			OutputDir:   contractsOutputDir(m, svcDirs),
+			ServiceDirs: svcDirs,
 		},
 	})
 }
@@ -527,6 +530,8 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 	}
 
 	cc := m.CrossCut
+	svcDirs := serviceOutputDirs(m)
+	ccOutDir := crossCutOutputDir(m, svcDirs)
 
 	if m.CrossCut.Testing.Unit != "" || m.CrossCut.Testing.E2E != "" {
 		add(d, &Task{
@@ -543,6 +548,8 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 				Frontend:    frontendOrNil(m),
 				Infra:       infraOrNil(m),
 				CrossCut:    &cc,
+				OutputDir:   ccOutDir,
+				ServiceDirs: svcDirs,
 			},
 		})
 	}
@@ -560,6 +567,8 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 				Endpoints:   m.Contracts.Endpoints,
 				Versioning:  m.Contracts.Versioning,
 				CrossCut:    &cc,
+				OutputDir:   ".",
+				ServiceDirs: svcDirs,
 			},
 		})
 	}
@@ -605,6 +614,30 @@ func backendBaseDir(serviceDirs map[string]string) string {
 		return dir
 	}
 	return "."
+}
+
+// contractsOutputDir returns the output directory for the contracts task.
+// For monolith/modular: co-located with the Go module ("backend" or ".").
+// For distributed arches: "shared" — a top-level shared package consumed by all services.
+func contractsOutputDir(m *manifest.Manifest, svcDirs map[string]string) string {
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		return backendBaseDir(svcDirs)
+	default: // Microservices, Event-Driven, Hybrid
+		return "shared"
+	}
+}
+
+// crossCutOutputDir returns the output directory for cross-cutting tasks.
+// For monolith/modular: co-located with the Go module ("backend" or ".").
+// For distributed arches: "." (root) — shared config and test utils live at the project root.
+func crossCutOutputDir(m *manifest.Manifest, svcDirs map[string]string) string {
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		return backendBaseDir(svcDirs)
+	default:
+		return "."
+	}
 }
 
 // ── nil-safe helpers ──────────────────────────────────────────────────────────
