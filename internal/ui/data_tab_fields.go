@@ -374,11 +374,21 @@ func govDeleteStrategyOptions(cats []string) []string {
 	return []string{"Soft-delete", "Hard-delete", "Archival", "Soft + periodic purge"}
 }
 
-func govBackupStrategyOptions(cats []string) []string {
+// backupStrategyByProvider maps infra cloud_provider → provider-specific backup options.
+var backupStrategyByProvider = map[string][]string{
+	"AWS":         {"AWS Backup", "RDS automated snapshots", "Manual snapshots", "None"},
+	"GCP":         {"Cloud SQL backups", "Manual snapshots", "None"},
+	"Self-hosted": {"pg_dump/mongodump cron", "Manual snapshots", "None"},
+}
+
+func govBackupStrategyOptions(cats []string, cloudProvider string) []string {
 	if allGovCategories(cats, "cache") {
 		return []string{"RDB snapshot", "AOF persistence", "None"}
 	}
-	return []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"}
+	if opts, ok := backupStrategyByProvider[cloudProvider]; ok {
+		return opts
+	}
+	return []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider DR", "None"}
 }
 
 // govSelectedCategories returns the DB categories for the databases selected
@@ -436,7 +446,7 @@ func (dt DataTabEditor) withRefreshedGovOptions(form []Field) []Field {
 	cats := dt.govSelectedCategories(form)
 	retentionOpts := govRetentionOptions(cats)
 	deleteOpts := govDeleteStrategyOptions(cats)
-	backupOpts := govBackupStrategyOptions(cats)
+	backupOpts := govBackupStrategyOptions(cats, dt.cloudProvider)
 	searchOpts := searchTechForSources(dt.dbEditor.Sources)
 
 	migrationOpts := migrationToolsForLangs(dt.backendLangs)
@@ -518,6 +528,7 @@ func refreshMultiSelectOptions(f Field, opts []string, placeholder string) Field
 func defaultGovFormFields(dbAliases []string, cloudProvider string) []Field {
 	dbPlaceholder := placeholderFor(dbAliases, "(no databases configured)")
 	archivalOpts := archivalStorageOptionsFor(cloudProvider)
+	backupOpts := govBackupStrategyOptions(nil, cloudProvider)
 	return []Field{
 		{Key: "name", Label: "policy name   ", Kind: KindText},
 		{
@@ -562,8 +573,9 @@ func defaultGovFormFields(dbAliases []string, cloudProvider string) []Field {
 		},
 		{
 			Key: "backup_strategy", Label: "backup strat. ", Kind: KindSelect,
-			Options: []string{"Automated daily", "Point-in-time recovery", "Manual snapshots", "Managed provider", "None"},
-			Value:   "None", SelIdx: 4,
+			Options: backupOpts,
+			Value:   "None",
+			SelIdx:  len(backupOpts) - 1,
 		},
 		{
 			Key: "search_tech", Label: "search tech   ", Kind: KindSelect,
