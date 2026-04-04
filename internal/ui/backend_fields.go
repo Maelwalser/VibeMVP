@@ -616,16 +616,53 @@ func defaultSecurityFields() []Field {
 	}
 }
 
-func defaultJobQueueFormFields(services, dtos []string) []Field {
+var jobQueueTechByLang = map[string][]string{
+	"Go":              {"Asynq", "River", "Temporal", "Faktory", "Custom"},
+	"TypeScript/Node": {"BullMQ", "Temporal", "Custom"},
+	"Python":          {"Celery", "Temporal", "Custom"},
+	"Ruby":            {"Sidekiq", "Temporal", "Custom"},
+	"Java":            {"Temporal", "Custom"},
+	"Kotlin":          {"Temporal", "Custom"},
+	"C#/.NET":         {"Hangfire", "Temporal", "Custom"},
+	"Rust":            {"Temporal", "Custom"},
+	"PHP":             {"Laravel Queues", "Temporal", "Custom"},
+	"Elixir":          {"Oban", "Temporal", "Custom"},
+	"Other":           {"Temporal", "Custom"},
+}
+
+// jobQueueTechOptions returns filtered technology options based on languages.
+// When no languages are configured, returns the full set.
+func jobQueueTechOptions(langs []string) ([]string, string) {
+	if len(langs) == 0 {
+		return []string{"Temporal", "BullMQ", "Sidekiq", "Celery", "Faktory", "Asynq", "River", "Custom"}, "Temporal"
+	}
+	seen := make(map[string]bool)
+	var opts []string
+	for _, lang := range langs {
+		for _, tech := range jobQueueTechByLang[lang] {
+			if !seen[tech] {
+				seen[tech] = true
+				opts = append(opts, tech)
+			}
+		}
+	}
+	if len(opts) == 0 {
+		return []string{"Temporal", "Custom"}, "Temporal"
+	}
+	return opts, opts[0]
+}
+
+func defaultJobQueueFormFields(services, dtos, langs []string) []Field {
 	workerOpts, workerVal := noneOrPlaceholder(services, "(no services configured)")
 	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
+	techOpts, techVal := jobQueueTechOptions(langs)
 	return []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "description", Label: "description   ", Kind: KindText},
 		{
 			Key: "technology", Label: "technology    ", Kind: KindSelect,
-			Options: []string{"Temporal", "BullMQ", "Sidekiq", "Celery", "Faktory", "Asynq", "River", "Custom"},
-			Value:   "BullMQ", SelIdx: 1,
+			Options: techOpts,
+			Value:   techVal,
 		},
 		{Key: "concurrency", Label: "concurrency   ", Kind: KindText, Value: "10"},
 		{Key: "max_retries", Label: "max_retries   ", Kind: KindText, Value: "3"},

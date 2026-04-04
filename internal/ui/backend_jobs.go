@@ -23,7 +23,7 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	case "a":
 		be.jobQueues = append(be.jobQueues, manifest.JobQueueDef{})
 		be.jobsIdx = len(be.jobQueues) - 1
-		be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs)
+		be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs, be.Languages())
 		existing := make([]string, 0, len(be.jobQueues)-1)
 		for i, jq := range be.jobQueues {
 			if i != be.jobsIdx {
@@ -44,7 +44,7 @@ func (be BackendEditor) updateJobsList(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	case "enter":
 		if n > 0 {
 			jq := be.jobQueues[be.jobsIdx]
-			be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs)
+			be.jobsForm = defaultJobQueueFormFields(be.ServiceNames(), be.availableDTOs, be.Languages())
 			be.jobsForm = setFieldValue(be.jobsForm, "name", jq.Name)
 			be.jobsForm = setFieldValue(be.jobsForm, "description", jq.Description)
 			be.jobsForm = setFieldValue(be.jobsForm, "technology", jq.Technology)
