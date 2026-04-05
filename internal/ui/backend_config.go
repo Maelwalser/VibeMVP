@@ -44,6 +44,7 @@ func (be BackendEditor) updateStackConfigList(key tea.KeyMsg) (BackendEditor, te
 		ed.formIdx = 0
 		ed.itemView = beListViewForm
 		be.activeField = 0
+		be.applyStackConfigNamesToServices()
 	case "d":
 		if n > 0 {
 			be.stacksUndo.Push(copyFieldItems(ed.items))
@@ -118,10 +119,12 @@ func (be BackendEditor) updateStackConfigForm(key tea.KeyMsg) (BackendEditor, te
 			return be.enterStackConfigFormInsert()
 		}
 	case "h", "left":
+		be.saveStackConfigForm()
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
 		}
 	case "l", "right":
+		be.saveStackConfigForm()
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++

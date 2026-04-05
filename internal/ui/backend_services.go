@@ -390,6 +390,7 @@ func (be *BackendEditor) saveServiceForm() {
 	if ed.itemIdx < len(be.Services) {
 		be.Services[ed.itemIdx] = svc
 	}
+	be.applyServiceNamesToForms()
 }
 
 func (be BackendEditor) updateCommList(key tea.KeyMsg) (BackendEditor, tea.Cmd) {

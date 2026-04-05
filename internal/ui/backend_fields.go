@@ -838,21 +838,26 @@ func defaultJobQueueFormFields(services, dtos, langs, configNames []string) []Fi
 	payloadOpts, payloadVal := noneOrPlaceholder(dtos, "(no DTOs configured)")
 	techOpts, techVal := jobQueueTechOptions(langs)
 
+	var cfgOpts []string
+	var cfgVal string
+	if len(configNames) > 0 {
+		cfgOpts = append([]string{"(any)"}, configNames...)
+		cfgVal = "(any)"
+	} else {
+		cfgOpts = []string{"(no configs defined)"}
+		cfgVal = "(no configs defined)"
+	}
+
 	fields := []Field{
 		{Key: "name", Label: "name          ", Kind: KindText},
 		{Key: "description", Label: "description   ", Kind: KindText},
-	}
-
-	// config_ref: only shown for non-monolith arches that have stack configs defined.
-	if len(configNames) > 0 {
-		cfgOpts := append([]string{"(any)"}, configNames...)
-		fields = append(fields, Field{
+		{
 			Key:     "config_ref",
 			Label:   "stack config  ",
 			Kind:    KindSelect,
 			Options: cfgOpts,
-			Value:   "(any)",
-		})
+			Value:   cfgVal,
+		},
 	}
 
 	fields = append(fields, []Field{
