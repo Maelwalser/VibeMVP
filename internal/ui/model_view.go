@@ -405,7 +405,7 @@ func (m Model) renderCmdLine(w int) string {
 	}
 
 	if lipgloss.Width(line) > w {
-		line = line[:w-1]
+		line = lipgloss.NewStyle().MaxWidth(w).Render(line)
 	}
 	return line
 }

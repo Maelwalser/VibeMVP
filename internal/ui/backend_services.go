@@ -64,6 +64,14 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 			ed.itemView = beListViewForm
 			be.activeField = 0
 		}
+	case "R":
+		if n > 0 {
+			be.saveServiceForm()
+			be.repoSubView = beRepoSubViewList
+			be.loadRepoEditorItems()
+			be.repoEditor.itemIdx = 0
+			be.repoEditor.itemView = beListViewList
+		}
 	case "l", "right":
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
@@ -158,6 +166,13 @@ func (be BackendEditor) updateServiceForm(key tea.KeyMsg) (BackendEditor, tea.Cm
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++
 		}
+	case "R":
+		// Drill into data access (repositories) for this service.
+		be.saveServiceForm()
+		be.repoSubView = beRepoSubViewList
+		be.loadRepoEditorItems()
+		be.repoEditor.itemIdx = 0
+		be.repoEditor.itemView = beListViewList
 	case "b", "esc":
 		be.saveServiceForm()
 		ed.itemView = beListViewList
@@ -388,6 +403,7 @@ func (be *BackendEditor) saveServiceForm() {
 	ed.items[ed.itemIdx] = copyFields(ed.form)
 	svc := serviceDefFromFields(ed.form)
 	if ed.itemIdx < len(be.Services) {
+		svc.Repositories = be.Services[ed.itemIdx].Repositories // preserve repos
 		be.Services[ed.itemIdx] = svc
 	}
 	be.applyServiceNamesToForms()
