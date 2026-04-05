@@ -34,12 +34,12 @@ var WellKnownGoModules = map[string]ModuleInfo{
 			{Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
 		},
 	},
-	"PostgreSQL": {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"},
-	"MySQL":      {Module: "github.com/go-sql-driver/mysql", Version: "v1.8.1"},
-	"SQLite":     {Module: "modernc.org/sqlite", Version: "v1.34.4"},
-	"MongoDB":    {Module: "go.mongodb.org/mongo-driver", Version: "v1.17.1"},
-	"Redis":      {Module: "github.com/redis/go-redis/v9", Version: "v9.7.3"},
-	"sqlx":       {Module: "github.com/jmoiron/sqlx", Version: "v1.4.0"},
+	"PostgreSQL":  {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"},
+	"MySQL":       {Module: "github.com/go-sql-driver/mysql", Version: "v1.8.1"},
+	"SQLite":      {Module: "modernc.org/sqlite", Version: "v1.34.4"},
+	"MongoDB":     {Module: "go.mongodb.org/mongo-driver", Version: "v1.17.1"},
+	"Redis":       {Module: "github.com/redis/go-redis/v9", Version: "v9.7.3"},
+	"sqlx":        {Module: "github.com/jmoiron/sqlx", Version: "v1.4.0"},
 	"CockroachDB": {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"}, // CockroachDB uses pgx wire protocol
 
 	// ── ORM ────────────────────────────────────────────────────────
@@ -50,8 +50,8 @@ var WellKnownGoModules = map[string]ModuleInfo{
 	"ent":           {Module: "entgo.io/ent", Version: "v0.14.1"},
 
 	// ── Messaging / event streaming ────────────────────────────────
-	"NATS":    {Module: "github.com/nats-io/nats.go", Version: "v1.37.0"},
-	"Kafka":   {Module: "github.com/segmentio/kafka-go", Version: "v0.4.47"},
+	"NATS":     {Module: "github.com/nats-io/nats.go", Version: "v1.37.0"},
+	"Kafka":    {Module: "github.com/segmentio/kafka-go", Version: "v0.4.47"},
 	"RabbitMQ": {Module: "github.com/rabbitmq/amqp091-go", Version: "v1.10.0"},
 
 	// ── RPC / API ──────────────────────────────────────────────────
@@ -64,9 +64,9 @@ var WellKnownGoModules = map[string]ModuleInfo{
 	"bcrypt": {Module: "golang.org/x/crypto", Version: "v0.31.0"},
 
 	// ── Testing ────────────────────────────────────────────────────
-	"testify": {Module: "github.com/stretchr/testify", Version: "v1.9.0"},
-	"pgxmock": {Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
-	"gomock":  {Module: "go.uber.org/mock", Version: "v0.5.0"},
+	"testify":  {Module: "github.com/stretchr/testify", Version: "v1.9.0"},
+	"pgxmock":  {Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
+	"gomock":   {Module: "go.uber.org/mock", Version: "v0.5.0"},
 	"httptest": {Module: "net/http/httptest", Version: ""}, // stdlib — no version needed
 
 	// ── Validation ─────────────────────────────────────────────────

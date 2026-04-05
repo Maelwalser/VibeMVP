@@ -11,12 +11,12 @@ import (
 
 var WellKnownNpmPackages = map[string]string{
 	// ── Next.js / React ────────────────────────────────────────────
-	"next":                  "15.3.0",
-	"react":                 "19.1.0",
-	"react-dom":             "19.1.0",
-	"@types/react":          "19.1.0",
-	"@types/react-dom":      "19.1.0",
-	"eslint-config-next":    "15.3.0",
+	"next":               "15.3.0",
+	"react":              "19.1.0",
+	"react-dom":          "19.1.0",
+	"@types/react":       "19.1.0",
+	"@types/react-dom":   "19.1.0",
+	"eslint-config-next": "15.3.0",
 
 	// ── Vue / Nuxt ─────────────────────────────────────────────────
 	"vue":          "3.5.13",
@@ -26,17 +26,17 @@ var WellKnownNpmPackages = map[string]string{
 	"@vueuse/core": "12.7.0",
 
 	// ── Svelte / SvelteKit ─────────────────────────────────────────
-	"svelte":          "5.25.3",
-	"@sveltejs/kit":   "2.20.1",
+	"svelte":                       "5.25.3",
+	"@sveltejs/kit":                "2.20.1",
 	"@sveltejs/vite-plugin-svelte": "5.0.3",
 
 	// ── Angular ────────────────────────────────────────────────────
-	"@angular/core":          "19.2.5",
-	"@angular/common":        "19.2.5",
-	"@angular/forms":         "19.2.5",
-	"@angular/router":        "19.2.5",
-	"@angular/platform-browser": "19.2.5",
-	"@angular/cli":           "19.2.5",
+	"@angular/core":                 "19.2.5",
+	"@angular/common":               "19.2.5",
+	"@angular/forms":                "19.2.5",
+	"@angular/router":               "19.2.5",
+	"@angular/platform-browser":     "19.2.5",
+	"@angular/cli":                  "19.2.5",
 	"@angular-devkit/build-angular": "19.2.5",
 
 	// ── Express / Node.js ──────────────────────────────────────────
@@ -50,9 +50,9 @@ var WellKnownNpmPackages = map[string]string{
 	"dotenv":         "16.4.7",
 
 	// ── Fastify ────────────────────────────────────────────────────
-	"fastify":        "5.3.2",
-	"@fastify/cors":  "10.1.0",
-	"@fastify/jwt":   "9.1.0",
+	"fastify":          "5.3.2",
+	"@fastify/cors":    "10.1.0",
+	"@fastify/jwt":     "9.1.0",
 	"@fastify/swagger": "9.5.0",
 
 	// ── NestJS ─────────────────────────────────────────────────────
@@ -79,14 +79,14 @@ var WellKnownNpmPackages = map[string]string{
 	"@remix-run/express": "2.15.3",
 
 	// ── Astro ──────────────────────────────────────────────────────
-	"astro":                "5.6.1",
-	"@astrojs/react":       "4.2.0",
-	"@astrojs/tailwind":    "5.1.4",
+	"astro":             "5.6.1",
+	"@astrojs/react":    "4.2.0",
+	"@astrojs/tailwind": "5.1.4",
 
 	// ── Solid.js / Qwik ────────────────────────────────────────────
-	"solid-js":    "1.9.5",
-	"@solidjs/router": "0.15.3",
-	"@builder.io/qwik": "1.14.0",
+	"solid-js":              "1.9.5",
+	"@solidjs/router":       "0.15.3",
+	"@builder.io/qwik":      "1.14.0",
 	"@builder.io/qwik-city": "1.14.0",
 
 	// ── Database / ORM ─────────────────────────────────────────────
@@ -100,11 +100,11 @@ var WellKnownNpmPackages = map[string]string{
 	"mysql2":         "3.12.0",
 
 	// ── Auth ───────────────────────────────────────────────────────
-	"next-auth":  "4.24.11",
-	"jsonwebtoken": "9.0.2",
+	"next-auth":           "4.24.11",
+	"jsonwebtoken":        "9.0.2",
 	"@types/jsonwebtoken": "9.0.9",
-	"bcryptjs":   "3.0.2",
-	"@types/bcryptjs": "2.4.6",
+	"bcryptjs":            "3.0.2",
+	"@types/bcryptjs":     "2.4.6",
 
 	// ── TypeScript / build ─────────────────────────────────────────
 	"typescript":  "5.7.2",
@@ -115,19 +115,19 @@ var WellKnownNpmPackages = map[string]string{
 	"ts-node":     "10.9.2",
 
 	// ── Styling ────────────────────────────────────────────────────
-	"tailwindcss":           "3.4.17",
-	"@tailwindcss/postcss":  "4.0.17",
-	"postcss":               "8.5.1",
-	"autoprefixer":          "10.4.20",
-	"tailwind-merge":        "2.5.5",
+	"tailwindcss":          "3.4.17",
+	"@tailwindcss/postcss": "4.0.17",
+	"postcss":              "8.5.1",
+	"autoprefixer":         "10.4.20",
+	"tailwind-merge":       "2.5.5",
 
 	// ── Linting ────────────────────────────────────────────────────
 	"eslint": "9.17.0",
 
 	// ── UI / components ────────────────────────────────────────────
-	"lucide-react":  "0.468.0",
-	"framer-motion": "12.6.3",
-	"clsx":          "2.1.1",
+	"lucide-react":             "0.468.0",
+	"framer-motion":            "12.6.3",
+	"clsx":                     "2.1.1",
 	"class-variance-authority": "0.7.1",
 
 	// ── State / data fetching ──────────────────────────────────────
@@ -138,17 +138,17 @@ var WellKnownNpmPackages = map[string]string{
 	"swr":                   "2.3.3",
 
 	// ── Forms / validation ─────────────────────────────────────────
-	"zod":                "3.24.1",
-	"react-hook-form":    "7.54.2",
+	"zod":                 "3.24.1",
+	"react-hook-form":     "7.54.2",
 	"@hookform/resolvers": "3.9.1",
-	"valibot":            "1.4.0",
+	"valibot":             "1.4.0",
 
 	// ── Testing ────────────────────────────────────────────────────
 	"@testing-library/react":      "16.2.0",
 	"@testing-library/user-event": "14.5.2",
-	"@playwright/test":             "1.51.1",
-	"jest":                         "29.7.0",
-	"@types/jest":                  "29.5.14",
+	"@playwright/test":            "1.51.1",
+	"jest":                        "29.7.0",
+	"@types/jest":                 "29.5.14",
 
 	// ── Runtime / tooling ──────────────────────────────────────────
 	"@types/bun": "1.2.8",

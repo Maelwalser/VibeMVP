@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/agent"
 	"github.com/vibe-menu/internal/realize/config"
 	"github.com/vibe-menu/internal/realize/dag"
-	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/memory"
 	"github.com/vibe-menu/internal/realize/verify"
 )

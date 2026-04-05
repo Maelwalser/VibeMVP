@@ -76,7 +76,7 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 			fixes = append(fixes, f)
 		}
 
-	// terraform and other verifier languages have no deterministic fixes yet.
+		// terraform and other verifier languages have no deterministic fixes yet.
 	}
 
 	if len(fixes) == 0 {
@@ -857,10 +857,10 @@ func ApplyUUIDToStringFixes(dir string, verifyOutput string) string {
 			path = fx.file
 		}
 		byFile[path] = append(byFile[path], fileFix{
-			lineIdx:    fx.line - 1,
-			varName:    fx.varName,
+			lineIdx:     fx.line - 1,
+			varName:     fx.varName,
 			replacement: replacement,
-			needImport: needImport,
+			needImport:  needImport,
 		})
 	}
 	applied := 0
@@ -984,4 +984,3 @@ func fixGofmt(dir string, files []string) string {
 	}
 	return fmt.Sprintf("gofmt fixed %d file(s)", fixed)
 }
-
