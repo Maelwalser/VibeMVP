@@ -798,7 +798,22 @@ func (ie InfraEditor) updateEnvFormDropdown(key tea.KeyMsg) (InfraEditor, tea.Cm
 	f := &ie.envForm[ie.envFormIdx]
 	ie.dd.OptIdx = NavigateDropdown(key.String(), ie.dd.OptIdx, len(f.Options))
 	switch key.String() {
-	case " ", "enter":
+	case " ":
+		if f.Kind == KindMultiSelect {
+			f.ToggleMultiSelect(ie.dd.OptIdx)
+			f.DDCursor = ie.dd.OptIdx
+		} else {
+			f.SelIdx = ie.dd.OptIdx
+			if ie.dd.OptIdx < len(f.Options) {
+				f.Value = f.Options[ie.dd.OptIdx]
+			}
+			ie.dd.Open = false
+			ie.onEnvFormFieldChanged(f.Key)
+			if f.PrepareCustomEntry() {
+				return ie.tryEnterInsert()
+			}
+		}
+	case "enter":
 		if f.Kind == KindMultiSelect {
 			f.ToggleMultiSelect(ie.dd.OptIdx)
 			f.DDCursor = ie.dd.OptIdx

@@ -26,11 +26,21 @@ func (be BackendEditor) HintLine() string {
 	tab := be.activeTab()
 	switch tab {
 	case beTabServices:
+		switch be.repoSubView {
+		case beRepoSubViewList:
+			return hintBar("j/k", "navigate", "a", "add repo", "d", "delete", "Enter", "edit", "b/Esc", "back to service")
+		case beRepoSubViewForm:
+			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "O", "operations", "b/Esc", "back to list")
+		case beRepoSubViewOpList:
+			return hintBar("j/k", "navigate", "a", "add op", "d", "delete", "Enter", "edit", "b/Esc", "back to repo")
+		case beRepoSubViewOpForm:
+			return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
+		}
 		ed := be.serviceEditor
 		if ed.itemView == beListViewList {
-			return hintBar("j/k", "navigate", "a", "add service", "d", "delete", "u", "undo", "Enter", "edit", "h/l", "sub-tab", "b", "change arch")
+			return hintBar("j/k", "nav", "a", "add", "d", "del", "Enter", "edit", "R", "data access", "h/l", "tabs")
 		}
-		return hintBar("j/k", "navigate", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back", "Tab", "next field")
+		return hintBar("j/k", "navigate", "R", "data access", "i/Enter", "edit", "Space", "cycle", "b/Esc", "back")
 	case beTabComm:
 		ed := be.commEditor
 		if ed.itemView == beListViewList {
@@ -218,6 +228,26 @@ func (be *BackendEditor) saveInput() {
 		ed := &be.stackConfigEditor
 		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
 			ed.form[ed.formIdx].SaveTextInput(val)
+			// Persist to items and propagate name changes to dependent forms immediately.
+			be.saveStackConfigForm()
+		}
+		return
+	}
+	// Check if we're in a repo form (within service)
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
+			be.saveRepoForm()
+		}
+		return
+	}
+	// Check if we're in an op form (within repo)
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].CanEditAsText() {
+			ed.form[ed.formIdx].SaveTextInput(val)
+			be.saveOpForm()
 		}
 		return
 	}
@@ -373,12 +403,28 @@ func (be BackendEditor) viewSubTabs(w, h int) string {
 		}
 	case beTabServices:
 		const beListHeaderH = 2
-		svcLines := be.viewServiceEditor(w)
-		switch be.serviceEditor.itemView {
-		case beListViewList:
-			svcLines = appendViewport(svcLines, beListHeaderH, be.serviceEditor.itemIdx, h-beOuterH)
-		case beListViewForm:
-			svcLines = appendViewport(svcLines, 2, be.serviceEditor.formIdx, h-beOuterH)
+		var svcLines []string
+		switch be.repoSubView {
+		case beRepoSubViewList:
+			svcLines = be.viewRepoEditor(w)
+			svcLines = appendViewport(svcLines, beListHeaderH, be.repoEditor.itemIdx, h-beOuterH)
+		case beRepoSubViewForm:
+			svcLines = be.viewRepoEditor(w)
+			svcLines = appendViewport(svcLines, 2, be.repoEditor.formIdx, h-beOuterH)
+		case beRepoSubViewOpList:
+			svcLines = be.viewOpEditor(w)
+			svcLines = appendViewport(svcLines, beListHeaderH, be.opEditor.itemIdx, h-beOuterH)
+		case beRepoSubViewOpForm:
+			svcLines = be.viewOpEditor(w)
+			svcLines = appendViewport(svcLines, 2, be.opEditor.formIdx, h-beOuterH)
+		default:
+			svcLines = be.viewServiceEditor(w)
+			switch be.serviceEditor.itemView {
+			case beListViewList:
+				svcLines = appendViewport(svcLines, beListHeaderH, be.serviceEditor.itemIdx, h-beOuterH)
+			case beListViewForm:
+				svcLines = appendViewport(svcLines, 2, be.serviceEditor.formIdx, h-beOuterH)
+			}
 		}
 		lines = append(lines, svcLines...)
 	case beTabComm:
@@ -478,6 +524,19 @@ func (be BackendEditor) viewServiceEditor(w int) []string {
 					cfg := fieldGet(item, "config_ref")
 					if cfg != "" && cfg != "(no configs defined)" {
 						extra = cfg
+					}
+				}
+				// Show repo count if any repositories are defined.
+				if i < len(be.Services) && len(be.Services[i].Repositories) > 0 {
+					rc := len(be.Services[i].Repositories)
+					repoStr := "1 repo"
+					if rc > 1 {
+						repoStr = fmt.Sprintf("%d repos", rc)
+					}
+					if extra != "" {
+						extra = extra + "  " + repoStr
+					} else {
+						extra = repoStr
 					}
 				}
 				lines = append(lines, renderListItem(w, i == ed.itemIdx, "  ▶ ", name, extra))

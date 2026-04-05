@@ -101,6 +101,17 @@ const (
 	beAuthViewPermForm                   // single permission edit form
 )
 
+// beRepoSubView tracks the drill-down state within a service's Data Access panel.
+type beRepoSubView int
+
+const (
+	beRepoSubViewNone   beRepoSubView = iota // not in repo editing
+	beRepoSubViewList                        // listing repos for the current service
+	beRepoSubViewForm                        // editing a repo's basic fields
+	beRepoSubViewOpList                      // listing ops for the current repo
+	beRepoSubViewOpForm                      // editing an op
+)
+
 // ── list + form sub-editor for services and comm links ───────────────────────
 
 type beListView int
@@ -173,6 +184,11 @@ type BackendEditor struct {
 	eventEditor       beListEditor // event catalog within messaging
 	stackConfigEditor beListEditor // CONFIG tab stack configs (non-monolith)
 
+	// Data Access (Repository) sub-editor — drill-down within a service form
+	repoSubView beRepoSubView
+	repoEditor  beListEditor
+	opEditor    beListEditor
+
 	// Stack configs for non-monolith arches (serialized to manifest).
 	StackConfigs []manifest.StackConfig
 
@@ -191,6 +207,9 @@ type BackendEditor struct {
 
 	// Cross-tab references (injected from model.go)
 	DomainNames        []string
+	domainAttributes   map[string][]string // domain name → attribute names (from data tab)
+	domainsByDB        map[string][]string // DB alias → domain names linked to that DB
+	dbSourceTypes      map[string]string   // DB alias → DB type (from data tab)
 	availableDTOs      []string
 	availableEndpoints []string
 	cacheAliases       []string                        // IsCache DB aliases from the Data pillar
@@ -227,15 +246,33 @@ func newBackendEditor() BackendEditor {
 		commEditor:        newBeListEditor(),
 		eventEditor:       newBeListEditor(),
 		stackConfigEditor: newBeListEditor(),
+		repoEditor:        newBeListEditor(),
+		opEditor:          newBeListEditor(),
 		formInput:         newFormInput(),
 		dropdownOpen:      true,
 	}
 }
 
-// SetDomainNames injects domain names from the data tab for event domain dropdowns.
 // SetDomainNames stores domain names from the Data pillar for dropdown population.
 func (be *BackendEditor) SetDomainNames(names []string) {
 	be.DomainNames = names
+}
+
+// SetDomainAttributes stores domain attribute maps from the Data pillar for
+// repo field selection dropdowns.
+func (be *BackendEditor) SetDomainAttributes(attrs map[string][]string) {
+	be.domainAttributes = attrs
+}
+
+// SetDomainsByDB stores the DB alias → domain names map for repo entity_ref filtering.
+func (be *BackendEditor) SetDomainsByDB(m map[string][]string) {
+	be.domainsByDB = m
+}
+
+// SetDBSourceTypes stores the DB alias → type map from the Data pillar for
+// technology-aware op_type options in the repo editor.
+func (be *BackendEditor) SetDBSourceTypes(types map[string]string) {
+	be.dbSourceTypes = types
 }
 
 // SetCacheAliases stores the IsCache DB aliases from the Data pillar.
@@ -299,9 +336,149 @@ func (be *BackendEditor) applyHealthDepsOptionsToFields(fields []Field) {
 	}
 }
 
-// SetDTONames injects DTO names from the contracts tab for job payload dropdowns.
+// SetDTONames injects DTO names from the contracts tab and immediately refreshes
+// all open comm/event/job forms that reference DTOs.
 func (be *BackendEditor) SetDTONames(names []string) {
 	be.availableDTOs = names
+	be.applyDTONamesToForms()
+}
+
+// applyDTONamesToForms refreshes DTO-referencing dropdowns in all open comm,
+// event, and job queue forms without resetting the current selection.
+func (be *BackendEditor) applyDTONamesToForms() {
+	dtoOpts, dtoPlaceholder := noneOrPlaceholder(be.availableDTOs, "(no DTOs configured)")
+
+	applyMultiDTO := func(fields []Field) {
+		for i := range fields {
+			if fields[i].Key != "payload_dto" && fields[i].Key != "response_dto" {
+				continue
+			}
+			var selectedNames []string
+			if len(fields[i].Options) > 0 {
+				for _, idx := range fields[i].SelectedIdxs {
+					if idx < len(fields[i].Options) {
+						selectedNames = append(selectedNames, fields[i].Options[idx])
+					}
+				}
+			} else if fields[i].Value != "" {
+				selectedNames = strings.Split(fields[i].Value, ", ")
+			}
+			fields[i].Options = be.availableDTOs
+			fields[i].SelectedIdxs = nil
+			fields[i].Value = ""
+			for _, name := range selectedNames {
+				for j, opt := range fields[i].Options {
+					if opt == name {
+						fields[i].SelectedIdxs = append(fields[i].SelectedIdxs, j)
+						break
+					}
+				}
+			}
+		}
+	}
+	applyMultiDTO(be.commEditor.form)
+	for _, item := range be.commEditor.items {
+		applyMultiDTO(item)
+	}
+
+	applySingleDTO := func(fields []Field) {
+		for i := range fields {
+			if fields[i].Key != "dto" {
+				continue
+			}
+			cur := fields[i].Value
+			fields[i].Kind = KindSelect
+			fields[i].Options = dtoOpts
+			fields[i].SelIdx = 0
+			if len(dtoOpts) == 0 {
+				fields[i].Value = dtoPlaceholder
+				break
+			}
+			for j, o := range dtoOpts {
+				if o == cur {
+					fields[i].SelIdx = j
+					fields[i].Value = o
+					break
+				}
+			}
+			if fields[i].Value != cur {
+				fields[i].Value = dtoOpts[0]
+			}
+			break
+		}
+	}
+	applyMultiDTO(be.eventEditor.form)
+	for _, item := range be.eventEditor.items {
+		applyMultiDTO(item)
+		applySingleDTO(item)
+	}
+	applySingleDTO(be.eventEditor.form)
+
+	// Jobs form payload_dto is KindSelect (single).
+	for i := range be.jobsForm {
+		if be.jobsForm[i].Key != "payload_dto" {
+			continue
+		}
+		workerOpts, workerVal := noneOrPlaceholder(be.availableDTOs, "(no DTOs configured)")
+		cur := be.jobsForm[i].Value
+		be.jobsForm[i].Options = workerOpts
+		be.jobsForm[i].SelIdx = 0
+		for j, o := range workerOpts {
+			if o == cur {
+				be.jobsForm[i].SelIdx = j
+				be.jobsForm[i].Value = o
+				break
+			}
+		}
+		if be.jobsForm[i].Value != cur {
+			be.jobsForm[i].Value = workerVal
+		}
+		break
+	}
+}
+
+// applyServiceNamesToForms refreshes service-name dropdowns in all open comm,
+// event, and job queue forms without resetting the current selection.
+func (be *BackendEditor) applyServiceNamesToForms() {
+	names := be.ServiceNames()
+	svcOpts, svcPlaceholder := noneOrPlaceholder(names, "(no services configured)")
+
+	applyToFields := func(fields []Field) {
+		for i := range fields {
+			switch fields[i].Key {
+			case "from", "to", "publisher_service", "consumer_service", "worker_service":
+				cur := fields[i].Value
+				fields[i].Kind = KindSelect
+				fields[i].Options = svcOpts
+				fields[i].SelIdx = 0
+				if len(svcOpts) == 0 {
+					fields[i].Value = svcPlaceholder
+					continue
+				}
+				found := false
+				for j, o := range svcOpts {
+					if o == cur {
+						fields[i].SelIdx = j
+						fields[i].Value = o
+						found = true
+						break
+					}
+				}
+				if !found {
+					fields[i].Value = svcOpts[0]
+				}
+			}
+		}
+	}
+	applyToFields(be.commEditor.form)
+	for _, item := range be.commEditor.items {
+		applyToFields(item)
+	}
+	applyToFields(be.eventEditor.form)
+	for _, item := range be.eventEditor.items {
+		applyToFields(item)
+	}
+	applyToFields(be.jobsForm)
 }
 
 // dtoProtocolToSerialization maps a DTO protocol name to the corresponding
@@ -449,8 +626,8 @@ func (be *BackendEditor) updateJobQueueTechOptions() {
 }
 
 // applyStackConfigNamesToServices updates the config_ref dropdown in all service
-// forms to reflect the current set of stack config names. Called whenever stack
-// configs are added, renamed, or deleted.
+// and job queue forms to reflect the current set of stack config names. Called
+// whenever stack configs are added, renamed, or deleted.
 func (be *BackendEditor) applyStackConfigNamesToServices() {
 	var names []string
 	for _, item := range be.stackConfigEditor.items {
@@ -458,6 +635,7 @@ func (be *BackendEditor) applyStackConfigNamesToServices() {
 			names = append(names, n)
 		}
 	}
+	// Service forms use noneOrPlaceholder: "(none)" prefix when configs exist.
 	opts, placeholder := noneOrPlaceholder(names, "(no configs defined)")
 	applyOpts := func(fields []Field) {
 		for i := range fields {
@@ -484,6 +662,39 @@ func (be *BackendEditor) applyStackConfigNamesToServices() {
 	for _, item := range be.serviceEditor.items {
 		applyOpts(item)
 	}
+
+	// Job queue forms use "(any)" as first option when configs exist.
+	var jobsOpts []string
+	var jobsPlaceholder string
+	if len(names) > 0 {
+		jobsOpts = append([]string{"(any)"}, names...)
+		jobsPlaceholder = "(any)"
+	} else {
+		jobsOpts = []string{"(no configs defined)"}
+		jobsPlaceholder = "(no configs defined)"
+	}
+	applyJobsOpts := func(fields []Field) {
+		for i := range fields {
+			if fields[i].Key != "config_ref" {
+				continue
+			}
+			fields[i].Options = jobsOpts
+			found := false
+			for j, o := range jobsOpts {
+				if o == fields[i].Value {
+					fields[i].SelIdx = j
+					found = true
+					break
+				}
+			}
+			if !found {
+				fields[i].Value = jobsPlaceholder
+				fields[i].SelIdx = 0
+			}
+			break
+		}
+	}
+	applyJobsOpts(be.jobsForm)
 }
 
 // SetEnvironmentNames injects environment names from the infra tab so that

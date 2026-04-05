@@ -52,6 +52,9 @@ func buildSectionRegistry() map[string]sectionEntry {
 			editor: func(m *Model) Editor { return m.backendEditor },
 			update: func(m *Model, msg tea.Msg) tea.Cmd {
 				m.backendEditor.SetDomainNames(m.dataTabEditor.domainNames())
+				m.backendEditor.SetDomainAttributes(m.dataTabEditor.DomainAttributeMap())
+				m.backendEditor.SetDomainsByDB(m.dataTabEditor.DomainsByDB())
+				m.backendEditor.SetDBSourceTypes(m.dataTabEditor.DBSourceTypeMap())
 				m.backendEditor.SetDTONames(m.contractsEditor.DTONames())
 				m.backendEditor.SetDTOProtocols(m.contractsEditor.DTOProtocols())
 				m.backendEditor.SetEndpointNames(m.contractsEditor.EndpointNames())
@@ -76,9 +79,12 @@ func buildSectionRegistry() map[string]sectionEntry {
 				m.dataTabEditor.SetDTONames(m.contractsEditor.DTONames())
 				var cmd tea.Cmd
 				m.dataTabEditor, cmd = m.dataTabEditor.Update(msg)
-				// Refresh rate_limit_backend and health_deps options whenever data sources change.
+				// Refresh rate_limit_backend, health_deps, and repo references whenever data sources change.
 				m.backendEditor.SetCacheAliases(m.dataTabEditor.CacheAliases())
 				m.backendEditor.SetDBSourceAliases(m.dataTabEditor.AllDBSourceAliases())
+				m.backendEditor.SetDomainAttributes(m.dataTabEditor.DomainAttributeMap())
+				m.backendEditor.SetDomainsByDB(m.dataTabEditor.DomainsByDB())
+				m.backendEditor.SetDBSourceTypes(m.dataTabEditor.DBSourceTypeMap())
 				return cmd
 			},
 		},
