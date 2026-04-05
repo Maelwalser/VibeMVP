@@ -235,7 +235,7 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Provider menu intercepts all input when open.
 	if m.modal.open {
 		switch key.String() {
-		case "M":
+		case "M", "ctrl+c":
 			if m.modal.menu.focus != pmFocusCredential {
 				m.modal.open = false
 				return m, nil
