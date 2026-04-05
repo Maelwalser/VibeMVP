@@ -116,7 +116,7 @@ func (s ArchScreen) Update(msg tea.Msg) (ArchScreen, tea.Cmd) {
 		return s, nil
 	}
 	switch key.String() {
-	case "q", "esc":
+	case "q", "esc", "P":
 		s.wantsQuit = true
 	case "l":
 		s = s.navigateRight()
@@ -530,6 +530,30 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 		})
 	}
 
+	// Edges: Service → Database (via RepositoryDef.TargetDB)
+	dbEdgeSeen := map[string]bool{}
+	for _, svc := range mf.Backend.Services {
+		if svc.Name == "" {
+			continue
+		}
+		for _, repo := range svc.Repositories {
+			if repo.TargetDB == "" {
+				continue
+			}
+			key := "svc." + svc.Name + "|db." + repo.TargetDB
+			if dbEdgeSeen[key] {
+				continue
+			}
+			dbEdgeSeen[key] = true
+			eID := "edge." + strconv.Itoa(len(edges))
+			edges = append(edges, archEdge{
+				id:        eID,
+				fromID:    "svc." + svc.Name,
+				toID:      "db." + repo.TargetDB,
+				direction: dirUnidirectional,
+			})
+		}
+	}
 	return nodes, edges
 }
 
@@ -682,6 +706,40 @@ func buildEdgeInfo(mf *manifest.Manifest, e archEdge) []string {
 		if !found {
 			lines = append(lines, "  No communication details available.")
 		}
+	} else if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "db.") {
+		svcName := strings.TrimPrefix(e.fromID, "svc.")
+		dbAlias := strings.TrimPrefix(e.toID, "db.")
+		var repos []manifest.RepositoryDef
+		for _, svc := range mf.Backend.Services {
+			if svc.Name != svcName {
+				continue
+			}
+			for _, repo := range svc.Repositories {
+				if repo.TargetDB == dbAlias {
+					repos = append(repos, repo)
+				}
+			}
+			break
+		}
+		if len(repos) == 0 {
+			lines = append(lines, "  Implied connection (no repositories defined).")
+		} else {
+			lines = append(lines, fmt.Sprintf("  Repositories: (%d)", len(repos)))
+			for _, repo := range repos {
+				repoHeader := "    · " + repo.Name
+				if repo.EntityRef != "" {
+					repoHeader += "  [" + repo.EntityRef + "]"
+				}
+				lines = append(lines, repoHeader)
+				for _, op := range repo.Operations {
+					opLine := "        " + op.OpType + ": " + op.Name
+					if op.ResultShape != "" {
+						opLine += " → " + op.ResultShape
+					}
+					lines = append(lines, opLine)
+				}
+			}
+		}
 	}
 
 	if len(lines) == 0 {
@@ -827,9 +885,9 @@ func buildSingleNodeInfo(mf *manifest.Manifest, n archNode, outs, ins []archEdge
 		}
 	}
 
-	// Connection summary — only for database and external API nodes.
+	// Connection summary — only for external API nodes.
 	// Frontend and service connections are navigated directly via the edge selection.
-	if (n.kind == archDatabase || n.kind == archExternalAPI) && len(outs)+len(ins) > 0 {
+	if n.kind == archExternalAPI && len(outs)+len(ins) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "  Connections:")
 		for _, e := range outs {
@@ -1015,14 +1073,12 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 
 	// Step 5: arrows + collect edge bounds
 	edgeBoundsMap := map[string]edgeBounds{}
-	for _, e := range edges {
-		if e.fromID != "frontend" {
-			continue
-		}
+
+	drawEdgeArrow := func(e archEdge) {
 		from, ok1 := nodePositions[e.fromID]
 		to, ok2 := nodePositions[e.toID]
 		if !ok1 || !ok2 {
-			continue
+			return
 		}
 		fromX := from.x + from.w - 1
 		toX := to.x
@@ -1052,6 +1108,19 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 			}
 		}
 		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+	}
+
+	// Frontend → Service arrows
+	for _, e := range edges {
+		if e.fromID == "frontend" {
+			drawEdgeArrow(e)
+		}
+	}
+	// Service → Database arrows
+	for _, e := range edges {
+		if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "db.") {
+			drawEdgeArrow(e)
+		}
 	}
 
 	// Step 6: info panel for selected node or edge
