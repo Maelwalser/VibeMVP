@@ -67,7 +67,21 @@ func deriveModulePath(svcName string) string {
 
 func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 	svcDirs := serviceOutputDirs(m)
+
+	// For monolith/modular architectures, data schema files live within the single
+	// Go module — they share the same module path as the backend service tasks.
+	// Injecting ModulePath here lets the data task generate correct import paths and
+	// ensures downstream agents see the right module name in Shared Team Context.
+	// For microservices, each service has its own module; data tasks have no single
+	// module path (leave empty; each service injects its own ModulePath).
+	dataModulePath := ""
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		dataModulePath = "monolith" // matches deriveModulePath for the synthetic "monolith" service
+	}
+
 	basePayload := TaskPayload{
+		ModulePath:   dataModulePath,
 		ArchPattern:  m.Backend.ArchPattern,
 		EnvConfig:    m.Backend.Env.OrZero(),
 		Domains:      m.Data.Domains,

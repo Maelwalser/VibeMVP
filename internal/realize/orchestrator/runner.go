@@ -284,8 +284,13 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	if err := r.writer.CommitWithPrefix(tmpDir, outputDir, files); err != nil {
 		return fmt.Errorf("task %s: commit files: %w", r.task.ID, err)
 	}
-	// Record with prefixed paths so downstream tasks can locate files on disk.
-	files = applyOutputDirPrefix(files, outputDir)
+	// Apply output dir prefix to get disk-relative paths for rawPaths storage.
+	// The un-prefixed files are passed to registerExportedTypes so the type registry
+	// stores module-relative package paths (e.g. "internal/domain") rather than
+	// filesystem paths (e.g. "backend/internal/domain") — preventing agents from
+	// constructing wrong import paths like "backend/internal/domain" when the correct
+	// Go import is "monolith/internal/domain".
+	prefixedFiles := applyOutputDirPrefix(files, outputDir)
 	// Keep the shared service temp dir alive until the bootstrap task completes
 	// so each layer's files accumulate for go build verification.
 	_, isSvcTask := serviceSlug(r.task.ID)
@@ -294,12 +299,15 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 			r.log("[%s] warning: failed to remove temp dir %s: %v", r.task.ID, tmpDir, err)
 		}
 	}
-	r.memory.Record(r.task, files)
+	// Record: passes prefixedFiles for rawPaths (disk staging) but Record internally
+	// strips outputDir when building excerpts for agent context.
+	r.memory.Record(r.task, prefixedFiles, outputDir)
+	// Register types from un-prefixed files so Package paths are module-relative.
 	r.registerExportedTypes(files)
 	if err := r.state.MarkCompleted(r.task.ID); err != nil {
 		r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 	}
-	r.log("[%s] done (%d files)", r.task.ID, len(files))
+	r.log("[%s] done (%d files)", r.task.ID, len(prefixedFiles))
 	return nil
 }
 

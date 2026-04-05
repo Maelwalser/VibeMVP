@@ -93,7 +93,7 @@ func TestSharedMemory_RecordAndDepsOf(t *testing.T) {
 	filesA := []dag.GeneratedFile{
 		{Path: "internal/models/types.go", Content: "package models\n\ntype User struct{}"},
 	}
-	mem.Record(taskA, filesA)
+	mem.Record(taskA, filesA, "")
 
 	deps := mem.DepsOf(taskB)
 	if len(deps) != 1 {
@@ -120,7 +120,7 @@ func TestSharedMemory_MissingDepIsSkipped(t *testing.T) {
 	// Record only data.schemas.
 	mem.Record(&dag.Task{ID: "data.schemas"}, []dag.GeneratedFile{
 		{Path: "types.go", Content: "package x"},
-	})
+	}, "")
 
 	deps := mem.DepsOf(task)
 	if len(deps) != 1 {
@@ -140,6 +140,7 @@ func TestSharedMemory_TotalBudgetCap(t *testing.T) {
 			[]dag.GeneratedFile{
 				{Path: "types.go", Content: strings.Repeat("y", chunkSize)},
 			},
+			"",
 		)
 	}
 
@@ -171,5 +172,53 @@ func TestSharedMemory_NoDepsReturnsEmpty(t *testing.T) {
 	task := &dag.Task{ID: "root", Dependencies: nil}
 	if deps := mem.DepsOf(task); len(deps) != 0 {
 		t.Errorf("expected empty deps for root task, got %d", len(deps))
+	}
+}
+
+// TestSharedMemory_RecordStripsOutputDir verifies that Record removes the outputDir
+// prefix from file paths before storing excerpts, so agents see module-relative paths
+// like "internal/domain/user.go" rather than "backend/internal/domain/user.go".
+// This prevents agents from constructing wrong import paths using the output directory
+// name instead of the Go module name (or equivalent in other languages).
+func TestSharedMemory_RecordStripsOutputDir(t *testing.T) {
+	mem := New()
+
+	taskA := &dag.Task{
+		ID:    "data.schemas",
+		Kind:  dag.TaskKindDataSchemas,
+		Label: "Data schemas",
+	}
+	taskB := &dag.Task{
+		ID:           "svc.monolith.repository",
+		Kind:         dag.TaskKindServiceRepository,
+		Label:        "Repository",
+		Dependencies: []string{"data.schemas"},
+	}
+
+	// Simulate what runner.go commit() does: apply outputDir prefix to files before
+	// passing to Record (these are the disk-relative paths).
+	prefixedFiles := []dag.GeneratedFile{
+		{Path: "backend/internal/domain/user.go", Content: "package domain\n\ntype User struct { ID string }"},
+	}
+	mem.Record(taskA, prefixedFiles, "backend")
+
+	deps := mem.DepsOf(taskB)
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 dep, got %d", len(deps))
+	}
+	if len(deps[0].Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(deps[0].Files))
+	}
+
+	// The excerpt path must NOT contain the "backend/" prefix.
+	gotPath := deps[0].Files[0].Path
+	if gotPath != "internal/domain/user.go" {
+		t.Errorf("excerpt path = %q, want %q (outputDir prefix should be stripped)", gotPath, "internal/domain/user.go")
+	}
+
+	// rawPaths must still use the prefixed path for disk staging.
+	rawPaths := mem.CommittedPaths([]string{"data.schemas"})
+	if len(rawPaths) != 1 || rawPaths[0] != "backend/internal/domain/user.go" {
+		t.Errorf("rawPaths = %v, want [backend/internal/domain/user.go]", rawPaths)
 	}
 }

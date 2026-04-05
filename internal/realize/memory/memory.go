@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -55,9 +56,20 @@ func New() *SharedMemory {
 
 // Record stores the output of a completed task. Only contextually useful files
 // are retained (interface/type/schema/contract files); large files are truncated.
+//
+// files should contain the disk-prefixed paths (e.g. "backend/internal/domain/user.go").
+// outputDir is stripped from file paths before building agent context excerpts, so
+// agents see module-relative paths like "internal/domain/user.go" — not the filesystem
+// output directory prefix. This prevents agents from constructing wrong import paths
+// such as "backend/internal/domain" instead of the module-relative "internal/domain".
+//
+// rawPaths keeps the full prefixed paths so CommittedPaths can stage files correctly.
 // Safe for concurrent use.
-func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
-	excerpts := buildExcerpts(files)
+func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile, outputDir string) {
+	// Strip the output dir prefix for agent context: agents work with module-relative
+	// paths, not filesystem paths. The OutputDir is a deployment artifact only.
+	contextFiles := stripOutputDirFromFiles(files, outputDir)
+	excerpts := buildExcerpts(contextFiles)
 	out := &TaskOutput{
 		TaskID: task.ID,
 		Label:  task.Label,
@@ -67,13 +79,29 @@ func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
 
 	paths := make([]string, len(files))
 	for i, f := range files {
-		paths[i] = f.Path
+		paths[i] = f.Path // keep prefixed for disk staging
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputs[task.ID] = out
 	m.rawPaths[task.ID] = paths
+}
+
+// stripOutputDirFromFiles returns a copy of files with the outputDir prefix stripped
+// from each path. If outputDir is empty or ".", files are returned unchanged.
+func stripOutputDirFromFiles(files []dag.GeneratedFile, outputDir string) []dag.GeneratedFile {
+	if outputDir == "" || outputDir == "." {
+		return files
+	}
+	prefix := filepath.ToSlash(outputDir) + "/"
+	result := make([]dag.GeneratedFile, len(files))
+	for i, f := range files {
+		normalized := filepath.ToSlash(f.Path)
+		stripped := strings.TrimPrefix(normalized, prefix)
+		result[i] = dag.GeneratedFile{Path: stripped, Content: f.Content}
+	}
+	return result
 }
 
 // RegisterTypes records the exported types produced by a task into the shared type
