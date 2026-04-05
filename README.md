@@ -29,20 +29,32 @@ A vim-inspired TUI for declaratively specifying a complete software system archi
 ### macOS / Linux — install script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vibe-menu/vibemenu/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Maelwalser/vibemenu/main/install.sh | bash
 ```
 
 Installs `vibemenu` and `realize` to `/usr/local/bin` (override with `INSTALL_DIR`).
 
+### Windows — PowerShell
+
+```powershell
+irm https://raw.githubusercontent.com/Maelwalser/vibemenu/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\Programs\vibemenu` and adds it to your user `PATH` (override with `$env:INSTALL_DIR`).
+
 ### Specific version
 
 ```bash
+# macOS / Linux
 VIBEMENU_VERSION=v1.0.0 bash install.sh
+
+# Windows
+$env:VIBEMENU_VERSION = "v1.0.0"; irm https://raw.githubusercontent.com/Maelwalser/vibemenu/main/install.ps1 | iex
 ```
 
 ### Manual download
 
-Pre-built binaries for every platform are attached to each [GitHub Release](https://github.com/vibe-menu/vibemenu/releases):
+Pre-built binaries for every platform are attached to each [GitHub Release](https://github.com/Maelwalser/vibemenu/releases):
 
 | Platform | Archive |
 |----------|---------|
@@ -52,12 +64,12 @@ Pre-built binaries for every platform are attached to each [GitHub Release](http
 | macOS Apple Silicon | `vibemenu-<version>-darwin-arm64.tar.gz` |
 | Windows x86-64 | `vibemenu-<version>-windows-amd64.zip` |
 
-Each archive contains two binaries: `vibemenu` (TUI editor) and `realize` (code generation).
+Each archive contains two binaries: `vibemenu` (TUI editor) and `realize` (code generation). A `checksums.txt` file is included in each release for SHA-256 verification — the install scripts verify it automatically.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/vibe-menu/vibemenu
+git clone https://github.com/Maelwalser/vibemenu
 cd vibemenu
 go build -o vibemenu ./cmd/agent
 go build -o realize  ./cmd/realize

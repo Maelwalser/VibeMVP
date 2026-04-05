@@ -2,13 +2,13 @@
 # install.sh — download and install VibeMenu binaries from GitHub Releases
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/vibe-menu/vibemenu/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Maelwalser/vibemenu/main/install.sh | bash
 #   VIBEMENU_VERSION=v1.2.3 bash install.sh
 #   INSTALL_DIR=~/.local/bin bash install.sh
 
 set -euo pipefail
 
-REPO="vibe-menu/vibemenu"
+REPO="Maelwalser/vibemenu"
 VERSION="${VIBEMENU_VERSION:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
@@ -35,7 +35,7 @@ ARCH=$(uname -m)
 case "$OS" in
   linux)  ;;
   darwin) ;;
-  *)      err "Unsupported OS: $OS. Please download manually from https://github.com/${REPO}/releases" ;;
+  *)      err "Unsupported OS: $OS. On Windows use: irm https://raw.githubusercontent.com/${REPO}/main/install.ps1 | iex" ;;
 esac
 
 case "$ARCH" in
@@ -61,12 +61,25 @@ info "Installing VibeMenu ${VERSION} (${OS}/${ARCH}) → ${INSTALL_DIR}"
 # ---------------------------------------------------------------------------
 TARBALL="vibemenu-${VERSION}-${OS}-${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
+CHECKSUM_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
 
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 info "Downloading ${URL}"
 curl -fsSL "$URL" -o "${TMPDIR}/${TARBALL}" || err "Download failed. Check that ${VERSION} exists for ${OS}/${ARCH}."
+
+# Verify checksum if sha256sum or shasum is available.
+if command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1; then
+  info "Verifying checksum…"
+  curl -fsSL "$CHECKSUM_URL" -o "${TMPDIR}/checksums.txt" 2>/dev/null || true
+  if [ -s "${TMPDIR}/checksums.txt" ]; then
+    (cd "$TMPDIR" && grep "${TARBALL}" checksums.txt | \
+      (command -v sha256sum >/dev/null 2>&1 && sha256sum --check --status || shasum -a 256 --check --status)) \
+      || err "Checksum verification failed — download may be corrupted."
+    ok "Checksum verified"
+  fi
+fi
 
 tar -xzf "${TMPDIR}/${TARBALL}" -C "${TMPDIR}"
 
@@ -102,7 +115,7 @@ cat <<EOF
     vibemenu          # open the TUI editor
     realize --help    # run code generation (skills auto-extracted on first run)
 
-  Skills are extracted to .vibemenu/skills/ on first 'realize' run.
-  Customise them freely — existing files are never overwritten by auto-extract.
+  Skills are embedded in the realize binary and extracted to .vibemenu/skills/
+  on first run. Existing files are never overwritten — customise freely.
 
 EOF
