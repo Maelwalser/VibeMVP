@@ -250,7 +250,6 @@ func (dt *DataTabEditor) saveDomainAttrItemsOnly() {
 	}
 }
 
-
 func (dt DataTabEditor) updateAttrList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 	n := len(dt.attrItems)
 	switch key.String() {

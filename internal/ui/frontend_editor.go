@@ -106,7 +106,7 @@ type FrontendEditor struct {
 	cBuf bool
 
 	// Per-subtab undo stacks (structural add/delete only)
-	pagesUndo UndoStack[[]manifest.PageDef]
+	pagesUndo  UndoStack[[]manifest.PageDef]
 	assetsUndo UndoStack[[]manifest.AssetDef]
 	compsUndo  UndoStack[[]manifest.PageComponentDef]
 }
