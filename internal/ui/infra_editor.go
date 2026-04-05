@@ -389,7 +389,7 @@ func (ie InfraEditor) updateFields(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 		case "enter", " ":
 			if idx < n {
 				f := &fields[idx]
-				if f.Kind == KindSelect {
+				if f.Kind == KindSelect && len(f.Options) > 0 {
 					ie.dd.Open = true
 					ie.dd.OptIdx = f.SelIdx
 				} else {
@@ -763,7 +763,7 @@ func (ie InfraEditor) updateEnvForm(key tea.KeyMsg) (InfraEditor, tea.Cmd) {
 	case "enter", " ":
 		if ie.envFormIdx < n {
 			f := &ie.envForm[ie.envFormIdx]
-			if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+			if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ie.dd.Open = true
 				ie.dd.OptIdx = f.SelIdx
 			} else {

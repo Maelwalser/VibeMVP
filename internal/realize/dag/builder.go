@@ -279,6 +279,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	links := commLinksFor(svc.Name, m.Backend.CommLinks)
 	jobQueues := jobQueuesForService(svc.Name, m.Backend.JobQueues)
 	cronJobs := cronJobsForService(svc.Name, m.Backend.JobQueues)
+	svcFileStorages := fileStoragesForService(svc.Name, m.Data.FileStorages)
+	svcExternalAPIs := externalAPIsForService(svc.Name, m.Contracts.ExternalAPIs)
 	outputDir := svcDirs[slug]
 
 	// Pre-compute resolved cross-references so every layer gets the right context.
@@ -313,7 +315,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Domains:      m.Data.Domains,
 			Databases:    m.Data.Databases,
 			Cachings:     m.Data.Cachings,
-			FileStorages: m.Data.FileStorages,
+			FileStorages: svcFileStorages,
+			ExternalAPIs: svcExternalAPIs,
 			Auth:         m.Backend.Auth,
 			Endpoints:    svcEndpoints,
 			DTOs:         svcDTOs,
@@ -384,7 +387,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Service:      &svcCopy,
 			Domains:      m.Data.Domains,
 			Cachings:     m.Data.Cachings,
-			FileStorages: m.Data.FileStorages,
+			FileStorages: svcFileStorages,
+			ExternalAPIs: svcExternalAPIs,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
 			Endpoints:    svcEndpoints,
@@ -419,7 +423,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			DTOs:         svcDTOs,
 			CommLinks:    links,
 			Auth:         m.Backend.Auth,
-			FileStorages: m.Data.FileStorages,
+			FileStorages: svcFileStorages,
+			ExternalAPIs: svcExternalAPIs,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
 			ServiceDirs:  svcDirs,
@@ -447,7 +452,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			AllServices:  m.Backend.Services,
 			Databases:    m.Data.Databases,
 			Cachings:     m.Data.Cachings,
-			FileStorages: m.Data.FileStorages,
+			FileStorages: svcFileStorages,
+			ExternalAPIs: svcExternalAPIs,
 			Auth:         m.Backend.Auth,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
@@ -466,6 +472,33 @@ func endpointsForService(name string, all []manifest.EndpointDef) []manifest.End
 	for _, e := range all {
 		if e.ServiceUnit == name {
 			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// externalAPIsForService returns the external APIs that belong to the given
+// service (CalledByService == name) plus any that are unassigned (empty),
+// since unassigned APIs are assumed shared across all services.
+// Returns nil (not an empty slice) when nothing matches, so omitempty omits it.
+func externalAPIsForService(name string, apis []manifest.ExternalAPIDef) []manifest.ExternalAPIDef {
+	var out []manifest.ExternalAPIDef
+	for _, a := range apis {
+		if a.CalledByService == "" || a.CalledByService == name {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// fileStoragesForService returns the file storage buckets that belong to the
+// given service (UsedByService == name) plus any that are unassigned (empty).
+// Returns nil when nothing matches so omitempty omits it.
+func fileStoragesForService(name string, storages []manifest.FileStorageDef) []manifest.FileStorageDef {
+	var out []manifest.FileStorageDef
+	for _, s := range storages {
+		if s.UsedByService == "" || s.UsedByService == name {
+			out = append(out, s)
 		}
 	}
 	return out

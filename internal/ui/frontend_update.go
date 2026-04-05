@@ -34,7 +34,7 @@ func (fe FrontendEditor) updateTech(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		if f == nil {
 			return fe, nil
 		}
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			fe.dd.Open = true
 			fe.dd.OptIdx = f.SelIdx
 		} else {
@@ -115,7 +115,7 @@ func (fe FrontendEditor) updateTheme(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &fe.themeFields[fe.themeFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			fe.dd.Open = true
 			if f.Kind == KindSelect {
 				fe.dd.OptIdx = f.SelIdx
@@ -273,7 +273,7 @@ func (fe FrontendEditor) updateCompForm(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 		}
 	case "enter", " ":
 		f := &fe.compForm[fe.compFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			fe.dd.Open = true
 			if f.Kind == KindSelect {
 				fe.dd.OptIdx = f.SelIdx
@@ -473,7 +473,7 @@ func (fe FrontendEditor) updateCompActionForm(key tea.KeyMsg) (FrontendEditor, t
 		fe.actionFormIdx = prevActionFormIdx(fe.actionForm, fe.actionFormIdx)
 	case "enter", " ":
 		f := &fe.actionForm[fe.actionFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			fe.dd.Open = true
 			fe.dd.OptIdx = f.SelIdx
 		} else {
@@ -553,7 +553,7 @@ func (fe FrontendEditor) updateNav(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &fe.navFields[fe.navFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			fe.dd.Open = true
 			fe.dd.OptIdx = f.SelIdx
 		} else {

@@ -428,10 +428,15 @@ func (ce *ContractsEditor) rebuildVersioningFields() {
 	}
 }
 
-func defaultExternalAPIFormFields() []Field {
+func defaultExternalAPIFormFields(serviceOptions []string) []Field {
 	return []Field{
 		// ── Common ──────────────────────────────────────────────────────────────
 		{Key: "provider", Label: "provider      ", Kind: KindText},
+		{
+			Key: "called_by_service", Label: "called_by     ", Kind: KindSelect,
+			Options: append([]string{"(any / unspecified)"}, serviceOptions...),
+			Value:   "(any / unspecified)",
+		},
 		{Key: "responsibility", Label: "responsibility", Kind: KindText},
 		{
 			Key: "protocol", Label: "protocol      ", Kind: KindSelect,

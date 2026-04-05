@@ -78,13 +78,35 @@ func (m Model) renderRealizeFullScreen() string {
 
 func (m Model) renderArchFullScreen() string {
 	w, h := m.width, m.height
-	contentH := h - 1
+	header := m.renderArchHeader(w)
+	contentH := h - 2 // -1 for the header, -1 for the hint line
 	if contentH < 1 {
 		contentH = 1
 	}
 	content := m.arch.screen.View(w, contentH)
 	hint := m.arch.screen.HintLine()
-	return content + "\n" + hint
+	return header + "\n" + content + "\n" + hint
+}
+
+// renderArchHeader renders the top bar for the architecture overview overlay.
+// Mirrors renderHeader's layout: wordmark ── SECTION ──────────── LABEL
+func (m Model) renderArchHeader(w int) string {
+	wordmark := StyleHeaderTitle.Render("VIBEMENU")
+	divL := StyleHeaderDeco.Render("  ──  ")
+	sectionLabel := StyleSectionTitle.Render("  ARCHITECTURE.OVERVIEW")
+	leftSeg := " " + wordmark + divL + sectionLabel
+
+	rightSeg := StyleHeaderTitle.Render("OVERVIEW") + " "
+
+	leftW := lipgloss.Width(leftSeg)
+	rightW := lipgloss.Width(rightSeg)
+	gap := w - leftW - rightW - 2
+	if gap < 2 {
+		gap = 2
+	}
+	mid := StyleHeaderDeco.Render("  " + strings.Repeat("─", gap))
+	line := leftSeg + mid + rightSeg
+	return StyleHeaderBar.Width(w).Render(line)
 }
 
 // renderHeader renders the top application bar with editorial typography.

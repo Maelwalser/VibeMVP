@@ -144,7 +144,7 @@ func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 	case "enter", " ":
 		if ce.epFormIdx < n {
 			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor
@@ -226,7 +226,7 @@ func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea
 		}
 	case "enter", " ":
 		f := &ce.versioningFields[ce.verFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			ce.dd.Open = true
 			ce.dd.OptIdx = f.SelIdx
 		} else {
@@ -287,7 +287,7 @@ func (ce ContractsEditor) updateExtList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 		ce.extUndo.Push(copySlice(ce.externalAPIs))
 		ce.externalAPIs = append(ce.externalAPIs, manifest.ExternalAPIDef{})
 		ce.extIdx = len(ce.externalAPIs) - 1
-		ce.extForm = defaultExternalAPIFormFields()
+		ce.extForm = defaultExternalAPIFormFields(ce.availableServices)
 		existing := make([]string, 0, len(ce.externalAPIs)-1)
 		for i, api := range ce.externalAPIs {
 			if i != ce.extIdx {
@@ -309,8 +309,11 @@ func (ce ContractsEditor) updateExtList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 	case "enter":
 		if n > 0 {
 			api := ce.externalAPIs[ce.extIdx]
-			ce.extForm = defaultExternalAPIFormFields()
+			ce.extForm = defaultExternalAPIFormFields(ce.availableServices)
 			ce.extForm = setFieldValue(ce.extForm, "provider", api.Provider)
+			if api.CalledByService != "" {
+				ce.extForm = setFieldValue(ce.extForm, "called_by_service", api.CalledByService)
+			}
 			ce.extForm = setFieldValue(ce.extForm, "responsibility", api.Responsibility)
 			if api.Protocol != "" {
 				ce.extForm = setFieldValue(ce.extForm, "protocol", api.Protocol)
@@ -365,7 +368,7 @@ func (ce ContractsEditor) updateExtForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 	case "enter", " ":
 		if ce.extFormIdx < n {
 			f := ce.extFormFieldByKey(visible[ce.extFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor
@@ -410,6 +413,11 @@ func (ce *ContractsEditor) saveExtForm() {
 	}
 	api := &ce.externalAPIs[ce.extIdx]
 	api.Provider = fieldGet(ce.extForm, "provider")
+	v := fieldGet(ce.extForm, "called_by_service")
+	if v == "(any / unspecified)" {
+		v = ""
+	}
+	api.CalledByService = v
 	api.Responsibility = fieldGet(ce.extForm, "responsibility")
 	api.Protocol = fieldGet(ce.extForm, "protocol")
 	api.AuthMechanism = fieldGet(ce.extForm, "auth_mechanism")
@@ -540,7 +548,7 @@ func (ce ContractsEditor) updateExtSubForm(key tea.KeyMsg) (ContractsEditor, tea
 	case "enter", " ":
 		if ce.extIntFormIdx < n {
 			f := ce.extIntFormFieldByKey(visible[ce.extIntFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor
@@ -589,6 +597,9 @@ func (ce ContractsEditor) viewExternal(w int) []string {
 				subtitle := api.Protocol
 				if subtitle == "" {
 					subtitle = "REST"
+				}
+				if api.CalledByService != "" {
+					subtitle += " · svc:" + api.CalledByService
 				}
 				if api.AuthMechanism != "" {
 					subtitle += " · " + api.AuthMechanism

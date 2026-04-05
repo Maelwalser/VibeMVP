@@ -213,19 +213,19 @@ func (w WelcomeModel) View() string {
 	dim := lipgloss.Color(clrFgDim)
 	border := lipgloss.Color(clrComment)
 
-	// innerW is derived from the widest banner line plus 2 so the bounding box
-	// of the art has exactly 1 space of margin on each side (left and right).
+	// innerW is the width of the widest banner line. The art's bounding box
+	// is centered in the box with equal left/right margins.
 	innerW := 0
 	for _, line := range vibeBanner {
 		if len(line) > innerW {
 			innerW = len(line)
 		}
 	}
-	innerW += 2
 	boxWidth := innerW + 4 // border (1+1) + padding (1+1)
 
-	center := lipgloss.NewStyle().Width(innerW).Align(lipgloss.Center).Background(modalBg)
-	left := lipgloss.NewStyle().Width(innerW).Background(modalBg)
+	contentW := innerW + 2 // actual content area width inside padding
+	center := lipgloss.NewStyle().Width(contentW).Align(lipgloss.Center).Background(modalBg)
+	left := lipgloss.NewStyle().Width(contentW).Background(modalBg)
 
 	bannerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(clrYellow)).
@@ -251,7 +251,7 @@ func (w WelcomeModel) View() string {
 
 	// Thin rule.
 	b.WriteString(lipgloss.NewStyle().Foreground(border).Background(modalBg).
-		Render(strings.Repeat("─", innerW)))
+		Render(strings.Repeat("─", contentW)))
 	b.WriteString("\n\n")
 
 	// ── Phase content ─────────────────────────────────────────────────────────

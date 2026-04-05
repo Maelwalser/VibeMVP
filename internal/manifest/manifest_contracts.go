@@ -96,6 +96,7 @@ type ExternalAPIInteraction struct {
 // ExternalAPIDef describes a third-party API that the system consumes.
 type ExternalAPIDef struct {
 	Provider        string                   `json:"provider"`
+	CalledByService string                   `json:"called_by_service,omitempty"`
 	Responsibility  string                   `json:"responsibility,omitempty"`
 	Protocol        string                   `json:"protocol,omitempty"`
 	AuthMechanism   string                   `json:"auth_mechanism"`

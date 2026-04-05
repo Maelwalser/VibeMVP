@@ -16,8 +16,11 @@ type archNodeKind int
 
 const (
 	archFrontend archNodeKind = iota
+	archAPIGateway
 	archService
+	archBroker
 	archDatabase
+	archFileStorage // shares column 4 with databases (stacked)
 	archExternalAPI
 )
 
@@ -58,15 +61,21 @@ type archEnvGroup struct {
 
 // archDiagramData holds the raw render output plus metadata for colorization.
 type archDiagramData struct {
-	rawLines      []string
-	nodePositions map[string]nodePos
-	edgeBoundsMap map[string]edgeBounds
-	envGroups     []archEnvGroup
-	frontendNodes []archNode
-	serviceNodes  []archNode
-	dbNodes       []archNode
-	extNodes      []archNode
-	selectedID    string
+	rawLines         []string
+	nodePositions    map[string]nodePos
+	edgeBoundsMap    map[string]edgeBounds
+	edgePathMap      map[string][]edgeBounds // precise path segments for per-pixel blink
+	envGroups        []archEnvGroup
+	frontendNodes    []archNode
+	gatewayNodes     []archNode
+	serviceNodes     []archNode
+	brokerNodes      []archNode
+	dbNodes          []archNode
+	fsNodes          []archNode // file-storage nodes, stacked below dbNodes
+	extNodes         []archNode
+	selectedID       string
+	infoColorRanges  []colorRange // priority-4 colors for the info panel
+	labelColorRanges []colorRange // priority-2 colors for column/section header labels
 }
 
 // ── Screen state ──────────────────────────────────────────────────────────────
@@ -106,8 +115,16 @@ func (s ArchScreen) Open(mf *manifest.Manifest) ArchScreen {
 func (s ArchScreen) WantsQuit() bool { return s.wantsQuit }
 
 func (s ArchScreen) HintLine() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(clrFgDim)).
-		Render("  h/l navigate · j/k cycle · H/L pan · g reset · q close")
+	hints := []string{
+		StyleHelpKey.Render("h/l") + StyleHelpDesc.Render(" navigate"),
+		StyleHelpKey.Render("j/k") + StyleHelpDesc.Render(" cycle"),
+		StyleHelpKey.Render("c") + StyleHelpDesc.Render(" comm links"),
+		StyleHelpKey.Render("H/L") + StyleHelpDesc.Render(" pan"),
+		StyleHelpKey.Render("g") + StyleHelpDesc.Render(" reset"),
+		StyleHelpKey.Render("q") + StyleHelpDesc.Render(" close"),
+	}
+	sep := StyleHelpDesc.Render("  │  ")
+	return "  " + strings.Join(hints, sep)
 }
 
 func (s ArchScreen) Update(msg tea.Msg) (ArchScreen, tea.Cmd) {
@@ -126,6 +143,8 @@ func (s ArchScreen) Update(msg tea.Msg) (ArchScreen, tea.Cmd) {
 		s = s.navigateDown()
 	case "k", "up":
 		s = s.navigateUp()
+	case "c":
+		s = s.selectCommEdge()
 	case "L": // Shift+L — pan right
 		s.scrollX++
 	case "H": // Shift+H — pan left
@@ -214,12 +233,14 @@ func nodeColumn(kind archNodeKind) int {
 	switch kind {
 	case archFrontend:
 		return 0
-	case archService:
+	case archAPIGateway:
 		return 1
-	case archDatabase:
+	case archService:
 		return 2
-	case archExternalAPI:
+	case archBroker:
 		return 3
+	case archDatabase, archFileStorage, archExternalAPI:
+		return 4 // databases, file storages and external APIs share the data column
 	}
 	return -1
 }
@@ -278,12 +299,13 @@ func (s ArchScreen) navigateRight() ArchScreen {
 			return s
 		}
 	}
-	// No direct edge — jump to first node in next column
-	nextCol := col + 1
-	for _, n := range s.nodes {
-		if nodeColumn(n.kind) == nextCol {
-			s.selectedID = n.id
-			return s
+	// No direct edge — jump to first node in next non-empty column (skip gaps)
+	for nextCol := col + 1; nextCol <= 4; nextCol++ {
+		for _, n := range s.nodes {
+			if nodeColumn(n.kind) == nextCol {
+				s.selectedID = n.id
+				return s
+			}
 		}
 	}
 	return s
@@ -302,14 +324,13 @@ func (s ArchScreen) navigateLeft() ArchScreen {
 			return s
 		}
 	}
-	prevCol := col - 1
-	if prevCol < 0 {
-		return s
-	}
-	for _, n := range s.nodes {
-		if nodeColumn(n.kind) == prevCol {
-			s.selectedID = n.id
-			return s
+	// Jump to first node in previous non-empty column (skip gaps)
+	for prevCol := col - 1; prevCol >= 0; prevCol-- {
+		for _, n := range s.nodes {
+			if nodeColumn(n.kind) == prevCol {
+				s.selectedID = n.id
+				return s
+			}
 		}
 	}
 	return s
@@ -355,6 +376,35 @@ func (s ArchScreen) navigateUp() ArchScreen {
 	for i, n := range nodes {
 		if n.id == s.selectedID {
 			s.selectedID = nodes[(i-1+len(nodes))%len(nodes)].id
+			return s
+		}
+	}
+	return s
+}
+
+// selectCommEdge selects outgoing svc→svc communication edges from the current service.
+// If already on a same-column edge, it cycles to the next sibling.
+func (s ArchScreen) selectCommEdge() ArchScreen {
+	// If already on a same-column edge, cycle to next sibling.
+	if e, ok := s.selectedEdge(); ok {
+		fromCol := s.nodeColumnByID(e.fromID)
+		toCol := s.nodeColumnByID(e.toID)
+		if fromCol == toCol {
+			siblings := s.siblingEdges(e)
+			for i, sib := range siblings {
+				if sib.id == e.id {
+					s.selectedID = siblings[(i+1)%len(siblings)].id
+					return s
+				}
+			}
+		}
+		return s
+	}
+	// Find first outgoing svc→svc edge from the current service node.
+	col := s.nodeColumnByID(s.selectedID)
+	for _, e := range s.edges {
+		if e.fromID == s.selectedID && s.nodeColumnByID(e.toID) == col {
+			s.selectedID = e.id
 			return s
 		}
 	}
@@ -417,6 +467,54 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 		nodes = append(nodes, archNode{id: "frontend", kind: archFrontend, label: label})
 	}
 
+	// API Gateway — sits between frontend and backend services.
+	// gwServices tracks which service names are routed through the gateway.
+	// If Endpoints is empty all services are routed; otherwise only the listed ones.
+	hasGateway := mf.Backend.APIGateway != nil && mf.Backend.APIGateway.Technology != ""
+	gwServices := map[string]bool{}
+	if hasGateway {
+		gw := mf.Backend.APIGateway
+		label := gw.Technology
+		if label == "" {
+			label = "API Gateway"
+		}
+		nodes = append(nodes, archNode{
+			id:          "gateway",
+			kind:        archAPIGateway,
+			label:       label,
+			environment: gw.Environment,
+		})
+		if gw.Endpoints == "" {
+			// No restriction: every service routes through the gateway.
+			for _, svc := range mf.Backend.Services {
+				if svc.Name != "" {
+					gwServices[svc.Name] = true
+				}
+			}
+		} else {
+			// Only services with a listed endpoint route through the gateway;
+			// the rest get a direct frontend→service edge.
+			for _, epName := range splitTrimComma(gw.Endpoints) {
+				ep := findEndpoint(mf, epName)
+				if ep != nil && ep.ServiceUnit != "" {
+					gwServices[ep.ServiceUnit] = true
+				}
+			}
+		}
+	}
+
+	// Message broker — shown between services and databases when configured.
+	hasBroker := mf.Backend.Messaging != nil && mf.Backend.Messaging.BrokerTech != ""
+	if hasBroker {
+		msg := mf.Backend.Messaging
+		nodes = append(nodes, archNode{
+			id:          "broker",
+			kind:        archBroker,
+			label:       msg.BrokerTech,
+			environment: msg.Environment,
+		})
+	}
+
 	// Monolith arch: all services share the pillar-level MonolithEnvironment when
 	// the individual service has no Environment set.
 	isMonolith := mf.Backend.ArchPattern == manifest.ArchMonolith ||
@@ -453,7 +551,26 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 		})
 	}
 
-	// External APIs — label only
+	// File storages — appended before External APIs to match the visual column 4 layout:
+	// DATA SOURCES → OBJECT STORAGE → EXTERNAL APIS (top to bottom).
+	for i, fs := range mf.Data.FileStorages {
+		if fs.Technology == "" {
+			continue
+		}
+		fsID := fmt.Sprintf("fs.%d", i)
+		label := fs.Technology
+		if fs.Purpose != "" {
+			label = fs.Technology + " · " + fs.Purpose
+		}
+		nodes = append(nodes, archNode{
+			id:          fsID,
+			kind:        archFileStorage,
+			label:       label,
+			environment: fs.Environment,
+		})
+	}
+
+	// External APIs — label + edge from the calling service when configured
 	for _, api := range mf.Contracts.ExternalAPIs {
 		if api.Provider == "" {
 			continue
@@ -465,7 +582,16 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 		})
 	}
 
-	// Edges: Frontend → Services via component actions
+	// frontendEdgeTarget returns the correct hop for a frontend→service edge:
+	// the gateway when that service is gateway-routed, or the service directly.
+	frontendEdgeTarget := func(svcName string) string {
+		if gwServices[svcName] {
+			return "gateway"
+		}
+		return "svc." + svcName
+	}
+
+	// Edges: Frontend → [Gateway or Services] via component actions
 	seen := map[string]bool{}
 	for _, comp := range mf.Frontend.Components {
 		for _, action := range comp.Actions {
@@ -476,7 +602,8 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 			if ep == nil || ep.ServiceUnit == "" {
 				continue
 			}
-			key := "frontend|svc." + ep.ServiceUnit
+			target := frontendEdgeTarget(ep.ServiceUnit)
+			key := "frontend|" + target
 			if seen[key] {
 				continue
 			}
@@ -485,7 +612,7 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 			edges = append(edges, archEdge{
 				id:        eID,
 				fromID:    "frontend",
-				toID:      "svc." + ep.ServiceUnit,
+				toID:      target,
 				direction: dirUnidirectional,
 			})
 		}
@@ -496,7 +623,8 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 			if ep.ServiceUnit == "" {
 				continue
 			}
-			key := "frontend|svc." + ep.ServiceUnit
+			target := frontendEdgeTarget(ep.ServiceUnit)
+			key := "frontend|" + target
 			if seen[key] {
 				continue
 			}
@@ -505,9 +633,58 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 			edges = append(edges, archEdge{
 				id:        eID,
 				fromID:    "frontend",
-				toID:      "svc." + ep.ServiceUnit,
+				toID:      target,
 				direction: dirUnidirectional,
 			})
+		}
+	}
+
+	// Gateway → Services: one edge per gateway-routed service.
+	if hasGateway {
+		gwSeen := map[string]bool{}
+		for _, svc := range mf.Backend.Services {
+			if svc.Name == "" || gwSeen[svc.Name] || !gwServices[svc.Name] {
+				continue
+			}
+			gwSeen[svc.Name] = true
+			eID := "edge." + strconv.Itoa(len(edges))
+			edges = append(edges, archEdge{
+				id:        eID,
+				fromID:    "gateway",
+				toID:      "svc." + svc.Name,
+				direction: dirUnidirectional,
+			})
+		}
+	}
+
+	// Broker edges: one edge per unique producer service (svc → broker)
+	// and one per unique consumer service (broker → svc).
+	if hasBroker {
+		pubSeen := map[string]bool{}
+		conSeen := map[string]bool{}
+		for _, evt := range mf.Backend.Events {
+			if evt.PublisherService != "" && !pubSeen[evt.PublisherService] {
+				pubSeen[evt.PublisherService] = true
+				eID := "edge." + strconv.Itoa(len(edges))
+				edges = append(edges, archEdge{
+					id:        eID,
+					fromID:    "svc." + evt.PublisherService,
+					toID:      "broker",
+					label:     "produces",
+					direction: dirUnidirectional,
+				})
+			}
+			if evt.ConsumerService != "" && !conSeen[evt.ConsumerService] {
+				conSeen[evt.ConsumerService] = true
+				eID := "edge." + strconv.Itoa(len(edges))
+				edges = append(edges, archEdge{
+					id:        eID,
+					fromID:    "broker",
+					toID:      "svc." + evt.ConsumerService,
+					label:     "consumes",
+					direction: dirUnidirectional,
+				})
+			}
 		}
 	}
 
@@ -554,6 +731,42 @@ func buildArchGraph(mf *manifest.Manifest) ([]archNode, []archEdge) {
 			})
 		}
 	}
+	// Edges: Service → File Storage (via FileStorageDef.UsedByService)
+	for i, fs := range mf.Data.FileStorages {
+		if fs.Technology == "" || fs.UsedByService == "" {
+			continue
+		}
+		fsID := fmt.Sprintf("fs.%d", i)
+		eID := "edge." + strconv.Itoa(len(edges))
+		edges = append(edges, archEdge{
+			id:        eID,
+			fromID:    "svc." + fs.UsedByService,
+			toID:      fsID,
+			direction: dirUnidirectional,
+		})
+	}
+
+	// Edges: Service → External API (via ExternalAPIDef.CalledByService)
+	extEdgeSeen := map[string]bool{}
+	for _, api := range mf.Contracts.ExternalAPIs {
+		if api.Provider == "" || api.CalledByService == "" {
+			continue
+		}
+		key := "svc." + api.CalledByService + "|ext." + api.Provider
+		if extEdgeSeen[key] {
+			continue
+		}
+		extEdgeSeen[key] = true
+		eID := "edge." + strconv.Itoa(len(edges))
+		edges = append(edges, archEdge{
+			id:        eID,
+			fromID:    "svc." + api.CalledByService,
+			toID:      "ext." + api.Provider,
+			label:     api.Protocol,
+			direction: dirUnidirectional,
+		})
+	}
+
 	return nodes, edges
 }
 
@@ -642,7 +855,30 @@ func formatEpRows(rows []epRow) []string {
 func buildEdgeInfo(mf *manifest.Manifest, e archEdge) []string {
 	var lines []string
 
-	if e.fromID == "frontend" && strings.HasPrefix(e.toID, "svc.") {
+	if e.fromID == "frontend" && e.toID == "gateway" {
+		gw := mf.Backend.APIGateway
+		if gw != nil && gw.Endpoints != "" {
+			var rows []epRow
+			for _, epName := range splitTrimComma(gw.Endpoints) {
+				epDef := findEndpoint(mf, epName)
+				if epDef == nil {
+					continue
+				}
+				method := epDef.HTTPMethod
+				if method == "" {
+					method = "[" + epDef.Protocol + "]"
+				}
+				rows = append(rows, epRow{method: method, path: epDef.NamePath,
+					reqDTO: epDef.RequestDTO, resDTO: epDef.ResponseDTO})
+			}
+			if len(rows) > 0 {
+				lines = append(lines, "  Gateway-routed endpoints:")
+				lines = append(lines, formatEpRows(rows)...)
+			}
+		} else {
+			lines = append(lines, "  All service endpoints are routed through the gateway.")
+		}
+	} else if e.fromID == "frontend" && strings.HasPrefix(e.toID, "svc.") {
 		svcName := strings.TrimPrefix(e.toID, "svc.")
 		var rows []epRow
 		for _, ep := range mf.Contracts.Endpoints {
@@ -661,10 +897,62 @@ func buildEdgeInfo(mf *manifest.Manifest, e archEdge) []string {
 			})
 		}
 		if len(rows) > 0 {
-			lines = append(lines, "  Endpoints:")
+			lines = append(lines, "  Direct endpoints (bypasses gateway):")
 			lines = append(lines, formatEpRows(rows)...)
 		} else {
 			lines = append(lines, "  No endpoints defined for this service.")
+		}
+	} else if strings.HasPrefix(e.fromID, "svc.") && e.toID == "broker" {
+		svcName := strings.TrimPrefix(e.fromID, "svc.")
+		var events []manifest.EventDef
+		for _, evt := range mf.Backend.Events {
+			if evt.PublisherService == svcName {
+				events = append(events, evt)
+			}
+		}
+		if len(events) > 0 {
+			lines = append(lines, fmt.Sprintf("  Published events: (%d)", len(events)))
+			for _, evt := range events {
+				l := "    → " + evt.Name
+				if evt.ConsumerService != "" {
+					l += "  (consumed by: " + evt.ConsumerService + ")"
+				}
+				if evt.DTO != "" {
+					l += "  [" + evt.DTO + "]"
+				}
+				lines = append(lines, l)
+				if evt.Description != "" {
+					lines = append(lines, "        "+evt.Description)
+				}
+			}
+		} else {
+			lines = append(lines, "  No events published by this service.")
+		}
+	} else if e.fromID == "broker" && strings.HasPrefix(e.toID, "svc.") {
+		svcName := strings.TrimPrefix(e.toID, "svc.")
+		var events []manifest.EventDef
+		for _, evt := range mf.Backend.Events {
+			if evt.ConsumerService == svcName {
+				events = append(events, evt)
+			}
+		}
+		if len(events) > 0 {
+			lines = append(lines, fmt.Sprintf("  Consumed events: (%d)", len(events)))
+			for _, evt := range events {
+				l := "    ← " + evt.Name
+				if evt.PublisherService != "" {
+					l += "  (published by: " + evt.PublisherService + ")"
+				}
+				if evt.DTO != "" {
+					l += "  [" + evt.DTO + "]"
+				}
+				lines = append(lines, l)
+				if evt.Description != "" {
+					lines = append(lines, "        "+evt.Description)
+				}
+			}
+		} else {
+			lines = append(lines, "  No events consumed by this service.")
 		}
 	} else if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "svc.") {
 		fromSvc := strings.TrimPrefix(e.fromID, "svc.")
@@ -705,6 +993,70 @@ func buildEdgeInfo(mf *manifest.Manifest, e archEdge) []string {
 		}
 		if !found {
 			lines = append(lines, "  No communication details available.")
+		}
+	} else if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "fs.") {
+		idxStr := strings.TrimPrefix(e.toID, "fs.")
+		idx, err := strconv.Atoi(idxStr)
+		if err == nil && idx >= 0 && idx < len(mf.Data.FileStorages) {
+			fs := mf.Data.FileStorages[idx]
+			if fs.Purpose != "" {
+				lines = append(lines, "  Purpose:       "+fs.Purpose)
+			}
+			if fs.Access != "" {
+				lines = append(lines, "  Access:        "+fs.Access)
+			}
+			if fs.MaxSize != "" {
+				lines = append(lines, "  Max size:      "+fs.MaxSize)
+			}
+			if fs.AllowedTypes != "" {
+				lines = append(lines, "  Allowed types: "+fs.AllowedTypes)
+			}
+			if fs.TTLMinutes != "" {
+				lines = append(lines, "  TTL:           "+fs.TTLMinutes+" min")
+			}
+			if fs.Domains != "" {
+				lines = append(lines, "  Domains:       "+fs.Domains)
+			}
+		}
+	} else if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "ext.") {
+		provider := strings.TrimPrefix(e.toID, "ext.")
+		for _, api := range mf.Contracts.ExternalAPIs {
+			if api.Provider != provider {
+				continue
+			}
+			if api.Protocol != "" {
+				lines = append(lines, "  Protocol:     "+api.Protocol)
+			}
+			if api.AuthMechanism != "" {
+				lines = append(lines, "  Auth:         "+api.AuthMechanism)
+			}
+			if api.FailureStrategy != "" {
+				lines = append(lines, "  On failure:   "+api.FailureStrategy)
+			}
+			if api.BaseURL != "" {
+				lines = append(lines, "  Base URL:     "+api.BaseURL)
+			}
+			if api.RateLimit != "" {
+				lines = append(lines, "  Rate limit:   "+api.RateLimit)
+			}
+			if cnt := len(api.Interactions); cnt > 0 {
+				lines = append(lines, fmt.Sprintf("  Interactions: (%d)", cnt))
+				for i, ia := range api.Interactions {
+					if i >= 5 {
+						lines = append(lines, fmt.Sprintf("    … +%d more", cnt-5))
+						break
+					}
+					l := "    → " + ia.Name
+					if ia.HTTPMethod != "" {
+						l += "  " + ia.HTTPMethod
+					}
+					if ia.Path != "" {
+						l += "  " + ia.Path
+					}
+					lines = append(lines, l)
+				}
+			}
+			break
 		}
 	} else if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "db.") {
 		svcName := strings.TrimPrefix(e.fromID, "svc.")
@@ -806,6 +1158,36 @@ func buildSingleNodeInfo(mf *manifest.Manifest, n archNode, outs, ins []archEdge
 			}
 		}
 
+	case archAPIGateway:
+		gw := mf.Backend.APIGateway
+		if gw != nil {
+			if gw.Technology != "" {
+				lines = append(lines, "  Technology:  "+gw.Technology)
+			}
+			if gw.Routing != "" {
+				lines = append(lines, "  Routing:     "+gw.Routing)
+			}
+			if gw.Features != "" {
+				lines = append(lines, "  Features:    "+gw.Features)
+			}
+			if gw.Endpoints != "" {
+				lines = append(lines, "  Endpoints:   "+gw.Endpoints)
+			}
+			if gw.Environment != "" {
+				lines = append(lines, "  Environment: "+gw.Environment)
+			}
+			// List all services that route through this gateway
+			if len(mf.Backend.Services) > 0 {
+				lines = append(lines, "")
+				lines = append(lines, fmt.Sprintf("  Routes to: (%d services)", len(mf.Backend.Services)))
+				for _, svc := range mf.Backend.Services {
+					if svc.Name != "" {
+						lines = append(lines, "    → "+svc.Name)
+					}
+				}
+			}
+		}
+
 	case archService:
 		svcName := strings.TrimPrefix(n.id, "svc.")
 		// Collect rows first to compute dynamic column width.
@@ -825,6 +1207,102 @@ func buildSingleNodeInfo(mf *manifest.Manifest, n archNode, outs, ins []archEdge
 			lines = append(lines, formatEpRows(rows)...)
 		} else {
 			lines = append(lines, "  No endpoints configured.")
+		}
+
+		// Job queues assigned to this service
+		var jobQueues []manifest.JobQueueDef
+		for _, jq := range mf.Backend.JobQueues {
+			if jq.WorkerService == svcName {
+				jobQueues = append(jobQueues, jq)
+			}
+		}
+		if len(jobQueues) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, fmt.Sprintf("  Jobs: (%d)", len(jobQueues)))
+			for _, jq := range jobQueues {
+				jobLine := "    · " + jq.Name
+				if jq.Technology != "" {
+					jobLine += "  [" + jq.Technology + "]"
+				}
+				lines = append(lines, jobLine)
+				if jq.Concurrency != "" {
+					lines = append(lines, "      concurrency: "+jq.Concurrency)
+				}
+				if jq.RetryPolicy != "" {
+					lines = append(lines, "      retry: "+jq.RetryPolicy)
+				}
+				for _, cj := range jq.CronJobs {
+					schedule := cj.Schedule
+					if schedule == "" {
+						schedule = "—"
+					}
+					lines = append(lines, "      ⏰ "+cj.Name+"  ("+schedule+")")
+				}
+			}
+		}
+
+	case archBroker:
+		msg := mf.Backend.Messaging
+		if msg != nil {
+			if msg.BrokerTech != "" {
+				lines = append(lines, "  Technology:    "+msg.BrokerTech)
+			}
+			if msg.Deployment != "" {
+				lines = append(lines, "  Deployment:    "+msg.Deployment)
+			}
+			if msg.Serialization != "" {
+				lines = append(lines, "  Serialization: "+msg.Serialization)
+			}
+			if msg.Delivery != "" {
+				lines = append(lines, "  Delivery:      "+msg.Delivery)
+			}
+		}
+		if cnt := len(mf.Backend.Events); cnt > 0 {
+			lines = append(lines, "")
+			lines = append(lines, fmt.Sprintf("  Events: (%d)", cnt))
+			for i, evt := range mf.Backend.Events {
+				if i >= 8 {
+					lines = append(lines, fmt.Sprintf("    … +%d more", cnt-8))
+					break
+				}
+				l := "    · " + evt.Name
+				if evt.PublisherService != "" && evt.ConsumerService != "" {
+					l += "  (" + evt.PublisherService + " → " + evt.ConsumerService + ")"
+				} else if evt.PublisherService != "" {
+					l += "  (pub: " + evt.PublisherService + ")"
+				} else if evt.ConsumerService != "" {
+					l += "  (sub: " + evt.ConsumerService + ")"
+				}
+				lines = append(lines, l)
+			}
+		}
+
+	case archFileStorage:
+		idxStr := strings.TrimPrefix(n.id, "fs.")
+		idx, err := strconv.Atoi(idxStr)
+		if err == nil && idx >= 0 && idx < len(mf.Data.FileStorages) {
+			fs := mf.Data.FileStorages[idx]
+			if fs.Purpose != "" {
+				lines = append(lines, "  Purpose:      "+fs.Purpose)
+			}
+			if fs.Access != "" {
+				lines = append(lines, "  Access:       "+fs.Access)
+			}
+			if fs.MaxSize != "" {
+				lines = append(lines, "  Max size:     "+fs.MaxSize)
+			}
+			if fs.AllowedTypes != "" {
+				lines = append(lines, "  Types:        "+fs.AllowedTypes)
+			}
+			if fs.TTLMinutes != "" {
+				lines = append(lines, "  TTL (min):    "+fs.TTLMinutes)
+			}
+			if fs.Domains != "" {
+				lines = append(lines, "  Domains:      "+fs.Domains)
+			}
+			if fs.UsedByService != "" {
+				lines = append(lines, "  Used by:      "+fs.UsedByService)
+			}
 		}
 
 	case archDatabase:
@@ -965,38 +1443,73 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		return archDiagramData{rawLines: strings.Split(renderEmptyArch(), "\n")}
 	}
 
-	var frontendNodes, serviceNodes, dbNodes, extNodes []archNode
+	var frontendNodes, gatewayNodes, serviceNodes, brokerNodes, dbNodes, fsNodes, extNodes []archNode
 	for _, n := range nodes {
 		switch n.kind {
 		case archFrontend:
 			frontendNodes = append(frontendNodes, n)
+		case archAPIGateway:
+			gatewayNodes = append(gatewayNodes, n)
 		case archService:
 			serviceNodes = append(serviceNodes, n)
+		case archBroker:
+			brokerNodes = append(brokerNodes, n)
 		case archDatabase:
 			dbNodes = append(dbNodes, n)
+		case archFileStorage:
+			fsNodes = append(fsNodes, n)
 		case archExternalAPI:
 			extNodes = append(extNodes, n)
 		}
 	}
 
 	col0W := maxBoxWidth(frontendNodes, 22)
+	colGW := maxBoxWidth(gatewayNodes, 22)
 	col1W := maxBoxWidth(serviceNodes, 22)
-	col2W := maxBoxWidth(dbNodes, 20)
-	col3W := maxBoxWidth(extNodes, 20)
+	colBW := maxBoxWidth(brokerNodes, 22)
+	col4W := maxInt(maxInt(maxBoxWidth(dbNodes, 20), maxBoxWidth(fsNodes, 20)), maxBoxWidth(extNodes, 20))
 
 	const gap = 10
 	const margin = 3
 
-	col0X := margin
-	col1X := col0X + col0W + gap
-	col2X := col1X + col1W + gap
-	col3X := col2X + col2W + gap
+	// Build column X positions as a forward chain: empty optional columns add no space.
+	x := margin
+	col0X := x
+	x += col0W + gap
+
+	colGX := x
+	if len(gatewayNodes) > 0 {
+		x += colGW + gap
+	}
+
+	col1X := x
+	x += col1W + gap
+
+	colBX := x
+	if len(brokerNodes) > 0 {
+		x += colBW + gap
+	}
+
+	col4X := x
+
+	// Column 4 height: each present section (db, fs, ext) has a 1-row section header.
+	col4H := 0
+	if len(dbNodes) > 0 {
+		col4H += 1 + columnHeight(dbNodes)
+	}
+	if len(fsNodes) > 0 {
+		col4H += 1 + columnHeight(fsNodes)
+	}
+	if len(extNodes) > 0 {
+		col4H += 1 + columnHeight(extNodes)
+	}
 
 	mainH := maxInt(
 		columnHeight(frontendNodes),
+		columnHeight(gatewayNodes),
 		columnHeight(serviceNodes),
-		columnHeight(dbNodes),
-		columnHeight(extNodes),
+		columnHeight(brokerNodes),
+		col4H,
 	)
 
 	// Info panel
@@ -1006,15 +1519,15 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		infoPanelH = 3 + len(infoLines)
 	}
 
-	const headerRows = 3
+	const headerRows = 1
 	totalH := headerRows + mainH + infoPanelH + 4
 
 	totalW := col1X + col1W + margin
-	if len(dbNodes) > 0 {
-		totalW = col2X + col2W + margin
+	if len(brokerNodes) > 0 {
+		totalW = colBX + colBW + margin
 	}
-	if len(extNodes) > 0 {
-		totalW = col3X + col3W + margin
+	if len(dbNodes) > 0 || len(fsNodes) > 0 || len(extNodes) > 0 {
+		totalW = col4X + col4W + margin
 	}
 	if totalW < termW {
 		totalW = termW
@@ -1022,37 +1535,78 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 
 	cv := newCanvas(totalW, totalH)
 
-	cv.writeStr(0, 0, "  Architecture Overview")
-	cv.hLine(0, 1, totalW-1)
-
 	yOff := headerRows
 
+	// Column header labels — colored amber via labelColorRanges.
+	var labelColorRanges []colorRange
+	addLabelRange := func(x, y int, text string) {
+		labelColorRanges = append(labelColorRanges, colorRange{
+			xStart: x, xEnd: x + len([]rune(text)),
+			yStart: y, yEnd: y + 1,
+			color: clrYellow, priority: 2,
+		})
+	}
+	labelRow := yOff - 1
 	if len(frontendNodes) > 0 {
-		cv.writeStr(col0X, yOff-1, "FRONTEND")
+		cv.writeStr(col0X, labelRow, "FRONTEND")
+		addLabelRange(col0X, labelRow, "FRONTEND")
+	}
+	if len(gatewayNodes) > 0 {
+		cv.writeStr(colGX, labelRow, "API GATEWAY")
+		addLabelRange(colGX, labelRow, "API GATEWAY")
 	}
 	if len(serviceNodes) > 0 {
-		cv.writeStr(col1X, yOff-1, "BACKEND LAYER")
+		cv.writeStr(col1X, labelRow, "BACKEND LAYER")
+		addLabelRange(col1X, labelRow, "BACKEND LAYER")
 	}
-	if len(dbNodes) > 0 {
-		cv.writeStr(col2X, yOff-1, "DATA SOURCES")
-	}
-	if len(extNodes) > 0 {
-		cv.writeStr(col3X, yOff-1, "EXTERNAL APIS")
+	if len(brokerNodes) > 0 {
+		cv.writeStr(colBX, labelRow, "MSG BROKER")
+		addLabelRange(colBX, labelRow, "MSG BROKER")
 	}
 
 	// Step 1: compute positions
 	nodePositions := map[string]nodePos{}
 	computeColumnPositions(frontendNodes, col0X, col0W, yOff, nodePositions)
+	if len(gatewayNodes) > 0 {
+		computeColumnPositions(gatewayNodes, colGX, colGW, yOff, nodePositions)
+	}
 	computeColumnPositions(serviceNodes, col1X, col1W, yOff, nodePositions)
-	computeColumnPositions(dbNodes, col2X, col2W, yOff, nodePositions)
-	computeColumnPositions(extNodes, col3X, col3W, yOff, nodePositions)
+	if len(brokerNodes) > 0 {
+		computeColumnPositions(brokerNodes, colBX, colBW, yOff, nodePositions)
+	}
+	// Column 4: stack db / fs / ext with a 1-row section header before each group.
+	col4CurY := yOff
+	if len(dbNodes) > 0 {
+		cv.writeStr(col4X, col4CurY, "DATA SOURCES")
+		addLabelRange(col4X, col4CurY, "DATA SOURCES")
+		col4CurY++
+		computeColumnPositions(dbNodes, col4X, col4W, col4CurY, nodePositions)
+		col4CurY += columnHeight(dbNodes)
+	}
+	if len(fsNodes) > 0 {
+		cv.writeStr(col4X, col4CurY, "OBJECT STORAGE")
+		addLabelRange(col4X, col4CurY, "OBJECT STORAGE")
+		col4CurY++
+		computeColumnPositions(fsNodes, col4X, col4W, col4CurY, nodePositions)
+		col4CurY += columnHeight(fsNodes)
+	}
+	if len(extNodes) > 0 {
+		cv.writeStr(col4X, col4CurY, "EXTERNAL APIS")
+		addLabelRange(col4X, col4CurY, "EXTERNAL APIS")
+		col4CurY++
+		computeColumnPositions(extNodes, col4X, col4W, col4CurY, nodePositions)
+	}
 
 	// Step 2: environment boxes — outermost layer, spans all columns sharing an env.
-	// All node types are included so a service and its database share one env box.
-	allEnvNodes := make([]archNode, 0, len(frontendNodes)+len(serviceNodes)+len(dbNodes)+len(extNodes))
+	allEnvNodes := make([]archNode, 0,
+		len(frontendNodes)+len(gatewayNodes)+len(serviceNodes)+
+			len(brokerNodes)+len(dbNodes)+len(fsNodes)+len(extNodes))
 	allEnvNodes = append(allEnvNodes, frontendNodes...)
+	allEnvNodes = append(allEnvNodes, gatewayNodes...)
 	allEnvNodes = append(allEnvNodes, serviceNodes...)
+	allEnvNodes = append(allEnvNodes, brokerNodes...)
 	allEnvNodes = append(allEnvNodes, dbNodes...)
+	allEnvNodes = append(allEnvNodes, fsNodes...)
 	allEnvNodes = append(allEnvNodes, extNodes...)
 	envGroups := computeEnvGroups(allEnvNodes, nodePositions, envInfoMap)
 	for _, eg := range envGroups {
@@ -1067,13 +1621,20 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 
 	// Step 4: node boxes (solid, drawn last — innermost layer)
 	drawColumnBoxes(&cv, frontendNodes, nodePositions)
+	drawColumnBoxes(&cv, gatewayNodes, nodePositions)
 	drawColumnBoxes(&cv, serviceNodes, nodePositions)
+	drawColumnBoxes(&cv, brokerNodes, nodePositions)
 	drawColumnBoxes(&cv, dbNodes, nodePositions)
+	drawColumnBoxes(&cv, fsNodes, nodePositions)
 	drawColumnBoxes(&cv, extNodes, nodePositions)
 
 	// Step 5: arrows + collect edge bounds
 	edgeBoundsMap := map[string]edgeBounds{}
+	edgePathMap := map[string][]edgeBounds{}
 
+	// drawEdgeArrow draws a left-to-right (→) arrow between two nodes in different columns.
+	// The vertical connector is placed at toX-gap/2 (near the target) so it avoids
+	// crossing through any intermediate column boxes.
 	drawEdgeArrow := func(e archEdge) {
 		from, ok1 := nodePositions[e.fromID]
 		to, ok2 := nodePositions[e.toID]
@@ -1086,12 +1647,19 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		toY := midY(to)
 
 		var bx1, bx2, by1, by2 int
+		var pathSegs []edgeBounds
 		if arrowY == toY {
 			cv.hLine(fromX, arrowY, toX-fromX)
 			cv.arrowRight(toX, arrowY)
 			bx1, bx2, by1, by2 = fromX, toX+1, arrowY, arrowY+1
+			pathSegs = []edgeBounds{{x1: fromX, x2: toX + 1, y1: arrowY, y2: arrowY + 1}}
 		} else {
-			midX := fromX + (toX-fromX)/2
+			// Route near the target column: vertical connector sits in the gap just
+			// before the target, avoiding any intermediate column boxes.
+			midX := toX - gap/2
+			if midX <= fromX {
+				midX = fromX + 1 // fallback: adjacent columns
+			}
 			cv.hLine(fromX, arrowY, midX-fromX)
 			if arrowY < toY {
 				cv.vLine(midX, arrowY, toY-arrowY+1)
@@ -1101,18 +1669,32 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 			cv.hLine(midX, toY, toX-midX)
 			cv.arrowRight(toX, toY)
 			bx1, bx2 = fromX, toX+1
+			vTop, vBot := arrowY, toY
 			if arrowY < toY {
 				by1, by2 = arrowY, toY+1
 			} else {
 				by1, by2 = toY, arrowY+1
+				vTop, vBot = toY, arrowY
+			}
+			pathSegs = []edgeBounds{
+				{x1: fromX, x2: midX + 1, y1: arrowY, y2: arrowY + 1},
+				{x1: midX, x2: midX + 1, y1: vTop, y2: vBot + 1},
+				{x1: midX, x2: toX + 1, y1: toY, y2: toY + 1},
 			}
 		}
 		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		edgePathMap[e.id] = pathSegs
 	}
 
-	// Frontend → Service arrows
+	// Frontend → Gateway or Service arrows
 	for _, e := range edges {
 		if e.fromID == "frontend" {
+			drawEdgeArrow(e)
+		}
+	}
+	// Gateway → Service arrows
+	for _, e := range edges {
+		if e.fromID == "gateway" && strings.HasPrefix(e.toID, "svc.") {
 			drawEdgeArrow(e)
 		}
 	}
@@ -1122,8 +1704,127 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 			drawEdgeArrow(e)
 		}
 	}
+	// Service → Service arrows: routed on the right side of the services column.
+	// Path: exit source's right edge → 3 chars right (bypass) → vertical to target row
+	//       → 3 chars back left to target's right edge → ◀ at target entry.
+	for _, e := range edges {
+		if !strings.HasPrefix(e.fromID, "svc.") || !strings.HasPrefix(e.toID, "svc.") {
+			continue
+		}
+		from, ok1 := nodePositions[e.fromID]
+		to, ok2 := nodePositions[e.toID]
+		if !ok1 || !ok2 || e.fromID == e.toID {
+			continue
+		}
+		fromY := midY(from)
+		toY := midY(to)
+		exitX := from.x + from.w // first cell right of source box
+		bypassX := exitX + 3     // vertical connector column
 
-	// Step 6: info panel for selected node or edge
+		// Source: horizontal exit
+		cv.hLine(exitX, fromY, 3)
+		// Vertical connector
+		lo, hi := fromY, toY
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		cv.vLine(bypassX, lo, hi-lo+1)
+		// Target: horizontal return (leave room for arrow at target exit cell)
+		cv.hLine(to.x+to.w+1, toY, bypassX-(to.x+to.w))
+		// Arrow pointing left into target from the right
+		cv.arrowLeft(to.x+to.w, toY)
+		// Bidirectional: also mark source with a left-pointing arrow (traffic returns)
+		if e.direction == dirBidirectional {
+			cv.arrowLeft(exitX, fromY)
+		}
+
+		bx1, bx2 := exitX, bypassX+1
+		by1, by2 := lo, hi+1
+		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		// Precise path: three segments instead of the bounding rectangle.
+		edgePathMap[e.id] = []edgeBounds{
+			{x1: exitX, x2: bypassX + 1, y1: fromY, y2: fromY + 1},   // horizontal exit
+			{x1: bypassX, x2: bypassX + 1, y1: lo, y2: hi + 1},       // vertical connector
+			{x1: to.x + to.w, x2: bypassX + 1, y1: toY, y2: toY + 1}, // horizontal entry + arrow
+		}
+	}
+
+	// Service → Broker arrows (left-to-right using drawEdgeArrow).
+	for _, e := range edges {
+		if strings.HasPrefix(e.fromID, "svc.") && e.toID == "broker" {
+			drawEdgeArrow(e)
+		}
+	}
+
+	// drawRtoLArrow draws a right-to-left (←) arrow: broker → service.
+	// The broker is to the right; the arrow enters the service's right edge with ◀.
+	drawRtoLArrow := func(e archEdge) {
+		from, ok1 := nodePositions[e.fromID] // broker
+		to, ok2 := nodePositions[e.toID]     // service
+		if !ok1 || !ok2 {
+			return
+		}
+		fromX := from.x    // left edge of broker (arrow exits here)
+		toX := to.x + to.w // right exit of service (just outside the box)
+		fromY := midY(from)
+		toY := midY(to)
+
+		var bx1, bx2, by1, by2 int
+		var pathSegs []edgeBounds
+		if fromY == toY {
+			cv.hLine(toX, fromY, fromX-toX)
+			cv.arrowLeft(toX, fromY)
+			bx1, bx2, by1, by2 = toX, fromX, fromY, fromY+1
+			pathSegs = []edgeBounds{{x1: toX, x2: fromX + 1, y1: fromY, y2: fromY + 1}}
+		} else {
+			midX := toX + (fromX-toX)/2 // midpoint in the gap
+			cv.hLine(midX, fromY, fromX-midX)
+			lo, hi := fromY, toY
+			if lo > hi {
+				lo, hi = hi, lo
+			}
+			cv.vLine(midX, lo, hi-lo+1)
+			cv.hLine(toX, toY, midX-toX)
+			cv.arrowLeft(toX, toY)
+			bx1, bx2 = toX, fromX
+			if fromY < toY {
+				by1, by2 = fromY, toY+1
+			} else {
+				by1, by2 = toY, fromY+1
+			}
+			pathSegs = []edgeBounds{
+				{x1: midX, x2: fromX + 1, y1: fromY, y2: fromY + 1},
+				{x1: midX, x2: midX + 1, y1: lo, y2: hi + 1},
+				{x1: toX, x2: midX + 1, y1: toY, y2: toY + 1},
+			}
+		}
+		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		edgePathMap[e.id] = pathSegs
+	}
+
+	// Broker → Service (consumer) arrows using drawRtoLArrow.
+	for _, e := range edges {
+		if e.fromID == "broker" && strings.HasPrefix(e.toID, "svc.") {
+			drawRtoLArrow(e)
+		}
+	}
+
+	// Service → FileStorage arrows.
+	for _, e := range edges {
+		if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "fs.") {
+			drawEdgeArrow(e)
+		}
+	}
+
+	// Service → ExternalAPI arrows.
+	for _, e := range edges {
+		if strings.HasPrefix(e.fromID, "svc.") && strings.HasPrefix(e.toID, "ext.") {
+			drawEdgeArrow(e)
+		}
+	}
+
+	// Step 6: info panel for selected node or edge — compute content and colors.
+	var infoColorRanges []colorRange
 	if len(infoLines) > 0 {
 		panelY := yOff + mainH + 2
 
@@ -1155,19 +1856,64 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		for i, line := range infoLines {
 			cv.writeStr(0, panelY+2+i, line)
 		}
+
+		// Color the header line (SELECTED / COMMUNICATION).
+		infoColorRanges = append(infoColorRanges, colorRange{
+			xStart: 0, xEnd: len([]rune(header)),
+			yStart: panelY, yEnd: panelY + 1,
+			color: clrYellow, priority: 4,
+		})
+		// Color individual info lines by content pattern.
+		infoColorRanges = append(infoColorRanges, buildInfoLineColors(infoLines, panelY+2)...)
 	}
 
 	return archDiagramData{
-		rawLines:      strings.Split(cv.render(), "\n"),
-		nodePositions: nodePositions,
-		edgeBoundsMap: edgeBoundsMap,
-		envGroups:     envGroups,
-		frontendNodes: frontendNodes,
-		serviceNodes:  serviceNodes,
-		dbNodes:       dbNodes,
-		extNodes:      extNodes,
-		selectedID:    selectedID,
+		rawLines:         strings.Split(cv.render(), "\n"),
+		nodePositions:    nodePositions,
+		edgeBoundsMap:    edgeBoundsMap,
+		edgePathMap:      edgePathMap,
+		envGroups:        envGroups,
+		frontendNodes:    frontendNodes,
+		gatewayNodes:     gatewayNodes,
+		serviceNodes:     serviceNodes,
+		brokerNodes:      brokerNodes,
+		dbNodes:          dbNodes,
+		fsNodes:          fsNodes,
+		extNodes:         extNodes,
+		selectedID:       selectedID,
+		infoColorRanges:  infoColorRanges,
+		labelColorRanges: labelColorRanges,
 	}
+}
+
+// buildInfoLineColors returns color ranges for lines in the info panel.
+// - Section headers like "  Endpoints:" → clrBlue
+// - Deeply indented items (4+ spaces) → clrFgDim
+// baseY is the absolute canvas Y of the first info line.
+func buildInfoLineColors(lines []string, baseY int) []colorRange {
+	var ranges []colorRange
+	for i, line := range lines {
+		y := baseY + i
+		trimmed := strings.TrimLeft(line, " ")
+		indent := len(line) - len(trimmed)
+		switch {
+		case indent == 2 && strings.HasSuffix(trimmed, ":"):
+			// Section header: "  Endpoints:", "  Protocol:", etc.
+			ranges = append(ranges, colorRange{
+				xStart: 0, xEnd: len([]rune(line)),
+				yStart: y, yEnd: y + 1,
+				color: clrBlue, priority: 4,
+			})
+		case indent >= 4:
+			// Indented list items and sub-values.
+			ranges = append(ranges, colorRange{
+				xStart: 0, xEnd: len([]rune(line)),
+				yStart: y, yEnd: y + 1,
+				color: clrFgDim, priority: 4,
+			})
+		}
+	}
+	return ranges
 }
 
 func renderEmptyArch() string {
@@ -1363,6 +2109,7 @@ type colorRange struct {
 	xStart, xEnd int
 	yStart, yEnd int
 	color        string
+	bold         bool
 	priority     int
 }
 
@@ -1383,6 +2130,18 @@ func colorizeClipped(lines []string, data archDiagramData, scrollX, scrollY int)
 		})
 	}
 
+	// Label color ranges — priority 2 (column/section header labels)
+	for _, cr := range data.labelColorRanges {
+		ranges = append(ranges, colorRange{
+			xStart:   cr.xStart - scrollX,
+			xEnd:     cr.xEnd - scrollX,
+			yStart:   cr.yStart - scrollY,
+			yEnd:     cr.yEnd - scrollY,
+			color:    cr.color,
+			priority: cr.priority,
+		})
+	}
+
 	// Node box regions — priority 2 (foreground)
 	addRanges := func(nodes []archNode, color string) {
 		for _, n := range nodes {
@@ -1399,34 +2158,69 @@ func colorizeClipped(lines []string, data archDiagramData, scrollX, scrollY int)
 		}
 	}
 	addRanges(data.frontendNodes, clrCyan)
+	addRanges(data.gatewayNodes, clrBlue)
 	addRanges(data.serviceNodes, clrGreen)
+	addRanges(data.brokerNodes, clrRed)
 	addRanges(data.dbNodes, clrYellow)
+	addRanges(data.fsNodes, clrYellow)
 	addRanges(data.extNodes, clrMagenta)
 
-	// Selected item blink — priority 3
+	// Info panel colors — priority 4 (above node colors)
+	for _, cr := range data.infoColorRanges {
+		ranges = append(ranges, colorRange{
+			xStart:   cr.xStart - scrollX,
+			xEnd:     cr.xEnd - scrollX,
+			yStart:   cr.yStart - scrollY,
+			yEnd:     cr.yEnd - scrollY,
+			color:    cr.color,
+			priority: cr.priority,
+		})
+	}
+
+	// Selected item highlight — priority 3.
+	// Blinks between pure white (bold) and bright gold (bold) for nodes,
+	// and between bright sky-blue (bold) and white (bold) for edges,
+	// so the selection always pops clearly against the muted palette.
+	const selColorA = "#FFFFFF" // bright white — "on" frame for nodes, "off" for edges
+	const selColorB = "#F0CC6A" // bright gold  — "off" frame for nodes
+	const selEdgeA = "#6DD9D9"  // bright teal  — "on" frame for edges
 	if data.selectedID != "" {
 		if strings.HasPrefix(data.selectedID, "edge.") {
-			// Color the selected edge path
-			if eb, ok := data.edgeBoundsMap[data.selectedID]; ok {
-				edgeColor := clrCyan
-				if AnimFrame%2 == 0 {
-					edgeColor = clrFg
+			// Use precise path segments so only actual edge pixels blink.
+			edgeColor := selEdgeA
+			if AnimFrame%2 == 0 {
+				edgeColor = selColorA
+			}
+			if segs, ok := data.edgePathMap[data.selectedID]; ok && len(segs) > 0 {
+				for _, seg := range segs {
+					ranges = append(ranges, colorRange{
+						xStart:   seg.x1 - scrollX,
+						xEnd:     seg.x2 - scrollX,
+						yStart:   seg.y1 - scrollY,
+						yEnd:     seg.y2 - scrollY,
+						color:    edgeColor,
+						bold:     true,
+						priority: 3,
+					})
 				}
+			} else if eb, ok := data.edgeBoundsMap[data.selectedID]; ok {
+				// Fallback to bounding box if path segments are unavailable.
 				ranges = append(ranges, colorRange{
 					xStart:   eb.x1 - scrollX,
 					xEnd:     eb.x2 - scrollX,
 					yStart:   eb.y1 - scrollY,
 					yEnd:     eb.y2 - scrollY,
 					color:    edgeColor,
+					bold:     true,
 					priority: 3,
 				})
 			}
 		} else {
-			// Color the selected node box
+			// Highlight the selected node box with bold so it pops.
 			if p, ok := data.nodePositions[data.selectedID]; ok {
-				blinkColor := clrFg
+				blinkColor := selColorA
 				if AnimFrame%2 == 0 {
-					blinkColor = clrYellow
+					blinkColor = selColorB
 				}
 				ranges = append(ranges, colorRange{
 					xStart:   p.x - scrollX,
@@ -1434,6 +2228,7 @@ func colorizeClipped(lines []string, data archDiagramData, scrollX, scrollY int)
 					yStart:   p.y - scrollY,
 					yEnd:     p.y + p.h - scrollY,
 					color:    blinkColor,
+					bold:     true,
 					priority: 3,
 				})
 			}
@@ -1455,6 +2250,7 @@ func applyColorRanges(line string, y int, ranges []colorRange) string {
 	}
 
 	colorAt := make([]string, len(runes))
+	boldAt := make([]bool, len(runes))
 	prioAt := make([]int, len(runes))
 
 	for _, cr := range ranges {
@@ -1472,6 +2268,7 @@ func applyColorRanges(line string, y int, ranges []colorRange) string {
 		for x := start; x < end; x++ {
 			if cr.priority >= prioAt[x] {
 				colorAt[x] = cr.color
+				boldAt[x] = cr.bold
 				prioAt[x] = cr.priority
 			}
 		}
@@ -1481,13 +2278,21 @@ func applyColorRanges(line string, y int, ranges []colorRange) string {
 	i := 0
 	for i < len(runes) {
 		col := colorAt[i]
+		bld := boldAt[i]
 		j := i + 1
-		for j < len(runes) && colorAt[j] == col {
+		for j < len(runes) && colorAt[j] == col && boldAt[j] == bld {
 			j++
 		}
 		chunk := string(runes[i:j])
-		if col != "" {
-			chunk = lipgloss.NewStyle().Foreground(lipgloss.Color(col)).Render(chunk)
+		if col != "" || bld {
+			style := lipgloss.NewStyle()
+			if col != "" {
+				style = style.Foreground(lipgloss.Color(col))
+			}
+			if bld {
+				style = style.Bold(true)
+			}
+			chunk = style.Render(chunk)
 		}
 		sb.WriteString(chunk)
 		i = j

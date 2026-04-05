@@ -82,7 +82,7 @@ func (dt DataTabEditor) updateCachingForm(key tea.KeyMsg) (DataTabEditor, tea.Cm
 		dt.cachingFormIdx = prevCachingFormIdx(dt.cachingForm, dt.cachingFormIdx)
 	case "enter", " ":
 		f := &dt.cachingForm[dt.cachingFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -214,7 +214,7 @@ func (dt DataTabEditor) updateGovForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		dt.govFormIdx = prevFormIdx(dt.govForm, dt.govFormIdx, isDisabled)
 	case "enter", " ":
 		f := &dt.govForm[dt.govFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -283,7 +283,7 @@ func (dt DataTabEditor) updateFSList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		dt.fsUndo.Push(copySlice(dt.fileStorages))
 		dt.fileStorages = append(dt.fileStorages, manifest.FileStorageDef{})
 		dt.fsIdx = len(dt.fileStorages) - 1
-		dt.fsForm = defaultFSFormFields(dt.domainNames(), dt.cloudProvider, dt.environmentNames)
+		dt.fsForm = defaultFSFormFields(dt.domainNames(), dt.cloudProvider, dt.environmentNames, dt.serviceNames)
 		existing := make([]string, 0, len(dt.fileStorages)-1)
 		for i, fs := range dt.fileStorages {
 			if i != dt.fsIdx {
@@ -303,7 +303,7 @@ func (dt DataTabEditor) updateFSList(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		}
 	case "enter":
 		if n > 0 {
-			dt.fsForm = fsFormFromDef(dt.fileStorages[dt.fsIdx], dt.domainNames(), dt.cloudProvider, dt.environmentNames)
+			dt.fsForm = fsFormFromDef(dt.fileStorages[dt.fsIdx], dt.domainNames(), dt.cloudProvider, dt.environmentNames, dt.serviceNames)
 			dt.fsFormIdx = 0
 			dt.fsSubView = fsViewForm
 		}
@@ -323,7 +323,7 @@ func (dt DataTabEditor) updateFSForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &dt.fsForm[dt.fsFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -409,7 +409,11 @@ func (dt DataTabEditor) viewFileStorage(w int) []string {
 				if name == "" {
 					name = fmt.Sprintf("(storage #%d)", i+1)
 				}
-				lines = append(lines, renderListItem(w, i == dt.fsIdx, "  ▶ ", name, tech+" / "+fs.Access))
+				subtitle := tech + " / " + fs.Access
+				if fs.UsedByService != "" {
+					subtitle += " · svc:" + fs.UsedByService
+				}
+				lines = append(lines, renderListItem(w, i == dt.fsIdx, "  ▶ ", name, subtitle))
 			}
 		}
 		return lines

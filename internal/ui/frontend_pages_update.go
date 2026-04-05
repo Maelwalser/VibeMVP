@@ -130,7 +130,7 @@ func (fe FrontendEditor) updatePageForm(key tea.KeyMsg) (FrontendEditor, tea.Cmd
 		}
 	case "enter", " ":
 		f := &fe.pageForm[fe.pageFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			fe.dd.Open = true
 			if f.Kind == KindSelect {
 				fe.dd.OptIdx = f.SelIdx

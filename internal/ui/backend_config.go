@@ -95,7 +95,7 @@ func (be BackendEditor) updateStackConfigForm(key tea.KeyMsg) (BackendEditor, te
 	case "enter", " ":
 		if ed.formIdx < n {
 			f := &ed.form[ed.formIdx]
-			if f.Kind == KindSelect {
+			if f.Kind == KindSelect && len(f.Options) > 0 {
 				be.dd.Open = true
 				be.dd.OptIdx = f.SelIdx
 			} else {
@@ -120,11 +120,13 @@ func (be BackendEditor) updateStackConfigForm(key tea.KeyMsg) (BackendEditor, te
 		}
 	case "h", "left":
 		be.saveStackConfigForm()
+		ed.itemView = beListViewList
 		if be.activeTabIdx > 0 {
 			be.activeTabIdx--
 		}
 	case "l", "right":
 		be.saveStackConfigForm()
+		ed.itemView = beListViewList
 		tabs := be.activeTabs()
 		if be.activeTabIdx < len(tabs)-1 {
 			be.activeTabIdx++

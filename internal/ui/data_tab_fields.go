@@ -818,7 +818,7 @@ func (dt DataTabEditor) withRefreshedCachingStrategies() DataTabEditor {
 	return dt
 }
 
-func defaultFSFormFields(domainOptions []string, cloudProvider string, environmentNames []string) []Field {
+func defaultFSFormFields(domainOptions []string, cloudProvider string, environmentNames []string, serviceOptions []string) []Field {
 	techOpts := fsStorageOptionsFor(cloudProvider)
 	envOpts, envDefault := noneOrPlaceholder(environmentNames, "(no environments configured)")
 	return []Field{
@@ -828,6 +828,11 @@ func defaultFSFormFields(domainOptions []string, cloudProvider string, environme
 			Value:   techOpts[0],
 		},
 		{Key: "purpose", Label: "purpose       ", Kind: KindText},
+		{
+			Key: "used_by_service", Label: "used_by       ", Kind: KindSelect,
+			Options: append([]string{"(any / unspecified)"}, serviceOptions...),
+			Value:   "(any / unspecified)",
+		},
 		{
 			Key: "environment", Label: "environment   ", Kind: KindSelect,
 			Options: envOpts,
@@ -860,10 +865,13 @@ func defaultFSFormFields(domainOptions []string, cloudProvider string, environme
 	}
 }
 
-func fsFormFromDef(def manifest.FileStorageDef, domainOptions []string, cloudProvider string, environmentNames []string) []Field {
-	f := defaultFSFormFields(domainOptions, cloudProvider, environmentNames)
+func fsFormFromDef(def manifest.FileStorageDef, domainOptions []string, cloudProvider string, environmentNames []string, serviceOptions []string) []Field {
+	f := defaultFSFormFields(domainOptions, cloudProvider, environmentNames, serviceOptions)
 	f = setFieldValue(f, "technology", def.Technology)
 	f = setFieldValue(f, "purpose", def.Purpose)
+	if def.UsedByService != "" {
+		f = setFieldValue(f, "used_by_service", def.UsedByService)
+	}
 	f = setFieldValue(f, "environment", def.Environment)
 	if def.Access != "" {
 		f = setFieldValue(f, "access", def.Access)
@@ -890,14 +898,19 @@ func fsFormFromDef(def manifest.FileStorageDef, domainOptions []string, cloudPro
 }
 
 func fsDefFromForm(fields []Field) manifest.FileStorageDef {
+	usedBy := fieldGet(fields, "used_by_service")
+	if usedBy == "(any / unspecified)" {
+		usedBy = ""
+	}
 	return manifest.FileStorageDef{
-		Technology:   fieldGet(fields, "technology"),
-		Purpose:      fieldGet(fields, "purpose"),
-		Environment:  fieldGet(fields, "environment"),
-		Access:       fieldGet(fields, "access"),
-		MaxSize:      fieldGet(fields, "max_size"),
-		Domains:      fieldGetMulti(fields, "domains"),
-		TTLMinutes:   fieldGet(fields, "ttl_minutes"),
-		AllowedTypes: fieldGetMulti(fields, "allowed_types"),
+		Technology:    fieldGet(fields, "technology"),
+		Purpose:       fieldGet(fields, "purpose"),
+		UsedByService: usedBy,
+		Environment:   fieldGet(fields, "environment"),
+		Access:        fieldGet(fields, "access"),
+		MaxSize:       fieldGet(fields, "max_size"),
+		Domains:       fieldGetMulti(fields, "domains"),
+		TTLMinutes:    fieldGet(fields, "ttl_minutes"),
+		AllowedTypes:  fieldGetMulti(fields, "allowed_types"),
 	}
 }

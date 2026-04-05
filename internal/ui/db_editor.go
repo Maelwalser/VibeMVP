@@ -273,7 +273,7 @@ func (db DBEditor) updateNormalForm(key tea.KeyMsg) (DBEditor, tea.Cmd) {
 		db.formIdx = len(db.dbForm) - 1
 	case "enter", " ":
 		f := &db.dbForm[db.formIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			db.dd.Open = true
 			db.dd.OptIdx = f.SelIdx
 		} else {

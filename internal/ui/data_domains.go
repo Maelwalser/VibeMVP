@@ -143,7 +143,7 @@ func (dt DataTabEditor) updateDomainForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd
 		}
 	case "enter", " ":
 		f := &dt.domainForm[dt.domainFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -310,7 +310,7 @@ func (dt DataTabEditor) updateAttrForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) 
 		}
 	case "enter", " ":
 		f := &dt.attrForm[dt.attrFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -391,7 +391,7 @@ func (dt DataTabEditor) updateRelForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &dt.relForm[dt.relFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx

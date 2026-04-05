@@ -133,7 +133,7 @@ func (be BackendEditor) updateServiceForm(key tea.KeyMsg) (BackendEditor, tea.Cm
 		ed.formIdx = be.nextServiceFormIdx(ed, -1)
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			be.dd.Open = true
 			if f.Kind == KindSelect {
 				be.dd.OptIdx = f.SelIdx
@@ -504,7 +504,7 @@ func (be BackendEditor) updateCommForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		ed.formIdx = be.nextCommFormIdx(ed, -1)
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			be.dd.Open = true
 			if f.Kind == KindSelect {
 				be.dd.OptIdx = f.SelIdx
@@ -597,7 +597,7 @@ func (be BackendEditor) updateMessaging(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 	case "enter", " ":
 		if be.activeField < brokerCount {
 			f := &be.MessagingFields[be.activeField]
-			if f.Kind == KindSelect {
+			if f.Kind == KindSelect && len(f.Options) > 0 {
 				be.dd.Open = true
 				be.dd.OptIdx = f.SelIdx
 			}
@@ -672,7 +672,7 @@ func (be BackendEditor) updateEventForm(key tea.KeyMsg) (BackendEditor, tea.Cmd)
 		ed.formIdx = (ed.formIdx - 1 + n) % n
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			be.dd.Open = true
 			be.dd.OptIdx = f.SelIdx
 		} else {

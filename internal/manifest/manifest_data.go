@@ -137,14 +137,15 @@ type CachingConfig struct {
 
 // FileStorageDef describes a file/object storage bucket.
 type FileStorageDef struct {
-	Technology   string `json:"technology"`
-	Purpose      string `json:"purpose,omitempty"`
-	Environment  string `json:"environment,omitempty"`
-	Access       string `json:"access"`
-	MaxSize      string `json:"max_size,omitempty"`
-	Domains      string `json:"domains,omitempty"`
-	TTLMinutes   string `json:"ttl_minutes,omitempty"`
-	AllowedTypes string `json:"allowed_types,omitempty"`
+	Technology    string `json:"technology"`
+	Purpose       string `json:"purpose,omitempty"`
+	UsedByService string `json:"used_by_service,omitempty"`
+	Environment   string `json:"environment,omitempty"`
+	Access        string `json:"access"`
+	MaxSize       string `json:"max_size,omitempty"`
+	Domains       string `json:"domains,omitempty"`
+	TTLMinutes    string `json:"ttl_minutes,omitempty"`
+	AllowedTypes  string `json:"allowed_types,omitempty"`
 }
 
 // DataGovernanceConfig describes data lifecycle, privacy, and compliance settings

@@ -679,7 +679,7 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 	case "enter", " ":
 		be.countBuf = ""
 		be.gBuf = false
-		if f := be.mutableFieldPtr(); f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+		if f := be.mutableFieldPtr(); f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			be.dd.Open = true
 			if f.Kind == KindSelect {
 				be.dd.OptIdx = f.SelIdx

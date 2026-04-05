@@ -6,7 +6,29 @@
       {
         "alias": "primary",
         "type": "PostgreSQL",
-        "is_cache": false
+        "is_cache": false,
+        "ssl_mode": "require",
+        "consistency": "strong",
+        "replication": "single-node",
+        "environment": "environment"
+      },
+      {
+        "alias": "database",
+        "type": "MySQL",
+        "is_cache": false,
+        "ssl_mode": "require",
+        "consistency": "strong",
+        "replication": "single-node",
+        "environment": "environment1"
+      },
+      {
+        "alias": "database1",
+        "type": "Redis",
+        "is_cache": false,
+        "ssl_mode": "require",
+        "consistency": "strong",
+        "replication": "single-node",
+        "environment": "environment"
       }
     ],
     "domains": [
@@ -67,24 +89,116 @@
           }
         ]
       }
+    ],
+    "file_storages": [
+      {
+        "technology": "S3",
+        "purpose": "storage",
+        "used_by_service": "service",
+        "environment": "environment",
+        "access": "Private (signed URLs)",
+        "max_size": "10 MB",
+        "ttl_minutes": "1440"
+      }
     ]
   },
   "backend": {
     "arch_pattern": "monolith",
+    "stack_configs": [
+      {
+        "name": "stack",
+        "language": "Go",
+        "language_version": "1.24",
+        "framework": "Fiber",
+        "framework_version": "v3.0"
+      },
+      {
+        "name": "stack1",
+        "language": "Go",
+        "language_version": "1.24",
+        "framework": "Fiber",
+        "framework_version": "v3.0"
+      },
+      {
+        "name": "stack2",
+        "language": "Go",
+        "language_version": "1.24",
+        "framework": "Fiber",
+        "framework_version": "v3.0"
+      }
+    ],
     "services": [
       {
         "name": "auth-api",
         "responsibility": "Handles user registration, login, token refresh, and logout",
-        "interfaces": [
-          {
-            "name": "REST API",
-            "type": "REST",
-            "description": "Auth endpoints consumed by the Next.js frontend"
-          }
-        ]
+        "pattern_tag": "Monolith part",
+        "technologies": [
+          "REST"
+        ],
+        "error_format": "Platform default",
+        "service_discovery": "None"
+      },
+      {
+        "name": "service",
+        "responsibility": "",
+        "pattern_tag": "Monolith part",
+        "error_format": "Platform default",
+        "service_discovery": "None"
+      },
+      {
+        "name": "service1",
+        "responsibility": "",
+        "pattern_tag": "Monolith part",
+        "error_format": "Platform default",
+        "service_discovery": "None"
+      },
+      {
+        "name": "service2",
+        "responsibility": "",
+        "pattern_tag": "Monolith part",
+        "error_format": "Platform default",
+        "service_discovery": "DNS-based",
+        "environment": "environment"
       }
     ],
+    "comm_links": [
+      {
+        "from": "auth-api",
+        "to": "service",
+        "direction": "Unidirectional (→)",
+        "protocol": "REST (HTTP)",
+        "sync_async": "Synchronous"
+      },
+      {
+        "from": "service1",
+        "to": "service2",
+        "direction": "Unidirectional (→)",
+        "protocol": "REST (HTTP)",
+        "sync_async": "Synchronous"
+      }
+    ],
+    "messaging": {
+      "broker_tech": "Kafka",
+      "deployment": "AWS MSK (managed)",
+      "serialization": "JSON",
+      "delivery": "At-most-once",
+      "environment": "(none)"
+    },
+    "events": [
+      {
+        "name": "event",
+        "publisher_service": "service",
+        "consumer_service": "service2",
+        "dto": "(none)"
+      }
+    ],
+    "api_gateway": {
+      "technology": "Kong",
+      "routing": "Path-based",
+      "environment": "(none)"
+    },
     "auth": {
+      "strategy": "JWT (stateless)",
       "provider": "self-managed",
       "service_unit": "auth-api",
       "authz_model": "RBAC",
@@ -110,10 +224,17 @@
         }
       ]
     },
-    "language": "Go",
-    "language_version": "1.24",
-    "framework": "Fiber",
-    "framework_version": "v3.0"
+    "job_queues": [
+      {
+        "name": "queue",
+        "technology": "Asynq",
+        "concurrency": "10",
+        "max_retries": "3",
+        "retry_policy": "Exponential backoff",
+        "dlq": "false",
+        "worker_service": "auth-api"
+      }
+    ]
   },
   "contracts": {
     "dtos": [
@@ -330,8 +451,22 @@
         "REST": "URL path (/v1/)"
       },
       "current_version": "v1",
-      "deprecation_policy": "6-month notice with Sunset header"
-    }
+      "deprecation_policy": "None"
+    },
+    "external_apis": [
+      {
+        "provider": "api",
+        "called_by_service": "auth-api",
+        "protocol": "REST",
+        "auth_mechanism": "API Key",
+        "failure_strategy": "Circuit Breaker",
+        "tls_mode": "TLS",
+        "message_format": "JSON",
+        "hmac_header": "X-Hub-Signature-256",
+        "retry_policy": "Retry 3x",
+        "soap_version": "1.1"
+      }
+    ]
   },
   "frontend": {
     "tech": {
@@ -463,11 +598,33 @@
     "framework": "React",
     "styling": "Tailwind CSS"
   },
+  "infrastructure": {
+    "environments": [
+      {
+        "name": "environment",
+        "compute_env": "Containers (Docker)",
+        "cloud_provider": "AWS",
+        "orchestrator": "Docker Compose"
+      },
+      {
+        "name": "environment1",
+        "compute_env": "Containers (Docker)",
+        "cloud_provider": "AWS",
+        "orchestrator": "Docker Compose"
+      },
+      {
+        "name": "environment2",
+        "compute_env": "Containers (Docker)",
+        "cloud_provider": "AWS",
+        "orchestrator": "Docker Compose"
+      }
+    ]
+  },
   "realize": {
     "app_name": "app",
     "output_dir": "generated-code",
     "concurrency": 4,
-    "verify": false,
+    "verify": true,
     "dry_run": false,
     "provider": "Claude",
     "tier_fast": "claude-haiku-4-5-20251001",
@@ -478,7 +635,29 @@
     {
       "alias": "primary",
       "type": "PostgreSQL",
-      "is_cache": false
+      "is_cache": false,
+      "ssl_mode": "require",
+      "consistency": "strong",
+      "replication": "single-node",
+      "environment": "environment"
+    },
+    {
+      "alias": "database",
+      "type": "MySQL",
+      "is_cache": false,
+      "ssl_mode": "require",
+      "consistency": "strong",
+      "replication": "single-node",
+      "environment": "environment1"
+    },
+    {
+      "alias": "database1",
+      "type": "Redis",
+      "is_cache": false,
+      "ssl_mode": "require",
+      "consistency": "strong",
+      "replication": "single-node",
+      "environment": "environment"
     }
   ]
 }
