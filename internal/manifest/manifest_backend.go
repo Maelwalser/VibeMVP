@@ -27,6 +27,7 @@ type ServiceDef struct {
 	ServiceDiscovery string             `json:"service_discovery,omitempty"`
 	Environment      string             `json:"environment,omitempty"`
 	Interfaces       []ExposedInterface `json:"interfaces,omitempty"`
+	Repositories     []RepositoryDef    `json:"repositories,omitempty"`
 }
 
 // ExposedInterface describes one interface a service unit exposes.
@@ -34,6 +35,29 @@ type ExposedInterface struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	Description string `json:"description,omitempty"`
+}
+
+// DataAccessOp defines a specific query or command against a data source.
+type DataAccessOp struct {
+	Name        string   `json:"name"`
+	OpType      string   `json:"op_type"`
+	FilterBy    []string `json:"filter_by,omitempty"`    // domain attribute names used as filter params
+	SortBy      string   `json:"sort_by,omitempty"`      // optional sort field
+	ResultShape string   `json:"result_shape,omitempty"` // "Single item", "List", "Count", "Boolean", "Void"
+	Pagination  string   `json:"pagination,omitempty"`   // pagination style when ResultShape=List
+	QueryHint   string   `json:"query_hint,omitempty"`   // free-form query intent hint for the agent
+	Description string   `json:"description,omitempty"`
+}
+
+// RepositoryDef bridges a backend service to a data entity, declaring the
+// required data access operations. EntityRef references a DomainDef.Name from
+// the DataPillar; TargetDB references a DBSourceDef.Alias.
+type RepositoryDef struct {
+	Name           string         `json:"name"`
+	EntityRef      string         `json:"entity_ref"`
+	TargetDB       string         `json:"target_db,omitempty"`
+	SelectedFields []string       `json:"selected_fields,omitempty"` // domain attribute names exposed by this repo
+	Operations     []DataAccessOp `json:"operations,omitempty"`
 }
 
 // CommLink describes a directed communication link between two service units.

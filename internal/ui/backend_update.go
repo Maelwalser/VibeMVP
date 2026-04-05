@@ -41,7 +41,11 @@ func (be BackendEditor) updateDropdown(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		ddJustClosed = true
 	}
 	// Auto-save the active form so changes persist without requiring b/esc.
-	if be.serviceEditor.itemView == beListViewForm {
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		be.saveRepoForm()
+	} else if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		be.saveOpForm()
+	} else if be.serviceEditor.itemView == beListViewForm {
 		be.saveServiceForm()
 	} else if be.commEditor.itemView == beListViewForm {
 		be.saveCommForm()
@@ -74,6 +78,18 @@ func (be BackendEditor) updateDropdown(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 
 // isMultiSelectDropdown returns true when the active dropdown field is KindMultiSelect.
 func (be BackendEditor) isMultiSelectDropdown() bool {
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) {
+			return ed.form[ed.formIdx].Kind == KindMultiSelect
+		}
+	}
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) {
+			return ed.form[ed.formIdx].Kind == KindMultiSelect
+		}
+	}
 	if be.serviceEditor.itemView == beListViewForm {
 		ed := &be.serviceEditor
 		if ed.formIdx < len(ed.form) {
@@ -99,6 +115,22 @@ func (be BackendEditor) isMultiSelectDropdown() bool {
 
 // toggleMultiSelectOption toggles ddOptIdx in the active KindMultiSelect field.
 func (be *BackendEditor) toggleMultiSelectOption() {
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].ToggleMultiSelect(be.dd.OptIdx)
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].ToggleMultiSelect(be.dd.OptIdx)
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
 	if be.authSubView == beAuthViewRoleForm {
 		if be.authRoleFormIdx < len(be.authRoleForm) && be.authRoleForm[be.authRoleFormIdx].Kind == KindMultiSelect {
 			be.authRoleForm[be.authRoleFormIdx].ToggleMultiSelect(be.dd.OptIdx)
@@ -136,6 +168,20 @@ func (be *BackendEditor) toggleMultiSelectOption() {
 
 // saveMultiSelectCursor saves the current dropdown cursor back to the field.
 func (be *BackendEditor) saveMultiSelectCursor() {
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) && ed.form[ed.formIdx].Kind == KindMultiSelect {
+			ed.form[ed.formIdx].DDCursor = be.dd.OptIdx
+		}
+		return
+	}
 	if be.authSubView == beAuthViewRoleForm {
 		if be.authRoleFormIdx < len(be.authRoleForm) && be.authRoleForm[be.authRoleFormIdx].Kind == KindMultiSelect {
 			be.authRoleForm[be.authRoleFormIdx].DDCursor = be.dd.OptIdx
@@ -163,6 +209,18 @@ func (be *BackendEditor) saveMultiSelectCursor() {
 
 // dropdownOptions returns the options of the currently active KindSelect or KindMultiSelect field.
 func (be BackendEditor) dropdownOptions() []string {
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) && (ed.form[ed.formIdx].Kind == KindSelect || ed.form[ed.formIdx].Kind == KindMultiSelect) {
+			return ed.form[ed.formIdx].Options
+		}
+	}
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) && (ed.form[ed.formIdx].Kind == KindSelect || ed.form[ed.formIdx].Kind == KindMultiSelect) {
+			return ed.form[ed.formIdx].Options
+		}
+	}
 	if be.stackConfigEditor.itemView == beListViewForm {
 		ed := &be.stackConfigEditor
 		if ed.formIdx < len(ed.form) && (ed.form[ed.formIdx].Kind == KindSelect || ed.form[ed.formIdx].Kind == KindMultiSelect) {
@@ -214,6 +272,27 @@ func (be *BackendEditor) applyDropdown() bool {
 		f.SelIdx = be.dd.OptIdx
 		f.Value = f.Options[be.dd.OptIdx]
 		return f.PrepareCustomEntry()
+	}
+	if be.repoSubView == beRepoSubViewForm && be.repoEditor.itemView == beListViewForm {
+		ed := &be.repoEditor
+		if ed.formIdx < len(ed.form) {
+			f := &ed.form[ed.formIdx]
+			custom := applyTo(f)
+			if f.Key == "entity_ref" {
+				be.refreshRepoFieldOptions()
+			} else if f.Key == "target_db" {
+				be.refreshRepoEntityRefOptions()
+			}
+			return custom
+		}
+		return false
+	}
+	if be.repoSubView == beRepoSubViewOpForm && be.opEditor.itemView == beListViewForm {
+		ed := &be.opEditor
+		if ed.formIdx < len(ed.form) {
+			return applyTo(&ed.form[ed.formIdx])
+		}
+		return false
 	}
 	if be.stackConfigEditor.itemView == beListViewForm {
 		ed := &be.stackConfigEditor
@@ -424,6 +503,16 @@ func (be BackendEditor) updateNormal(msg tea.Msg) (BackendEditor, tea.Cmd) {
 	case beTabServices:
 		if be.serviceEditor.itemView == beListViewList {
 			return be.updateServiceList(key)
+		}
+		switch be.repoSubView {
+		case beRepoSubViewList:
+			return be.updateRepoList(key)
+		case beRepoSubViewForm:
+			return be.updateRepoForm(key)
+		case beRepoSubViewOpList:
+			return be.updateOpList(key)
+		case beRepoSubViewOpForm:
+			return be.updateOpForm(key)
 		}
 		return be.updateServiceForm(key)
 	case beTabComm:

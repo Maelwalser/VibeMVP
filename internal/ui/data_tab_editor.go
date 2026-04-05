@@ -181,6 +181,66 @@ func (dt DataTabEditor) dbNames() []string {
 	return names
 }
 
+// DomainAttributeMap returns a map of domain name → attribute names for use
+// by the backend repo editor's field selection.
+func (dt DataTabEditor) DomainAttributeMap() map[string][]string {
+	out := make(map[string][]string, len(dt.domains))
+	for _, d := range dt.domains {
+		if d.Name == "" {
+			continue
+		}
+		attrs := make([]string, 0, len(d.Attributes))
+		for _, a := range d.Attributes {
+			if a.Name != "" {
+				attrs = append(attrs, a.Name)
+			}
+		}
+		out[d.Name] = attrs
+	}
+	return out
+}
+
+// DomainsByDB returns a map of DB alias → list of domain names that reference
+// that DB. Domains whose Databases field is empty are included under every key
+// (they are not restricted to any specific database). This is used by the
+// backend repo editor to filter entity_ref options based on target_db.
+func (dt DataTabEditor) DomainsByDB() map[string][]string {
+	out := make(map[string][]string)
+	for _, d := range dt.domains {
+		if d.Name == "" {
+			continue
+		}
+		if d.Databases == "" {
+			// No DB restriction: include under each configured alias.
+			for _, src := range dt.dbEditor.Sources {
+				if src.Alias != "" {
+					out[src.Alias] = append(out[src.Alias], d.Name)
+				}
+			}
+			continue
+		}
+		for _, alias := range strings.Split(d.Databases, ", ") {
+			alias = strings.TrimSpace(alias)
+			if alias != "" {
+				out[alias] = append(out[alias], d.Name)
+			}
+		}
+	}
+	return out
+}
+
+// DBSourceTypeMap returns a map of DB alias → DB type string for use by the
+// backend repo editor's op_type selection.
+func (dt DataTabEditor) DBSourceTypeMap() map[string]string {
+	out := make(map[string]string, len(dt.dbEditor.Sources))
+	for _, s := range dt.dbEditor.Sources {
+		if s.Alias != "" {
+			out[s.Alias] = string(s.Type)
+		}
+	}
+	return out
+}
+
 // domainNames returns the names of all created domains (excluding current) for use as dropdown options.
 func (dt DataTabEditor) domainNames() []string {
 	names := make([]string, 0, len(dt.domains))

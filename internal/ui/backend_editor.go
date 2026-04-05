@@ -101,6 +101,17 @@ const (
 	beAuthViewPermForm                   // single permission edit form
 )
 
+// beRepoSubView tracks the drill-down state within a service's Data Access panel.
+type beRepoSubView int
+
+const (
+	beRepoSubViewNone   beRepoSubView = iota // not in repo editing
+	beRepoSubViewList                        // listing repos for the current service
+	beRepoSubViewForm                        // editing a repo's basic fields
+	beRepoSubViewOpList                      // listing ops for the current repo
+	beRepoSubViewOpForm                      // editing an op
+)
+
 // ── list + form sub-editor for services and comm links ───────────────────────
 
 type beListView int
@@ -173,6 +184,11 @@ type BackendEditor struct {
 	eventEditor       beListEditor // event catalog within messaging
 	stackConfigEditor beListEditor // CONFIG tab stack configs (non-monolith)
 
+	// Data Access (Repository) sub-editor — drill-down within a service form
+	repoSubView beRepoSubView
+	repoEditor  beListEditor
+	opEditor    beListEditor
+
 	// Stack configs for non-monolith arches (serialized to manifest).
 	StackConfigs []manifest.StackConfig
 
@@ -191,6 +207,9 @@ type BackendEditor struct {
 
 	// Cross-tab references (injected from model.go)
 	DomainNames        []string
+	domainAttributes   map[string][]string // domain name → attribute names (from data tab)
+	domainsByDB        map[string][]string // DB alias → domain names linked to that DB
+	dbSourceTypes      map[string]string   // DB alias → DB type (from data tab)
 	availableDTOs      []string
 	availableEndpoints []string
 	cacheAliases       []string                        // IsCache DB aliases from the Data pillar
@@ -227,15 +246,33 @@ func newBackendEditor() BackendEditor {
 		commEditor:        newBeListEditor(),
 		eventEditor:       newBeListEditor(),
 		stackConfigEditor: newBeListEditor(),
+		repoEditor:        newBeListEditor(),
+		opEditor:          newBeListEditor(),
 		formInput:         newFormInput(),
 		dropdownOpen:      true,
 	}
 }
 
-// SetDomainNames injects domain names from the data tab for event domain dropdowns.
 // SetDomainNames stores domain names from the Data pillar for dropdown population.
 func (be *BackendEditor) SetDomainNames(names []string) {
 	be.DomainNames = names
+}
+
+// SetDomainAttributes stores domain attribute maps from the Data pillar for
+// repo field selection dropdowns.
+func (be *BackendEditor) SetDomainAttributes(attrs map[string][]string) {
+	be.domainAttributes = attrs
+}
+
+// SetDomainsByDB stores the DB alias → domain names map for repo entity_ref filtering.
+func (be *BackendEditor) SetDomainsByDB(m map[string][]string) {
+	be.domainsByDB = m
+}
+
+// SetDBSourceTypes stores the DB alias → type map from the Data pillar for
+// technology-aware op_type options in the repo editor.
+func (be *BackendEditor) SetDBSourceTypes(types map[string]string) {
+	be.dbSourceTypes = types
 }
 
 // SetCacheAliases stores the IsCache DB aliases from the Data pillar.
