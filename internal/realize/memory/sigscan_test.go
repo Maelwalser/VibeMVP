@@ -138,7 +138,7 @@ import (
 	}
 }
 
-func TestExtractGoSignatures_StripsTypeBodies(t *testing.T) {
+func TestExtractGoSignatures_PreservesTypeBodies(t *testing.T) {
 	content := `package foo
 
 type User struct {
@@ -150,8 +150,13 @@ type User struct {
 	if !strings.Contains(got, "type User struct {") {
 		t.Errorf("expected type declaration in output")
 	}
-	if strings.Contains(got, "ID   int") {
-		t.Errorf("struct body field should be stripped, got: %q", got)
+	// Struct field declarations must be preserved — downstream agents need the
+	// exact field layout to generate compatible code.
+	if !strings.Contains(got, "ID   int") {
+		t.Errorf("struct body fields should be preserved, got: %q", got)
+	}
+	if !strings.Contains(got, "Name string") {
+		t.Errorf("struct body fields should be preserved, got: %q", got)
 	}
 }
 
@@ -168,6 +173,28 @@ func Greet(name string) string {
 	}
 	if strings.Contains(got, `"hello "`) {
 		t.Errorf("function body should be stripped, got: %q", got)
+	}
+}
+
+func TestExtractGoSignatures_KeepsVarBlock(t *testing.T) {
+	content := `package foo
+
+import "errors"
+
+var (
+	ErrNotFound    = errors.New("not found")
+	ErrConflict    = errors.New("already exists")
+)
+`
+	got := extractGoSignatures(content)
+	if !strings.Contains(got, "var (") {
+		t.Errorf("expected var block in output, got: %q", got)
+	}
+	if !strings.Contains(got, "ErrNotFound") {
+		t.Errorf("expected sentinel error in output, got: %q", got)
+	}
+	if !strings.Contains(got, "ErrConflict") {
+		t.Errorf("expected sentinel error in output, got: %q", got)
 	}
 }
 
@@ -200,8 +227,13 @@ func TestExtractTSSignatures_KeepsInterface(t *testing.T) {
 	if !strings.Contains(got, "export interface User {") {
 		t.Errorf("expected interface declaration in output, got: %q", got)
 	}
-	if strings.Contains(got, "id: number") {
-		t.Errorf("interface body should be stripped, got: %q", got)
+	// Interface field declarations must be preserved — downstream agents need
+	// the exact field types to generate compatible TypeScript code.
+	if !strings.Contains(got, "id: number") {
+		t.Errorf("interface body fields should be preserved, got: %q", got)
+	}
+	if !strings.Contains(got, "name: string") {
+		t.Errorf("interface body fields should be preserved, got: %q", got)
 	}
 }
 

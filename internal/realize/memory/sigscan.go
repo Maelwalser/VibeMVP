@@ -109,21 +109,37 @@ func extractGoSignatures(content string) string {
 		}
 
 		// Handle type declarations (struct / interface / alias).
+		// Struct/interface bodies are preserved in full — field declarations are
+		// part of the type signature and downstream agents must see them to know
+		// what fields exist. Only function bodies are stripped.
 		if strings.HasPrefix(trimmed, "type ") {
 			out = append(out, line)
 			if strings.HasSuffix(trimmed, "{") {
 				inTypeBody = true
 				depth = 1
-				out = append(out, "\t// ... [body omitted]")
 			}
 			continue
 		}
 		if inTypeBody {
+			out = append(out, line) // keep field/method declarations
 			depth += strings.Count(line, "{") - strings.Count(line, "}")
 			if depth <= 0 {
 				inTypeBody = false
 				depth = 0
-				out = append(out, "}")
+			}
+			continue
+		}
+
+		// Handle var blocks (sentinel errors, package-level vars).
+		if strings.HasPrefix(trimmed, "var ") {
+			out = append(out, line)
+			if trimmed == "var (" {
+				for i++; i < len(lines); i++ {
+					out = append(out, lines[i])
+					if strings.TrimSpace(lines[i]) == ")" {
+						break
+					}
+				}
 			}
 			continue
 		}
@@ -173,47 +189,78 @@ func extractGoSignatures(content string) string {
 }
 
 // extractTSSignatures extracts interface, type alias, and exported function
-// declarations from TypeScript/TSX source, omitting implementation bodies.
+// declarations from TypeScript/TSX source. Interface and type bodies are
+// preserved in full (field declarations are part of the signature). Only
+// function implementation bodies are stripped.
 func extractTSSignatures(content string) string {
 	lines := strings.Split(content, "\n")
 	var out []string
 
-	inBlock := false
+	// inTypeBlock: inside an interface/type/enum body — keep all lines
+	// inFuncBlock: inside a function body — strip lines
+	inTypeBlock := false
+	inFuncBlock := false
 	depth := 0
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
 
-		if inBlock {
+		if inTypeBlock {
+			out = append(out, line) // preserve field declarations
 			depth += strings.Count(line, "{") - strings.Count(line, "}")
 			if depth <= 0 {
-				inBlock = false
+				inTypeBlock = false
+				depth = 0
+			}
+			continue
+		}
+
+		if inFuncBlock {
+			depth += strings.Count(line, "{") - strings.Count(line, "}")
+			if depth <= 0 {
+				inFuncBlock = false
 				depth = 0
 				out = append(out, "}")
 			}
 			continue
 		}
 
-		isDecl := strings.HasPrefix(trimmed, "interface ") ||
+		isTypeDecl := strings.HasPrefix(trimmed, "interface ") ||
 			strings.HasPrefix(trimmed, "export interface ") ||
 			strings.HasPrefix(trimmed, "type ") ||
 			strings.HasPrefix(trimmed, "export type ") ||
 			strings.HasPrefix(trimmed, "export enum ") ||
-			strings.HasPrefix(trimmed, "enum ") ||
-			strings.HasPrefix(trimmed, "export const ") ||
-			strings.HasPrefix(trimmed, "export function ") ||
+			strings.HasPrefix(trimmed, "enum ")
+
+		isFuncDecl := strings.HasPrefix(trimmed, "export function ") ||
 			strings.HasPrefix(trimmed, "export async function ") ||
-			strings.HasPrefix(trimmed, "export default function ") ||
+			strings.HasPrefix(trimmed, "export default function ")
+
+		isOther := strings.HasPrefix(trimmed, "export const ") ||
 			strings.HasPrefix(trimmed, `import `)
 
-		if isDecl {
+		if isTypeDecl {
 			out = append(out, line)
 			if strings.HasSuffix(trimmed, "{") {
-				inBlock = true
+				inTypeBlock = true
+				depth = 1
+			}
+			continue
+		}
+
+		if isFuncDecl {
+			out = append(out, line)
+			if strings.HasSuffix(trimmed, "{") {
+				inFuncBlock = true
 				depth = 1
 				out = append(out, "  // ... [body omitted]")
 			}
+			continue
+		}
+
+		if isOther {
+			out = append(out, line)
 			continue
 		}
 

@@ -226,6 +226,15 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	// the pipeline — the user receives all generated code plus a clear diagnostic.
 	o.log("realize: running integration build across all output files...")
 	intResult := verify.RunIntegrationBuild(ctx, o.cfg.OutputDir)
+	if !intResult.Passed {
+		// Before reporting failure, apply deterministic fixes across all output files
+		// (placeholder import paths, gofmt, escape sequences) and re-check.
+		o.log("realize: integration build failed — applying deterministic fixes and retrying...")
+		if fixes := applyIntegrationFixes(o.cfg.OutputDir); fixes != "" {
+			o.log("realize: integration fixes applied: %s", fixes)
+		}
+		intResult = verify.RunIntegrationBuild(ctx, o.cfg.OutputDir)
+	}
 	if intResult.Passed {
 		o.log("realize: integration build passed ✓ — all generated code compiles together")
 	} else {
@@ -235,6 +244,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		o.log("realize:       1. Wrong import paths — check that all internal imports use module path '%s'", modulePathFromOutput(o.cfg.OutputDir))
 		o.log("realize:       2. Duplicate type declarations — two tasks defined conflicting interfaces")
 		o.log("realize:       3. Function signature mismatch — caller ignores an error return value")
+		o.log("realize:       4. Constructor called with wrong argument count — check 'Critical Constructor Signatures'")
 		o.log("realize:       Run 'go build ./...' inside the backend directory to reproduce the errors.")
 	}
 
@@ -514,4 +524,37 @@ func technologiesFor(task *dag.Task) []string {
 	}
 
 	return techs
+}
+
+// applyIntegrationFixes runs deterministic fix passes (placeholder import paths,
+// gofmt, escape sequences, pgxpool invalid fields) across all Go source files in
+// the output directory. This is called once after the integration build fails to
+// auto-correct mechanical errors before the final diagnostic is emitted.
+// Returns a summary of fixes applied, or "" if nothing changed.
+func applyIntegrationFixes(outputDir string) string {
+	var allGoFiles []string
+	_ = filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".tmp" || name == "vendor" || name == ".realize" ||
+				name == "node_modules" || name == ".next" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			rel, err := filepath.Rel(outputDir, path)
+			if err == nil {
+				allGoFiles = append(allGoFiles, rel)
+			}
+		}
+		return nil
+	})
+	if len(allGoFiles) == 0 {
+		return ""
+	}
+	return verify.ApplyDeterministicFixes(outputDir, allGoFiles)
 }

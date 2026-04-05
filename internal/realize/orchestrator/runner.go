@@ -236,6 +236,21 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			return r.commit(ctx, tmpDir, result.Files)
 		}
 
+		// Before consuming a retry slot, try the disk-based UUID→string fix.
+		// This catches the common pattern of passing uuid.UUID where string is
+		// expected without needing an LLM call.
+		if attempt < r.maxRetries {
+			if uuidFix := verify.ApplyUUIDToStringFixes(tmpDir, vResult.Output); uuidFix != "" {
+				r.log("[%s] %s", r.task.ID, uuidFix)
+				// Re-gofmt after rewriting
+				verify.ApplyDeterministicFixes(tmpDir, verify.FilePaths(lastFiles))
+				if fixResult, ferr := r.verifier.Verify(ctx, tmpDir, verify.FilePaths(lastFiles)); ferr == nil && fixResult.Passed {
+					r.log("[%s] uuid fix resolved verification — skipping LLM retry", r.task.ID)
+					return r.commit(ctx, tmpDir, lastFiles)
+				}
+			}
+		}
+
 		// Before consuming a retry slot, try the in-memory fix layer (unused
 		// import removal + gofmt via go/format). This catches issues that the
 		// disk-based fixes above miss (e.g. imports added after file was written).

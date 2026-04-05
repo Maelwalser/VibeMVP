@@ -219,8 +219,22 @@ func buildExcerpts(files []dag.GeneratedFile) []FileExcerpt {
 // schema, or contract definitions — the most useful shared context.
 func isHighValue(path string) bool {
 	lower := strings.ToLower(path)
+
+	// All files under a domain/ package contain entity structs and sentinel
+	// errors that every downstream task needs to stay type-consistent.
+	if strings.Contains(lower, "/domain/") {
+		return true
+	}
+	// Repository interface and error files are the binding contract between layers.
+	if strings.HasSuffix(lower, "interfaces.go") {
+		return true
+	}
+	if strings.Contains(lower, "/repository/") && strings.HasSuffix(lower, "errors.go") {
+		return true
+	}
+
 	suffixes := []string{
-		"types.go", "models.go", "schema.go", "interfaces.go",
+		"types.go", "models.go", "schema.go",
 		"entities.go", "domain.go", "dto.go",
 		"types.ts", "models.ts", "schema.ts", "types.tsx",
 	}

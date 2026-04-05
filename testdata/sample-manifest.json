@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-04T12:00:00Z",
+  "created_at": "2026-04-05T11:38:23.459784755+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [
@@ -15,59 +15,100 @@
         "description": "Authenticated system user",
         "databases": "primary",
         "attributes": [
-          {"name": "id",                       "type": "UUID",     "constraints": "Primary Key, Auto-generated"},
-          {"name": "email",                    "type": "String",   "constraints": "Required, Unique", "validation": "valid email format"},
-          {"name": "password_hash",            "type": "String",   "constraints": "Required"},
-          {"name": "is_active",                "type": "Boolean",  "constraints": "Required", "default": "true"},
-          {"name": "refresh_token",            "type": "String",   "constraints": "Nullable"},
-          {"name": "refresh_token_expires_at", "type": "DateTime", "constraints": "Nullable"},
-          {"name": "created_at",               "type": "DateTime", "constraints": "Required, Auto-generated"},
-          {"name": "updated_at",               "type": "DateTime", "constraints": "Required, Auto-updated"}
+          {
+            "name": "id",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "email",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "password_hash",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "is_active",
+            "type": "varchar",
+            "default": "true",
+            "sensitive": false
+          },
+          {
+            "name": "refresh_token",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "refresh_token_expires_at",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "created_at",
+            "type": "varchar",
+            "sensitive": false
+          },
+          {
+            "name": "updated_at",
+            "type": "varchar",
+            "sensitive": false
+          }
         ]
       }
-    ],
-    "caching": {
-      "layer": "None",
-      "strategy": "None",
-      "invalidation": "None"
-    }
+    ]
   },
   "backend": {
     "arch_pattern": "monolith",
-    "env": {
-      "stages": "development,production"
-    },
     "services": [
       {
         "name": "auth-api",
         "responsibility": "Handles user registration, login, token refresh, and logout",
         "language": "Go",
+        "language_version": "1.24",
         "framework": "Fiber",
-        "interfaces": [
-          {"name": "REST API", "type": "REST", "description": "Auth endpoints consumed by the Next.js frontend"}
-        ]
+        "framework_version": "v3.0",
+        "pattern_tag": "Monolith part",
+        "technologies": [
+          "REST"
+        ],
+        "error_format": "Platform default",
+        "service_discovery": "None"
       }
     ],
     "auth": {
-      "strategy": "JWT",
+      "strategy": "JWT (stateless)",
       "provider": "self-managed",
       "service_unit": "auth-api",
       "authz_model": "RBAC",
       "token_storage": "HttpOnly cookie",
-      "refresh_token": "Enabled",
-      "mfa": "None",
+      "permissions": [
+        {
+          "name": "profile:read",
+          "description": "Read own profile"
+        },
+        {
+          "name": "profile:update",
+          "description": "Update own profile"
+        }
+      ],
       "roles": [
         {
           "name": "user",
           "description": "Authenticated end user",
-          "permissions": ["profile:read", "profile:update"]
+          "permissions": [
+            "profile:read",
+            "profile:update"
+          ]
         }
-      ],
-      "permissions": [
-        {"name": "profile:read",   "description": "Read own profile"},
-        {"name": "profile:update", "description": "Update own profile"}
       ]
-    }
+    },
+    "language": "Go",
+    "language_version": "1.24",
+    "framework": "Fiber",
+    "framework_version": "v3.0"
   },
   "contracts": {
     "dtos": [
@@ -78,9 +119,27 @@
         "description": "Payload for user registration",
         "protocol": "REST/JSON",
         "fields": [
-          {"name": "email",            "type": "string",  "required": true,  "nullable": false, "validation": "valid email format"},
-          {"name": "password",         "type": "string",  "required": true,  "nullable": false, "validation": "min 8 chars, at least one number"},
-          {"name": "confirm_password", "type": "string",  "required": true,  "nullable": false, "validation": "must match password"}
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "validation": "valid email format"
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "validation": "min 8 chars, at least one number"
+          },
+          {
+            "name": "confirm_password",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "validation": "must match password"
+          }
         ]
       },
       {
@@ -90,8 +149,19 @@
         "description": "Payload for user login",
         "protocol": "REST/JSON",
         "fields": [
-          {"name": "email",    "type": "string", "required": true, "nullable": false, "validation": "valid email format"},
-          {"name": "password", "type": "string", "required": true, "nullable": false}
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "validation": "valid email format"
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": true,
+            "nullable": false
+          }
         ]
       },
       {
@@ -99,8 +169,7 @@
         "category": "Request",
         "source_domains": "User",
         "description": "Payload for refreshing an access token (sent as HttpOnly cookie; no body required)",
-        "protocol": "REST/JSON",
-        "fields": []
+        "protocol": "REST/JSON"
       },
       {
         "name": "AuthTokenResponse",
@@ -109,10 +178,34 @@
         "description": "JWT credentials returned after successful register or login",
         "protocol": "REST/JSON",
         "fields": [
-          {"name": "access_token",  "type": "string",  "required": true,  "nullable": false, "notes": "Signed JWT; short-lived (15 min)"},
-          {"name": "token_type",    "type": "string",  "required": true,  "nullable": false, "default": "Bearer"},
-          {"name": "expires_in",    "type": "integer", "required": true,  "nullable": false, "notes": "Seconds until access_token expires"},
-          {"name": "refresh_token", "type": "string",  "required": false, "nullable": true,  "notes": "Rotated on each use; set as HttpOnly cookie"}
+          {
+            "name": "access_token",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "notes": "Signed JWT; short-lived (15 min)"
+          },
+          {
+            "name": "token_type",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "default": "Bearer"
+          },
+          {
+            "name": "expires_in",
+            "type": "integer",
+            "required": true,
+            "nullable": false,
+            "notes": "Seconds until access_token expires"
+          },
+          {
+            "name": "refresh_token",
+            "type": "string",
+            "required": false,
+            "nullable": true,
+            "notes": "Rotated on each use; set as HttpOnly cookie"
+          }
         ]
       },
       {
@@ -122,10 +215,32 @@
         "description": "Public user profile returned from /me",
         "protocol": "REST/JSON",
         "fields": [
-          {"name": "id",         "type": "string",   "required": true, "nullable": false, "notes": "UUID"},
-          {"name": "email",      "type": "string",   "required": true, "nullable": false},
-          {"name": "is_active",  "type": "boolean",  "required": true, "nullable": false},
-          {"name": "created_at", "type": "string",   "required": true, "nullable": false, "notes": "ISO 8601 timestamp"}
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "notes": "UUID"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "boolean",
+            "required": true,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "notes": "ISO 8601 timestamp"
+          }
         ]
       },
       {
@@ -134,8 +249,20 @@
         "description": "Standard error envelope for all 4xx/5xx responses",
         "protocol": "REST/JSON",
         "fields": [
-          {"name": "error",   "type": "string", "required": true, "nullable": false, "notes": "Machine-readable error code"},
-          {"name": "message", "type": "string", "required": true, "nullable": false, "notes": "Human-readable description"}
+          {
+            "name": "error",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "notes": "Machine-readable error code"
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "required": true,
+            "nullable": false,
+            "notes": "Human-readable description"
+          }
         ]
       }
     ],
@@ -145,9 +272,9 @@
         "name_path": "/api/v1/auth/register",
         "protocol": "REST",
         "auth_required": "No",
-        "http_method": "POST",
         "request_dto": "RegisterRequest",
         "response_dto": "AuthTokenResponse",
+        "http_method": "POST",
         "description": "Create a new user account and return JWT credentials",
         "rate_limit": "10 req/min per IP"
       },
@@ -156,9 +283,9 @@
         "name_path": "/api/v1/auth/login",
         "protocol": "REST",
         "auth_required": "No",
-        "http_method": "POST",
         "request_dto": "LoginRequest",
         "response_dto": "AuthTokenResponse",
+        "http_method": "POST",
         "description": "Validate credentials and return JWT credentials",
         "rate_limit": "10 req/min per IP"
       },
@@ -167,9 +294,9 @@
         "name_path": "/api/v1/auth/refresh",
         "protocol": "REST",
         "auth_required": "No",
-        "http_method": "POST",
         "request_dto": "RefreshTokenRequest",
         "response_dto": "AuthTokenResponse",
+        "http_method": "POST",
         "description": "Issue a new access token using the refresh token cookie"
       },
       {
@@ -178,8 +305,8 @@
         "protocol": "REST",
         "auth_required": "Yes",
         "auth_roles": "user",
-        "http_method": "POST",
         "response_dto": "ErrorResponse",
+        "http_method": "POST",
         "description": "Invalidate the refresh token and clear the auth cookie"
       },
       {
@@ -188,8 +315,8 @@
         "protocol": "REST",
         "auth_required": "Yes",
         "auth_roles": "user",
-        "http_method": "GET",
         "response_dto": "UserResponse",
+        "http_method": "GET",
         "description": "Return the profile of the currently authenticated user"
       }
     ],
@@ -204,18 +331,91 @@
   "frontend": {
     "tech": {
       "language": "TypeScript",
-      "platform": "Web",
+      "language_version": "5.7",
+      "platform": "Web (SPA)",
       "framework": "React",
+      "framework_version": "19",
       "meta_framework": "Next.js",
       "package_manager": "npm",
       "styling": "Tailwind CSS",
+      "component_lib": "shadcn/ui",
       "state_management": "Zustand",
       "data_fetching": "TanStack Query",
       "form_handling": "React Hook Form",
       "validation": "Zod",
-      "auth_flow_type": "JWT / HttpOnly cookie",
-      "error_boundary": "React Error Boundary"
+      "image_optimization": "Next/Image (built-in)",
+      "auth_flow_type": "Redirect (OAuth/OIDC)",
+      "error_boundary": "React Error Boundary",
+      "bundle_optimization": "Code splitting (route-based)"
     },
+    "components": [
+      {
+        "name": "RegisterForm",
+        "component_type": "Form",
+        "connected_endpoints": "/api/v1/auth/register",
+        "actions": [
+          {
+            "trigger": "onSubmit",
+            "action_type": "Submit Form",
+            "endpoint": "/api/v1/auth/register",
+            "http_method": "POST",
+            "request_body": "RegisterRequest",
+            "success_action": "Store token in auth state; navigate to /dashboard",
+            "error_action": "Show inline validation errors or server error toast"
+          }
+        ],
+        "description": "Email + password + confirm-password form with Zod validation"
+      },
+      {
+        "name": "LoginForm",
+        "component_type": "Form",
+        "connected_endpoints": "/api/v1/auth/login",
+        "actions": [
+          {
+            "trigger": "onSubmit",
+            "action_type": "Submit Form",
+            "endpoint": "/api/v1/auth/login",
+            "http_method": "POST",
+            "request_body": "LoginRequest",
+            "success_action": "Store token in auth state; navigate to /dashboard",
+            "error_action": "Show inline validation errors or server error toast"
+          }
+        ],
+        "description": "Email + password form with Zod validation"
+      },
+      {
+        "name": "UserProfileCard",
+        "component_type": "Display",
+        "connected_endpoints": "/api/v1/auth/me",
+        "actions": [
+          {
+            "trigger": "onMount",
+            "action_type": "Fetch Data",
+            "endpoint": "/api/v1/auth/me",
+            "http_method": "GET",
+            "success_action": "Render user email and created_at",
+            "error_action": "Redirect to /login on 401"
+          }
+        ],
+        "description": "Shows current user email and account info fetched from /me"
+      },
+      {
+        "name": "LogoutButton",
+        "component_type": "Button",
+        "connected_endpoints": "/api/v1/auth/logout",
+        "actions": [
+          {
+            "trigger": "onClick",
+            "action_type": "Submit Form",
+            "endpoint": "/api/v1/auth/logout",
+            "http_method": "POST",
+            "success_action": "Clear auth state; navigate to /login",
+            "error_action": "Show error toast; clear local auth state anyway"
+          }
+        ],
+        "description": "Calls logout endpoint and clears client auth state"
+      }
+    ],
     "pages": [
       {
         "name": "Register",
@@ -241,86 +441,39 @@
         "name": "Dashboard",
         "route": "/dashboard",
         "auth_required": "Yes",
-        "auth_roles": "user",
         "layout": "AppLayout",
         "core_actions": "Display user profile from /me; logout button",
         "loading": "Skeleton while fetching profile",
         "error_handling": "Redirect to /login on 401",
+        "auth_roles": "user",
         "linked_pages": "/login"
-      }
-    ],
-    "components": [
-      {
-        "name": "RegisterForm",
-        "component_type": "Form",
-        "connected_endpoints": "/api/v1/auth/register",
-        "description": "Email + password + confirm-password form with Zod validation",
-        "actions": [
-          {
-            "trigger": "onSubmit",
-            "action_type": "Submit Form",
-            "endpoint": "/api/v1/auth/register",
-            "http_method": "POST",
-            "request_body": "RegisterRequest",
-            "success_action": "Store token in auth state; navigate to /dashboard",
-            "error_action": "Show inline validation errors or server error toast"
-          }
-        ]
-      },
-      {
-        "name": "LoginForm",
-        "component_type": "Form",
-        "connected_endpoints": "/api/v1/auth/login",
-        "description": "Email + password form with Zod validation",
-        "actions": [
-          {
-            "trigger": "onSubmit",
-            "action_type": "Submit Form",
-            "endpoint": "/api/v1/auth/login",
-            "http_method": "POST",
-            "request_body": "LoginRequest",
-            "success_action": "Store token in auth state; navigate to /dashboard",
-            "error_action": "Show inline validation errors or server error toast"
-          }
-        ]
-      },
-      {
-        "name": "UserProfileCard",
-        "component_type": "Display",
-        "connected_endpoints": "/api/v1/auth/me",
-        "description": "Shows current user email and account info fetched from /me",
-        "actions": [
-          {
-            "trigger": "onMount",
-            "action_type": "Fetch Data",
-            "endpoint": "/api/v1/auth/me",
-            "http_method": "GET",
-            "success_action": "Render user email and created_at",
-            "error_action": "Redirect to /login on 401"
-          }
-        ]
-      },
-      {
-        "name": "LogoutButton",
-        "component_type": "Button",
-        "connected_endpoints": "/api/v1/auth/logout",
-        "description": "Calls logout endpoint and clears client auth state",
-        "actions": [
-          {
-            "trigger": "onClick",
-            "action_type": "Submit Form",
-            "endpoint": "/api/v1/auth/logout",
-            "http_method": "POST",
-            "success_action": "Clear auth state; navigate to /login",
-            "error_action": "Show error toast; clear local auth state anyway"
-          }
-        ]
       }
     ],
     "navigation": {
       "nav_type": "Top bar",
       "breadcrumbs": false,
       "auth_aware": true
+    },
+    "rendering": "Web (SPA)",
+    "framework": "React",
+    "styling": "Tailwind CSS"
+  },
+  "realize": {
+    "app_name": "test",
+    "output_dir": "generated-code",
+    "concurrency": 1,
+    "verify": true,
+    "dry_run": false,
+    "provider": "Claude",
+    "tier_fast": "claude-haiku-4-5-20251001",
+    "tier_medium": "claude-sonnet-4-6",
+    "tier_slow": "claude-opus-4-6"
+  },
+  "databases": [
+    {
+      "alias": "primary",
+      "type": "PostgreSQL",
+      "is_cache": false
     }
-  }
+  ]
 }

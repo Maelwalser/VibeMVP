@@ -248,11 +248,13 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 1 — repository: data-access interfaces + DB implementations.
 	// Small: ~200–400 lines of Go. Depends on resolved module graph from deps.
+	// Also depends on dataDeps directly so domain struct definitions appear in
+	// DepsOf() shared context — agents must see actual field layouts, not just type names.
 	add(d, &Task{
 		ID:           repoID,
 		Kind:         TaskKindServiceRepository,
 		Label:        fmt.Sprintf("%s — repository layer", svc.Name),
-		Dependencies: []string{depsID},
+		Dependencies: append([]string{depsID}, dataDeps...),
 		Payload: TaskPayload{
 			ModulePath:  modPath,
 			ArchPattern: m.Backend.ArchPattern,
@@ -267,11 +269,13 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 2 — service/business logic: orchestrates repositories.
 	// Small: ~150–300 lines of Go per domain entity.
+	// Also depends on dataDeps so domain struct/error definitions are visible
+	// in shared context for correct type usage (e.g. UUID handling, sentinel errors).
 	add(d, &Task{
 		ID:           svcID,
 		Kind:         TaskKindServiceLogic,
 		Label:        fmt.Sprintf("%s — service layer", svc.Name),
-		Dependencies: []string{repoID},
+		Dependencies: append([]string{repoID}, dataDeps...),
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
@@ -289,11 +293,13 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	// Layer 3 — handlers: HTTP routes and request/response mapping.
 	// Small: ~200–400 lines of Go. Auth config injected so handlers can
 	// apply the correct middleware.
+	// Also depends on dataDeps so handler knows actual domain field types when
+	// creating response structs — prevents string/bool/time.Time mismatches.
 	add(d, &Task{
 		ID:           handlerID,
 		Kind:         TaskKindServiceHandler,
 		Label:        fmt.Sprintf("%s — handler layer", svc.Name),
-		Dependencies: []string{svcID},
+		Dependencies: append([]string{svcID}, dataDeps...),
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
@@ -312,11 +318,16 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 4 — bootstrap: main.go, go.mod, config, middleware wiring.
 	// Small: ~100–200 lines. Wires all layers together.
+	// Depends on ALL three implementation layers (not just handler) so that
+	// DepsOf(bootstrap) includes repository and service constructor signatures.
+	// Without this, the bootstrap agent cannot know the exact constructor argument
+	// list for NewUserRepository or NewUserService, causing "too many arguments"
+	// and "undefined" cross-task compile errors.
 	add(d, &Task{
 		ID:           bootID,
 		Kind:         TaskKindServiceBootstrap,
 		Label:        fmt.Sprintf("%s — bootstrap", svc.Name),
-		Dependencies: []string{handlerID},
+		Dependencies: []string{repoID, svcID, handlerID},
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
