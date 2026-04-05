@@ -224,6 +224,13 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		}
 	}
 
+	// Pre-flight import path fix: resolve "svcdir/internal/pkg" → correct module
+	// path before the compiler even runs. This is a pure filesystem operation (no
+	// compiler invocation) so it is fast and safe to run unconditionally.
+	if fixes := verify.FixImportPaths(o.cfg.OutputDir); fixes != "" {
+		o.log("realize: import path pre-flight: %s", fixes)
+	}
+
 	// Run a project-wide integration build after all tasks complete.
 	// This catches cross-task compilation errors (import path mismatches, type
 	// field access on wrong struct, missing multi-return handling) that per-task
@@ -539,12 +546,19 @@ func technologiesFor(task *dag.Task) []string {
 	return techs
 }
 
-// applyIntegrationFixes runs deterministic fix passes (placeholder import paths,
-// gofmt, escape sequences, pgxpool invalid fields) across all Go source files in
+// applyIntegrationFixes runs deterministic fix passes across all Go source files in
 // the output directory. This is called once after the integration build fails to
 // auto-correct mechanical errors before the final diagnostic is emitted.
 // Returns a summary of fixes applied, or "" if nothing changed.
 func applyIntegrationFixes(outputDir string) string {
+	var summaries []string
+
+	// Cross-module import path fix runs first so the subsequent per-file fixes
+	// operate on already-corrected imports and don't waste effort on stale paths.
+	if f := verify.FixImportPaths(outputDir); f != "" {
+		summaries = append(summaries, f)
+	}
+
 	var allGoFiles []string
 	_ = filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -566,8 +580,11 @@ func applyIntegrationFixes(outputDir string) string {
 		}
 		return nil
 	})
-	if len(allGoFiles) == 0 {
-		return ""
+	if len(allGoFiles) > 0 {
+		if f := verify.ApplyDeterministicFixes(outputDir, allGoFiles, "go"); f != "" {
+			summaries = append(summaries, f)
+		}
 	}
-	return verify.ApplyDeterministicFixes(outputDir, allGoFiles, "go")
+
+	return strings.Join(summaries, "; ")
 }
