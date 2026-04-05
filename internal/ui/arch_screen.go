@@ -64,6 +64,7 @@ type archDiagramData struct {
 	rawLines         []string
 	nodePositions    map[string]nodePos
 	edgeBoundsMap    map[string]edgeBounds
+	edgePathMap      map[string][]edgeBounds // precise path segments for per-pixel blink
 	envGroups        []archEnvGroup
 	frontendNodes    []archNode
 	gatewayNodes     []archNode
@@ -117,6 +118,7 @@ func (s ArchScreen) HintLine() string {
 	hints := []string{
 		StyleHelpKey.Render("h/l") + StyleHelpDesc.Render(" navigate"),
 		StyleHelpKey.Render("j/k") + StyleHelpDesc.Render(" cycle"),
+		StyleHelpKey.Render("c") + StyleHelpDesc.Render(" comm links"),
 		StyleHelpKey.Render("H/L") + StyleHelpDesc.Render(" pan"),
 		StyleHelpKey.Render("g") + StyleHelpDesc.Render(" reset"),
 		StyleHelpKey.Render("q") + StyleHelpDesc.Render(" close"),
@@ -141,6 +143,8 @@ func (s ArchScreen) Update(msg tea.Msg) (ArchScreen, tea.Cmd) {
 		s = s.navigateDown()
 	case "k", "up":
 		s = s.navigateUp()
+	case "c":
+		s = s.selectCommEdge()
 	case "L": // Shift+L — pan right
 		s.scrollX++
 	case "H": // Shift+H — pan left
@@ -372,6 +376,35 @@ func (s ArchScreen) navigateUp() ArchScreen {
 	for i, n := range nodes {
 		if n.id == s.selectedID {
 			s.selectedID = nodes[(i-1+len(nodes))%len(nodes)].id
+			return s
+		}
+	}
+	return s
+}
+
+// selectCommEdge selects outgoing svc→svc communication edges from the current service.
+// If already on a same-column edge, it cycles to the next sibling.
+func (s ArchScreen) selectCommEdge() ArchScreen {
+	// If already on a same-column edge, cycle to next sibling.
+	if e, ok := s.selectedEdge(); ok {
+		fromCol := s.nodeColumnByID(e.fromID)
+		toCol := s.nodeColumnByID(e.toID)
+		if fromCol == toCol {
+			siblings := s.siblingEdges(e)
+			for i, sib := range siblings {
+				if sib.id == e.id {
+					s.selectedID = siblings[(i+1)%len(siblings)].id
+					return s
+				}
+			}
+		}
+		return s
+	}
+	// Find first outgoing svc→svc edge from the current service node.
+	col := s.nodeColumnByID(s.selectedID)
+	for _, e := range s.edges {
+		if e.fromID == s.selectedID && s.nodeColumnByID(e.toID) == col {
+			s.selectedID = e.id
 			return s
 		}
 	}
@@ -1596,6 +1629,7 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 
 	// Step 5: arrows + collect edge bounds
 	edgeBoundsMap := map[string]edgeBounds{}
+	edgePathMap := map[string][]edgeBounds{}
 
 	// drawEdgeArrow draws a left-to-right (→) arrow between two nodes in different columns.
 	// The vertical connector is placed at toX-gap/2 (near the target) so it avoids
@@ -1612,10 +1646,12 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		toY := midY(to)
 
 		var bx1, bx2, by1, by2 int
+		var pathSegs []edgeBounds
 		if arrowY == toY {
 			cv.hLine(fromX, arrowY, toX-fromX)
 			cv.arrowRight(toX, arrowY)
 			bx1, bx2, by1, by2 = fromX, toX+1, arrowY, arrowY+1
+			pathSegs = []edgeBounds{{x1: fromX, x2: toX + 1, y1: arrowY, y2: arrowY + 1}}
 		} else {
 			// Route near the target column: vertical connector sits in the gap just
 			// before the target, avoiding any intermediate column boxes.
@@ -1632,13 +1668,21 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 			cv.hLine(midX, toY, toX-midX)
 			cv.arrowRight(toX, toY)
 			bx1, bx2 = fromX, toX+1
+			vTop, vBot := arrowY, toY
 			if arrowY < toY {
 				by1, by2 = arrowY, toY+1
 			} else {
 				by1, by2 = toY, arrowY+1
+				vTop, vBot = toY, arrowY
+			}
+			pathSegs = []edgeBounds{
+				{x1: fromX, x2: midX + 1, y1: arrowY, y2: arrowY + 1},
+				{x1: midX, x2: midX + 1, y1: vTop, y2: vBot + 1},
+				{x1: midX, x2: toX + 1, y1: toY, y2: toY + 1},
 			}
 		}
 		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		edgePathMap[e.id] = pathSegs
 	}
 
 	// Frontend → Gateway or Service arrows
@@ -1696,6 +1740,12 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		bx1, bx2 := exitX, bypassX+1
 		by1, by2 := lo, hi+1
 		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		// Precise path: three segments instead of the bounding rectangle.
+		edgePathMap[e.id] = []edgeBounds{
+			{x1: exitX, x2: bypassX + 1, y1: fromY, y2: fromY + 1},          // horizontal exit
+			{x1: bypassX, x2: bypassX + 1, y1: lo, y2: hi + 1},              // vertical connector
+			{x1: to.x + to.w, x2: bypassX + 1, y1: toY, y2: toY + 1},       // horizontal entry + arrow
+		}
 	}
 
 	// Service → Broker arrows (left-to-right using drawEdgeArrow).
@@ -1719,10 +1769,12 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		toY := midY(to)
 
 		var bx1, bx2, by1, by2 int
+		var pathSegs []edgeBounds
 		if fromY == toY {
 			cv.hLine(toX, fromY, fromX-toX)
 			cv.arrowLeft(toX, fromY)
 			bx1, bx2, by1, by2 = toX, fromX, fromY, fromY+1
+			pathSegs = []edgeBounds{{x1: toX, x2: fromX + 1, y1: fromY, y2: fromY + 1}}
 		} else {
 			midX := toX + (fromX-toX)/2 // midpoint in the gap
 			cv.hLine(midX, fromY, fromX-midX)
@@ -1739,8 +1791,14 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 			} else {
 				by1, by2 = toY, fromY+1
 			}
+			pathSegs = []edgeBounds{
+				{x1: midX, x2: fromX + 1, y1: fromY, y2: fromY + 1},
+				{x1: midX, x2: midX + 1, y1: lo, y2: hi + 1},
+				{x1: toX, x2: midX + 1, y1: toY, y2: toY + 1},
+			}
 		}
 		edgeBoundsMap[e.id] = edgeBounds{x1: bx1, x2: bx2, y1: by1, y2: by2}
+		edgePathMap[e.id] = pathSegs
 	}
 
 	// Broker → Service (consumer) arrows using drawRtoLArrow.
@@ -1812,6 +1870,7 @@ func buildRawArchDiagram(nodes []archNode, edges []archEdge,
 		rawLines:         strings.Split(cv.render(), "\n"),
 		nodePositions:    nodePositions,
 		edgeBoundsMap:    edgeBoundsMap,
+		edgePathMap:      edgePathMap,
 		envGroups:        envGroups,
 		frontendNodes:    frontendNodes,
 		gatewayNodes:     gatewayNodes,
@@ -2119,12 +2178,24 @@ func colorizeClipped(lines []string, data archDiagramData, scrollX, scrollY int)
 	// Selected item blink — priority 3
 	if data.selectedID != "" {
 		if strings.HasPrefix(data.selectedID, "edge.") {
-			// Color the selected edge path
-			if eb, ok := data.edgeBoundsMap[data.selectedID]; ok {
-				edgeColor := clrCyan
-				if AnimFrame%2 == 0 {
-					edgeColor = clrFg
+			// Use precise path segments so only actual edge pixels blink.
+			edgeColor := clrCyan
+			if AnimFrame%2 == 0 {
+				edgeColor = clrFg
+			}
+			if segs, ok := data.edgePathMap[data.selectedID]; ok && len(segs) > 0 {
+				for _, seg := range segs {
+					ranges = append(ranges, colorRange{
+						xStart:   seg.x1 - scrollX,
+						xEnd:     seg.x2 - scrollX,
+						yStart:   seg.y1 - scrollY,
+						yEnd:     seg.y2 - scrollY,
+						color:    edgeColor,
+						priority: 3,
+					})
 				}
+			} else if eb, ok := data.edgeBoundsMap[data.selectedID]; ok {
+				// Fallback to bounding box if path segments are unavailable.
 				ranges = append(ranges, colorRange{
 					xStart:   eb.x1 - scrollX,
 					xEnd:     eb.x2 - scrollX,
