@@ -863,18 +863,9 @@ func fillTildes(lines []string, h int) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// withSidePanel places left content and a right ASCII art panel side by side,
-// separated by a thin vertical rule.
-//
-// Cropping behaviour:
-//   - Horizontal: if artW < natural art width, a center-crop window is used so
-//     the middle section of symmetric art stays visible. When artW >= natural
-//     width no cropping occurs and trailing spaces are stripped.
-//   - Vertical: no cropping — art renders top-to-bottom; rows beyond the art's
-//     line count leave the right panel empty (art need not fill the full height).
 // withDescriptionPanel lays out left content and a pre-styled description panel
-// side-by-side. Unlike withSidePanel it does NOT rune-slice or re-style the right
-// lines, so ANSI escape sequences in descLines are preserved intact.
+// side-by-side. It does NOT rune-slice or re-style the right lines, so ANSI
+// escape sequences in descLines are preserved intact.
 func withDescriptionPanel(left string, descLines []string, leftW, descW, h int) string {
 	leftLines := strings.Split(strings.TrimRight(left, "\n"), "\n")
 	sep := StyleArtSep.Render("│")
@@ -893,67 +884,6 @@ func withDescriptionPanel(left string, descLines []string, leftW, descW, h int) 
 		var rightLine string
 		if i < len(descLines) {
 			rightLine = descLines[i]
-		}
-
-		sb.WriteString(leftLine)
-		sb.WriteString(sep)
-		sb.WriteString(rightLine)
-		if i < h-1 {
-			sb.WriteString("\n")
-		}
-	}
-	sb.WriteString("\n")
-	return sb.String()
-}
-
-func withSidePanel(left string, artLines []string, leftW, artW, h int) string {
-	leftLines := strings.Split(strings.TrimRight(left, "\n"), "\n")
-	sep := StyleArtSep.Render("│")
-
-	// Compute the natural (trimmed) width of the widest art line.
-	natW := 0
-	for _, l := range artLines {
-		if rw := len([]rune(strings.TrimRight(l, " "))); rw > natW {
-			natW = rw
-		}
-	}
-
-	// Horizontal center-crop offset: positive only when panel is narrower than art.
-	hOffset := 0
-	if natW > artW {
-		hOffset = (natW - artW) / 2
-	}
-
-	var sb strings.Builder
-	for i := 0; i < h; i++ {
-		// ── Left content line — padded to leftW so the separator aligns. ──────
-		var leftLine string
-		if i < len(leftLines) {
-			leftLine = leftLines[i]
-		}
-		lw := lipgloss.Width(leftLine)
-		if lw < leftW {
-			leftLine += strings.Repeat(" ", leftW-lw)
-		}
-
-		// ── Right art line — center-crop then strip trailing spaces. ──────────
-		var rightLine string
-		if i < len(artLines) {
-			runes := []rune(artLines[i])
-			start := hOffset
-			if start > len(runes) {
-				start = len(runes)
-			}
-			end := start + artW
-			if end > len(runes) {
-				end = len(runes)
-			}
-			if start < end {
-				trimmed := strings.TrimRight(string(runes[start:end]), " ")
-				if trimmed != "" {
-					rightLine = StyleArtPanel.Render(trimmed)
-				}
-			}
 		}
 
 		sb.WriteString(leftLine)

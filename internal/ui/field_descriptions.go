@@ -13,17 +13,17 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── DATABASE ──────────────────────────────────────────────────────────────
 
 	"type": {
-		"PostgreSQL":     "Relational database with ACID transactions, JSON support, and rich indexing. Mature, open-source, widely hosted. Best all-round choice for most applications.",
-		"MySQL":          "Relational database optimized for read-heavy workloads. Wide cloud support. Generates MySQL-compatible schema migrations and connection pooling.",
-		"SQLite":         "Embedded file-based relational database. Zero server overhead. Ideal for local dev, testing, CLI tools, and edge deployments.",
-		"MongoDB":        "Document-oriented NoSQL database with flexible schemas. Native JSON storage. Best for rapidly changing data shapes or content-heavy apps.",
-		"DynamoDB":       "AWS-managed key-value and document store. Single-digit millisecond latency at any scale. Requires careful access-pattern design upfront.",
-		"Cassandra":      "Wide-column distributed database designed for high-volume time-series and write-heavy workloads. Tunable consistency per query.",
-		"Redis":          "In-memory key-value store with pub/sub, sorted sets, and streams. Used for caching, sessions, leaderboards, and real-time features.",
-		"Memcached":      "Simple in-memory key-value cache. Fastest raw throughput for plain cache use cases. No persistence or complex data structures.",
-		"ClickHouse":     "Columnar analytical database for real-time analytics queries over billions of rows. Best for dashboards and log aggregation.",
-		"Elasticsearch":  "Distributed full-text search and analytics engine. Inverted index for fast text search, aggregations, and geo queries.",
-		"other":          "Custom or unlisted database. Generates a generic data-source scaffold for you to configure.",
+		"PostgreSQL":    "Relational database with ACID transactions, JSON support, and rich indexing. Mature, open-source, widely hosted. Best all-round choice for most applications.",
+		"MySQL":         "Relational database optimized for read-heavy workloads. Wide cloud support. Generates MySQL-compatible schema migrations and connection pooling.",
+		"SQLite":        "Embedded file-based relational database. Zero server overhead. Ideal for local dev, testing, CLI tools, and edge deployments.",
+		"MongoDB":       "Document-oriented NoSQL database with flexible schemas. Native JSON storage. Best for rapidly changing data shapes or content-heavy apps.",
+		"DynamoDB":      "AWS-managed key-value and document store. Single-digit millisecond latency at any scale. Requires careful access-pattern design upfront.",
+		"Cassandra":     "Wide-column distributed database designed for high-volume time-series and write-heavy workloads. Tunable consistency per query.",
+		"Redis":         "In-memory key-value store with pub/sub, sorted sets, and streams. Used for caching, sessions, leaderboards, and real-time features.",
+		"Memcached":     "Simple in-memory key-value cache. Fastest raw throughput for plain cache use cases. No persistence or complex data structures.",
+		"ClickHouse":    "Columnar analytical database for real-time analytics queries over billions of rows. Best for dashboards and log aggregation.",
+		"Elasticsearch": "Distributed full-text search and analytics engine. Inverted index for fast text search, aggregations, and geo queries.",
+		"other":         "Custom or unlisted database. Generates a generic data-source scaffold for you to configure.",
 	},
 
 	"is_cache": {
@@ -39,57 +39,57 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"consistency": {
-		"strong":        "All reads reflect the latest write. Synchronous replication. Higher latency; no stale reads.",
-		"eventual":      "Reads may briefly return stale data after a write. Lower latency, higher availability. Suitable for non-critical reads.",
-		"LOCAL_QUORUM":  "Cassandra: majority of local-DC replicas must acknowledge. Balances consistency and latency within a datacenter.",
-		"ONE":           "Cassandra: single replica acknowledges. Fastest reads; lowest consistency.",
-		"QUORUM":        "Cassandra: majority across all datacenters must acknowledge. Strong consistency at higher latency.",
-		"ALL":           "Cassandra: all replicas must acknowledge. Strongest consistency; not fault-tolerant if any replica is down.",
-		"LOCAL_ONE":     "Cassandra: single local-DC replica acknowledges. Fast local reads with minimal consistency guarantee.",
+		"strong":       "All reads reflect the latest write. Synchronous replication. Higher latency; no stale reads.",
+		"eventual":     "Reads may briefly return stale data after a write. Lower latency, higher availability. Suitable for non-critical reads.",
+		"LOCAL_QUORUM": "Cassandra: majority of local-DC replicas must acknowledge. Balances consistency and latency within a datacenter.",
+		"ONE":          "Cassandra: single replica acknowledges. Fastest reads; lowest consistency.",
+		"QUORUM":       "Cassandra: majority across all datacenters must acknowledge. Strong consistency at higher latency.",
+		"ALL":          "Cassandra: all replicas must acknowledge. Strongest consistency; not fault-tolerant if any replica is down.",
+		"LOCAL_ONE":    "Cassandra: single local-DC replica acknowledges. Fast local reads with minimal consistency guarantee.",
 	},
 
 	"replication": {
-		"single-node":      "No replication. One database instance. Good for development and non-critical services.",
-		"primary-replica":  "One writer, one or more read replicas. Scales reads; async replication. Generates read/write connection routing.",
-		"multi-region":     "Replicas in multiple geographic regions. Low-latency global reads; complex conflict resolution. Generates region-aware routing.",
+		"single-node":     "No replication. One database instance. Good for development and non-critical services.",
+		"primary-replica": "One writer, one or more read replicas. Scales reads; async replication. Generates read/write connection routing.",
+		"multi-region":    "Replicas in multiple geographic regions. Low-latency global reads; complex conflict resolution. Generates region-aware routing.",
 	},
 
 	// ── BACKEND: Architecture & Language ─────────────────────────────────────
 
 	"arch": {
-		"monolith":          "Single deployable unit. All features bundled in one codebase. Easiest to develop, test, and deploy. Best for MVPs and small teams.",
-		"modular-monolith":  "Bounded modules within a single deployment. Modules share a process but communicate through defined interfaces. A stepping-stone toward microservices.",
-		"microservices":     "Independently deployable services communicating over APIs. Enables team autonomy and polyglot technology. Generates separate service directories with API contracts.",
-		"event-driven":      "Services communicate asynchronously via a message broker. Decouples producers from consumers. Generates event publishers, consumers, and message schemas.",
-		"hybrid":            "Mix of synchronous APIs and async event streams. Flexible for incremental migration or mixed workloads.",
+		"monolith":         "Single deployable unit. All features bundled in one codebase. Easiest to develop, test, and deploy. Best for MVPs and small teams.",
+		"modular-monolith": "Bounded modules within a single deployment. Modules share a process but communicate through defined interfaces. A stepping-stone toward microservices.",
+		"microservices":    "Independently deployable services communicating over APIs. Enables team autonomy and polyglot technology. Generates separate service directories with API contracts.",
+		"event-driven":     "Services communicate asynchronously via a message broker. Decouples producers from consumers. Generates event publishers, consumers, and message schemas.",
+		"hybrid":           "Mix of synchronous APIs and async event streams. Flexible for incremental migration or mixed workloads.",
 	},
 
 	"monolith_lang": {
-		"Go":               "Compiled, statically typed, fast startup. Excellent concurrency via goroutines. Generates Go modules with idiomatic error handling.",
-		"TypeScript/Node":  "JavaScript superset with type safety. Large npm ecosystem. Generates Node services with TypeScript strict mode.",
-		"Python":           "Readable, dynamically typed. Rich ML and data ecosystem. Generates Python services using FastAPI, Django, or Flask.",
-		"Java":             "Mature, strongly typed JVM language. Enterprise ecosystem with Spring. Generates Spring Boot services.",
-		"Kotlin":           "Modern JVM language with null safety and coroutines. Generates Ktor or Spring Boot Kotlin services.",
-		"C#/.NET":          "Microsoft's type-safe language on .NET. Generates ASP.NET Core services with dependency injection.",
-		"Rust":             "Memory-safe systems language. Zero-cost abstractions, no GC. Generates Actix-web or Axum services.",
-		"Ruby":             "Developer-friendly, convention-over-configuration. Generates Rails or Sinatra applications.",
-		"PHP":              "Widely deployed web language. Generates Laravel or Symfony applications.",
-		"Elixir":           "Functional, fault-tolerant on the BEAM VM. Generates Phoenix applications with excellent real-time support.",
-		"Other":            "Custom language choice. Generates a generic scaffold for you to extend.",
+		"Go":              "Compiled, statically typed, fast startup. Excellent concurrency via goroutines. Generates Go modules with idiomatic error handling.",
+		"TypeScript/Node": "JavaScript superset with type safety. Large npm ecosystem. Generates Node services with TypeScript strict mode.",
+		"Python":          "Readable, dynamically typed. Rich ML and data ecosystem. Generates Python services using FastAPI, Django, or Flask.",
+		"Java":            "Mature, strongly typed JVM language. Enterprise ecosystem with Spring. Generates Spring Boot services.",
+		"Kotlin":          "Modern JVM language with null safety and coroutines. Generates Ktor or Spring Boot Kotlin services.",
+		"C#/.NET":         "Microsoft's type-safe language on .NET. Generates ASP.NET Core services with dependency injection.",
+		"Rust":            "Memory-safe systems language. Zero-cost abstractions, no GC. Generates Actix-web or Axum services.",
+		"Ruby":            "Developer-friendly, convention-over-configuration. Generates Rails or Sinatra applications.",
+		"PHP":             "Widely deployed web language. Generates Laravel or Symfony applications.",
+		"Elixir":          "Functional, fault-tolerant on the BEAM VM. Generates Phoenix applications with excellent real-time support.",
+		"Other":           "Custom language choice. Generates a generic scaffold for you to extend.",
 	},
 
 	"language": {
-		"Go":               "Compiled, statically typed, fast startup. Excellent concurrency via goroutines. Generates Go modules with idiomatic error handling.",
-		"TypeScript/Node":  "JavaScript superset with type safety. Large npm ecosystem. Generates Node services with TypeScript strict mode.",
-		"Python":           "Readable, dynamically typed. Rich ML and data ecosystem. Generates Python services using FastAPI, Django, or Flask.",
-		"Java":             "Mature, strongly typed JVM language. Enterprise ecosystem with Spring. Generates Spring Boot services.",
-		"Kotlin":           "Modern JVM language with null safety and coroutines. Generates Ktor or Spring Boot Kotlin services.",
-		"C#/.NET":          "Microsoft's type-safe language on .NET. Generates ASP.NET Core services with dependency injection.",
-		"Rust":             "Memory-safe systems language. Zero-cost abstractions, no GC. Generates Actix-web or Axum services.",
-		"Ruby":             "Developer-friendly, convention-over-configuration. Generates Rails or Sinatra applications.",
-		"PHP":              "Widely deployed web language. Generates Laravel or Symfony applications.",
-		"Elixir":           "Functional, fault-tolerant on the BEAM VM. Generates Phoenix applications with excellent real-time support.",
-		"Other":            "Custom language choice. Generates a generic scaffold for you to extend.",
+		"Go":              "Compiled, statically typed, fast startup. Excellent concurrency via goroutines. Generates Go modules with idiomatic error handling.",
+		"TypeScript/Node": "JavaScript superset with type safety. Large npm ecosystem. Generates Node services with TypeScript strict mode.",
+		"Python":          "Readable, dynamically typed. Rich ML and data ecosystem. Generates Python services using FastAPI, Django, or Flask.",
+		"Java":            "Mature, strongly typed JVM language. Enterprise ecosystem with Spring. Generates Spring Boot services.",
+		"Kotlin":          "Modern JVM language with null safety and coroutines. Generates Ktor or Spring Boot Kotlin services.",
+		"C#/.NET":         "Microsoft's type-safe language on .NET. Generates ASP.NET Core services with dependency injection.",
+		"Rust":            "Memory-safe systems language. Zero-cost abstractions, no GC. Generates Actix-web or Axum services.",
+		"Ruby":            "Developer-friendly, convention-over-configuration. Generates Rails or Sinatra applications.",
+		"PHP":             "Widely deployed web language. Generates Laravel or Symfony applications.",
+		"Elixir":          "Functional, fault-tolerant on the BEAM VM. Generates Phoenix applications with excellent real-time support.",
+		"Other":           "Custom language choice. Generates a generic scaffold for you to extend.",
 	},
 
 	"pattern_tag": {
@@ -105,21 +105,21 @@ var fieldDescriptions = map[string]map[string]string{
 
 	"error_format": {
 		"RFC 7807 (Problem Details)": "Standard HTTP error body: type, title, status, detail, instance. Interoperable with any client. Generates Problem Details middleware and typed error constructors.",
-		"Custom JSON envelope":        "App-specific error wrapper with code, message, and data fields. Generates shared error package with typed codes.",
-		"Platform default":            "Uses the framework's built-in error handling. No additional wrapper generated.",
+		"Custom JSON envelope":       "App-specific error wrapper with code, message, and data fields. Generates shared error package with typed codes.",
+		"Platform default":           "Uses the framework's built-in error handling. No additional wrapper generated.",
 	},
 
 	// ── BACKEND: Messaging ────────────────────────────────────────────────────
 
 	"broker_tech": {
-		"Kafka":              "High-throughput distributed event streaming. Durable log with consumer groups and topic partitioning. Best for high-volume event pipelines and stream processing.",
-		"NATS":               "Lightweight, cloud-native messaging with pub/sub, queues, and JetStream persistence. Ultra-low latency. Best for microservice communication.",
-		"RabbitMQ":           "Feature-rich message broker with routing, exchanges, and dead-letter queues. AMQP protocol. Best for complex routing and task queues.",
-		"Redis Streams":      "Redis-native event streaming. Combines cache and message queue in one service. Best when Redis is already in the stack.",
-		"AWS SQS/SNS":        "AWS-managed queues (SQS) and fanout topics (SNS). Zero infrastructure management. Generates AWS SDK producers and consumers.",
-		"Google Pub/Sub":     "GCP-managed publish-subscribe messaging. Exactly-once or at-least-once delivery. Generates Pub/Sub client code.",
-		"Azure Service Bus":  "Azure-managed enterprise messaging with queues, topics, and sessions. Generates Azure SDK integration.",
-		"Pulsar":             "Multi-tenant distributed messaging with built-in geo-replication. Supports both streaming and queuing semantics.",
+		"Kafka":             "High-throughput distributed event streaming. Durable log with consumer groups and topic partitioning. Best for high-volume event pipelines and stream processing.",
+		"NATS":              "Lightweight, cloud-native messaging with pub/sub, queues, and JetStream persistence. Ultra-low latency. Best for microservice communication.",
+		"RabbitMQ":          "Feature-rich message broker with routing, exchanges, and dead-letter queues. AMQP protocol. Best for complex routing and task queues.",
+		"Redis Streams":     "Redis-native event streaming. Combines cache and message queue in one service. Best when Redis is already in the stack.",
+		"AWS SQS/SNS":       "AWS-managed queues (SQS) and fanout topics (SNS). Zero infrastructure management. Generates AWS SDK producers and consumers.",
+		"Google Pub/Sub":    "GCP-managed publish-subscribe messaging. Exactly-once or at-least-once delivery. Generates Pub/Sub client code.",
+		"Azure Service Bus": "Azure-managed enterprise messaging with queues, topics, and sessions. Generates Azure SDK integration.",
+		"Pulsar":            "Multi-tenant distributed messaging with built-in geo-replication. Supports both streaming and queuing semantics.",
 	},
 
 	// ── BACKEND: API Gateway ──────────────────────────────────────────────────
@@ -133,14 +133,14 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── BACKEND: Auth ─────────────────────────────────────────────────────────
 
 	"provider": {
-		"Self-managed":   "Your own auth service. Full control over token format and session lifecycle. Generates JWT issuance, validation middleware, and refresh token storage.",
-		"Auth0":          "Cloud-hosted identity platform. Generates Auth0 SDK integration, callback routes, and user profile sync.",
-		"Clerk":          "Developer-focused auth-as-a-service with pre-built UI components. Generates Clerk SDK wrappers.",
-		"Supabase Auth":  "Open-source BaaS auth with row-level security. Generates Supabase client setup and auth helpers.",
-		"Firebase Auth":  "Google's mobile-first auth. Generates Firebase Admin SDK integration for token verification.",
-		"Keycloak":       "Open-source identity and access management. Self-hosted or cloud. Generates OIDC/SAML configuration.",
-		"AWS Cognito":    "AWS managed user pools. Generates Cognito SDK integration and JWT verification middleware.",
-		"Other":          "Custom identity provider. Generates a generic OIDC/OAuth2 integration scaffold.",
+		"Self-managed":  "Your own auth service. Full control over token format and session lifecycle. Generates JWT issuance, validation middleware, and refresh token storage.",
+		"Auth0":         "Cloud-hosted identity platform. Generates Auth0 SDK integration, callback routes, and user profile sync.",
+		"Clerk":         "Developer-focused auth-as-a-service with pre-built UI components. Generates Clerk SDK wrappers.",
+		"Supabase Auth": "Open-source BaaS auth with row-level security. Generates Supabase client setup and auth helpers.",
+		"Firebase Auth": "Google's mobile-first auth. Generates Firebase Admin SDK integration for token verification.",
+		"Keycloak":      "Open-source identity and access management. Self-hosted or cloud. Generates OIDC/SAML configuration.",
+		"AWS Cognito":   "AWS managed user pools. Generates Cognito SDK integration and JWT verification middleware.",
+		"Other":         "Custom identity provider. Generates a generic OIDC/OAuth2 integration scaffold.",
 	},
 
 	"authz_model": {
@@ -177,13 +177,13 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── BACKEND: Security ─────────────────────────────────────────────────────
 
 	"waf_provider": {
-		"Cloudflare WAF":  "Cloudflare edge WAF with managed rules and custom policies. Blocks attacks before reaching your origin.",
-		"AWS WAF":         "AWS-native WAF for ALB, API Gateway, and CloudFront. Generates WAF ACL rules and managed rule group associations.",
-		"Cloud Armor":     "GCP DDoS protection and WAF for HTTP(S) load balancers. Generates security policy and pre-configured rules.",
-		"Azure WAF":       "Azure WAF integrated with Application Gateway or Front Door. Generates OWASP ruleset configuration.",
-		"ModSecurity":     "Open-source WAF module for Apache/Nginx. OWASP Core Rule Set support. Generates ModSecurity configuration files.",
-		"NGINX ModSec":    "ModSecurity as an NGINX dynamic module. Generates NGINX config with ModSec integration and CRS rules.",
-		"None":            "No WAF configured. Suitable for internal services or early-stage projects.",
+		"Cloudflare WAF": "Cloudflare edge WAF with managed rules and custom policies. Blocks attacks before reaching your origin.",
+		"AWS WAF":        "AWS-native WAF for ALB, API Gateway, and CloudFront. Generates WAF ACL rules and managed rule group associations.",
+		"Cloud Armor":    "GCP DDoS protection and WAF for HTTP(S) load balancers. Generates security policy and pre-configured rules.",
+		"Azure WAF":      "Azure WAF integrated with Application Gateway or Front Door. Generates OWASP ruleset configuration.",
+		"ModSecurity":    "Open-source WAF module for Apache/Nginx. OWASP Core Rule Set support. Generates ModSecurity configuration files.",
+		"NGINX ModSec":   "ModSecurity as an NGINX dynamic module. Generates NGINX config with ModSec integration and CRS rules.",
+		"None":           "No WAF configured. Suitable for internal services or early-stage projects.",
 	},
 
 	"waf_ruleset": {
@@ -194,11 +194,11 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"captcha": {
-		"hCaptcha":            "Privacy-focused CAPTCHA alternative to reCAPTCHA. Generates hCaptcha widget integration and server-side verification.",
-		"reCAPTCHA v2":        "Google's checkbox or image-challenge CAPTCHA. Visible challenge. Generates reCAPTCHA v2 widget and verification.",
-		"reCAPTCHA v3":        "Google's invisible CAPTCHA scoring users by behavior. No user challenge. Generates score-based risk assessment middleware.",
+		"hCaptcha":             "Privacy-focused CAPTCHA alternative to reCAPTCHA. Generates hCaptcha widget integration and server-side verification.",
+		"reCAPTCHA v2":         "Google's checkbox or image-challenge CAPTCHA. Visible challenge. Generates reCAPTCHA v2 widget and verification.",
+		"reCAPTCHA v3":         "Google's invisible CAPTCHA scoring users by behavior. No user challenge. Generates score-based risk assessment middleware.",
 		"Cloudflare Turnstile": "Cloudflare's privacy-respecting CAPTCHA replacement. No user friction for most users. Generates Turnstile widget and token validation.",
-		"None":                "No CAPTCHA configured.",
+		"None":                 "No CAPTCHA configured.",
 	},
 
 	"bot_protection": {
@@ -210,19 +210,19 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"rate_limit_strategy": {
-		"Token bucket (Redis)":  "Tokens replenish at a fixed rate; burst capacity allowed. Redis-backed for distributed enforcement.",
-		"Sliding window":        "Counts requests in a rolling time window. Smoother than fixed window; prevents boundary bursts.",
-		"Fixed window":          "Counts requests in discrete time windows. Simple; allows burst at window edges.",
-		"Leaky bucket":          "Requests queued and processed at a fixed rate. Smooths traffic spikes.",
-		"API Gateway":           "Delegates rate limiting to the upstream API gateway. No application-level code generated.",
-		"None":                  "No rate limiting. Suitable when rate limiting is handled at the infrastructure layer.",
+		"Token bucket (Redis)": "Tokens replenish at a fixed rate; burst capacity allowed. Redis-backed for distributed enforcement.",
+		"Sliding window":       "Counts requests in a rolling time window. Smoother than fixed window; prevents boundary bursts.",
+		"Fixed window":         "Counts requests in discrete time windows. Simple; allows burst at window edges.",
+		"Leaky bucket":         "Requests queued and processed at a fixed rate. Smooths traffic spikes.",
+		"API Gateway":          "Delegates rate limiting to the upstream API gateway. No application-level code generated.",
+		"None":                 "No rate limiting. Suitable when rate limiting is handled at the infrastructure layer.",
 	},
 
 	"rate_limit_backend": {
-		"Redis":      "Redis-backed distributed rate limit counter. Consistent across multiple app instances.",
-		"Memcached":  "Memcached-backed counter. Fast but no persistence; counters reset on restart.",
-		"In-memory":  "Per-process in-memory counter. No coordination between instances. Only suitable for single-instance deployments.",
-		"None":       "No rate limit storage. Rate limiting is disabled.",
+		"Redis":     "Redis-backed distributed rate limit counter. Consistent across multiple app instances.",
+		"Memcached": "Memcached-backed counter. Fast but no persistence; counters reset on restart.",
+		"In-memory": "Per-process in-memory counter. No coordination between instances. Only suitable for single-instance deployments.",
+		"None":      "No rate limit storage. Rate limiting is disabled.",
 	},
 
 	"ddos_protection": {
@@ -287,21 +287,21 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"protocol": {
-		"REST/JSON":          "JSON over HTTP. Default for web APIs. Generates JSON struct tags and OpenAPI schema definitions.",
-		"Protobuf":           "Binary Protocol Buffer encoding. Compact and fast. Generates .proto message definitions and compiled stubs.",
-		"Avro":               "Binary Avro encoding. Schema registered in a schema registry. Generates Avro schema files and registry-aware serializer.",
-		"MessagePack":        "Binary MessagePack encoding. JSON-compatible but more compact. Generates MessagePack codec wrappers.",
-		"Thrift":             "Apache Thrift binary encoding. Multi-language RPC and serialization. Generates .thrift IDL files and language stubs.",
-		"FlatBuffers":        "Zero-copy binary encoding. Extremely fast deserialization. Generates FlatBuffers schema and accessor code.",
-		"Cap'n Proto":        "Zero-copy, schema-based binary encoding. No parse step needed. Generates Cap'n Proto schema and bindings.",
-		"REST":               "Synchronous HTTP endpoint. Generates HTTP handler with method, path, and request/response types.",
-		"GraphQL":            "Query language for APIs. Clients specify exact data needs. Generates resolver stubs and GraphQL schema types.",
-		"gRPC":               "High-performance RPC over HTTP/2. Strong typing via Protobuf. Generates .proto service definitions and gRPC stubs.",
-		"WebSocket message":  "Bidirectional persistent connection. Real-time push and receive. Generates WebSocket handler with message dispatch.",
-		"Event":              "Async message via a broker (Kafka, RabbitMQ). Decoupled delivery. Generates producer/consumer stubs and message schemas.",
-		"WebSocket":          "Persistent bidirectional connection. Real-time server-push. Generates WebSocket upgrade handler.",
-		"Webhook":            "Server pushes events to a registered client URL. Generates webhook dispatcher and HMAC signature validation.",
-		"SOAP":               "XML-based web service protocol. Generates WSDL definition and SOAP envelope binding code.",
+		"REST/JSON":         "JSON over HTTP. Default for web APIs. Generates JSON struct tags and OpenAPI schema definitions.",
+		"Protobuf":          "Binary Protocol Buffer encoding. Compact and fast. Generates .proto message definitions and compiled stubs.",
+		"Avro":              "Binary Avro encoding. Schema registered in a schema registry. Generates Avro schema files and registry-aware serializer.",
+		"MessagePack":       "Binary MessagePack encoding. JSON-compatible but more compact. Generates MessagePack codec wrappers.",
+		"Thrift":            "Apache Thrift binary encoding. Multi-language RPC and serialization. Generates .thrift IDL files and language stubs.",
+		"FlatBuffers":       "Zero-copy binary encoding. Extremely fast deserialization. Generates FlatBuffers schema and accessor code.",
+		"Cap'n Proto":       "Zero-copy, schema-based binary encoding. No parse step needed. Generates Cap'n Proto schema and bindings.",
+		"REST":              "Synchronous HTTP endpoint. Generates HTTP handler with method, path, and request/response types.",
+		"GraphQL":           "Query language for APIs. Clients specify exact data needs. Generates resolver stubs and GraphQL schema types.",
+		"gRPC":              "High-performance RPC over HTTP/2. Strong typing via Protobuf. Generates .proto service definitions and gRPC stubs.",
+		"WebSocket message": "Bidirectional persistent connection. Real-time push and receive. Generates WebSocket handler with message dispatch.",
+		"Event":             "Async message via a broker (Kafka, RabbitMQ). Decoupled delivery. Generates producer/consumer stubs and message schemas.",
+		"WebSocket":         "Persistent bidirectional connection. Real-time server-push. Generates WebSocket upgrade handler.",
+		"Webhook":           "Server pushes events to a registered client URL. Generates webhook dispatcher and HMAC signature validation.",
+		"SOAP":              "XML-based web service protocol. Generates WSDL definition and SOAP envelope binding code.",
 	},
 
 	"http_method": {
@@ -319,20 +319,20 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"grpc_stream_type": {
-		"Unary":              "Single request, single response. Standard function call semantics. Default for most gRPC methods.",
-		"Server stream":      "Single request, stream of responses from the server. Good for live feeds and large datasets.",
-		"Client stream":      "Stream of requests from the client, single aggregated response. Good for batch uploads.",
-		"Bidirectional":      "Both client and server stream simultaneously. Full-duplex. Used for chat and live collaboration.",
-		"Server streaming":   "Single request, stream of responses. Good for progress notifications.",
-		"Client streaming":   "Stream of requests, single response. Good for batch uploads or sensor data ingestion.",
+		"Unary":            "Single request, single response. Standard function call semantics. Default for most gRPC methods.",
+		"Server stream":    "Single request, stream of responses from the server. Good for live feeds and large datasets.",
+		"Client stream":    "Stream of requests from the client, single aggregated response. Good for batch uploads.",
+		"Bidirectional":    "Both client and server stream simultaneously. Full-duplex. Used for chat and live collaboration.",
+		"Server streaming": "Single request, stream of responses. Good for progress notifications.",
+		"Client streaming": "Stream of requests, single response. Good for batch uploads or sensor data ingestion.",
 	},
 
 	"ws_direction": {
-		"Client→Server":   "Messages flow from client to server only. Server processes incoming events.",
-		"Server→Client":   "Messages pushed from server to client only. Server-side broadcast or live updates.",
-		"Bidirectional":   "Both client and server send messages freely. Used for chat, collaborative editing, and real-time games.",
-		"Send":            "This endpoint sends messages to connected clients.",
-		"Receive":         "This endpoint receives messages from clients.",
+		"Client→Server": "Messages flow from client to server only. Server processes incoming events.",
+		"Server→Client": "Messages pushed from server to client only. Server-side broadcast or live updates.",
+		"Bidirectional": "Both client and server send messages freely. Used for chat, collaborative editing, and real-time games.",
+		"Send":          "This endpoint sends messages to connected clients.",
+		"Receive":       "This endpoint receives messages from clients.",
 	},
 
 	"pagination": {
@@ -351,11 +351,11 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"deprecation": {
-		"None":                    "No deprecation notice. This API version is current.",
-		"Sunset header":           "HTTP Sunset header added to responses announcing the removal date. RFC 8594 standard.",
+		"None":                     "No deprecation notice. This API version is current.",
+		"Sunset header":            "HTTP Sunset header added to responses announcing the removal date. RFC 8594 standard.",
 		"Versioned removal notice": "Deprecation documented in API changelog with a specific removal version.",
-		"Changelog entry":         "Deprecation noted in the project CHANGELOG only. No runtime header.",
-		"Custom":                  "Custom deprecation strategy. Generates a placeholder for your deprecation logic.",
+		"Changelog entry":          "Deprecation noted in the project CHANGELOG only. No runtime header.",
+		"Custom":                   "Custom deprecation strategy. Generates a placeholder for your deprecation logic.",
 	},
 
 	"tls_mode": {
@@ -370,24 +370,24 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"auth_mechanism": {
-		"API Key":   "Static secret key sent in a header or query parameter. Generates API key validation middleware.",
-		"OAuth2":    "OAuth 2.0 token-based auth. Generates OAuth2 client with token refresh logic.",
-		"Bearer":    "JWT or opaque bearer token in the Authorization header. Generates token validation middleware.",
-		"Basic":     "Base64-encoded username:password. Only use over HTTPS. Generates basic auth decoder.",
-		"mTLS":      "Mutual TLS certificate authentication. Generates TLS config with client cert verification.",
-		"None":      "No authentication on this external API. Suitable for public APIs.",
+		"API Key": "Static secret key sent in a header or query parameter. Generates API key validation middleware.",
+		"OAuth2":  "OAuth 2.0 token-based auth. Generates OAuth2 client with token refresh logic.",
+		"Bearer":  "JWT or opaque bearer token in the Authorization header. Generates token validation middleware.",
+		"Basic":   "Base64-encoded username:password. Only use over HTTPS. Generates basic auth decoder.",
+		"mTLS":    "Mutual TLS certificate authentication. Generates TLS config with client cert verification.",
+		"None":    "No authentication on this external API. Suitable for public APIs.",
 	},
 
 	"failure_strategy": {
-		"Retry 3x":        "Retry failed requests up to three times with exponential backoff.",
-		"Retry 5x":        "Retry failed requests up to five times. More aggressive recovery.",
-		"Immediate fail":  "No retries. Return error on first failure. Application handles fallback.",
-		"None":            "No explicit failure strategy. Framework defaults apply.",
-		"Circuit breaker": "Opens circuit after failure threshold, preventing further calls until it resets.",
-		"Fallback":        "On failure, return a cached response or default value.",
+		"Retry 3x":           "Retry failed requests up to three times with exponential backoff.",
+		"Retry 5x":           "Retry failed requests up to five times. More aggressive recovery.",
+		"Immediate fail":     "No retries. Return error on first failure. Application handles fallback.",
+		"None":               "No explicit failure strategy. Framework defaults apply.",
+		"Circuit breaker":    "Opens circuit after failure threshold, preventing further calls until it resets.",
+		"Fallback":           "On failure, return a cached response or default value.",
 		"Retry with backoff": "Retry with increasing delay between attempts. Reduces pressure on a struggling service.",
-		"Timeout":         "Fail after a configured timeout. Prevents slow external calls from blocking the application.",
-		"Timeout + fail":  "Apply a timeout; on expiry fail immediately without retries.",
+		"Timeout":            "Fail after a configured timeout. Prevents slow external calls from blocking the application.",
+		"Timeout + fail":     "Apply a timeout; on expiry fail immediately without retries.",
 	},
 
 	// ── FRONTEND: Tech ────────────────────────────────────────────────────────
@@ -408,14 +408,14 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"meta_framework": {
-		"Next.js":          "React meta-framework. SSR, SSG, ISR, and file-based routing. Generates app router, API routes, and deployment config.",
-		"Nuxt":             "Vue meta-framework. SSR, SSG, and file-based routing. Generates Nuxt config, composables, and server routes.",
-		"SvelteKit":        "Svelte meta-framework. SSR and file-based routing with minimal JS. Generates SvelteKit routes and server-load functions.",
-		"Remix":            "React meta-framework focused on web fundamentals. Nested routing and form actions. Generates loaders and actions.",
-		"Astro":            "Islands architecture for content-heavy sites. Minimal client JS. Generates Astro pages with component islands.",
-		"TanStack Start":   "React meta-framework from the TanStack team. Type-safe routing and server functions.",
+		"Next.js":           "React meta-framework. SSR, SSG, ISR, and file-based routing. Generates app router, API routes, and deployment config.",
+		"Nuxt":              "Vue meta-framework. SSR, SSG, and file-based routing. Generates Nuxt config, composables, and server routes.",
+		"SvelteKit":         "Svelte meta-framework. SSR and file-based routing with minimal JS. Generates SvelteKit routes and server-load functions.",
+		"Remix":             "React meta-framework focused on web fundamentals. Nested routing and form actions. Generates loaders and actions.",
+		"Astro":             "Islands architecture for content-heavy sites. Minimal client JS. Generates Astro pages with component islands.",
+		"TanStack Start":    "React meta-framework from the TanStack team. Type-safe routing and server functions.",
 		"Angular Universal": "Server-side rendering for Angular. Generates SSR server and TransferState setup.",
-		"None":             "No meta-framework. Pure client-side rendering. Generates a SPA.",
+		"None":              "No meta-framework. Pure client-side rendering. Generates a SPA.",
 	},
 
 	"pkg_manager": {
@@ -446,16 +446,16 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"state_mgmt": {
-		"Redux Toolkit":  "Opinionated Redux with reducers, actions, and thunks. Best for large apps with complex shared state.",
-		"Zustand":        "Lightweight state management with hooks. Minimal boilerplate. Generates typed stores.",
-		"Pinia":          "Vue's official state management. Composition API-based. Generates typed stores with actions and getters.",
-		"MobX":           "Observable-based reactive state. Automatically tracks dependencies. Generates observable stores.",
-		"Jotai":          "Atomic state management for React. Each atom is a unit of state. Generates typed atoms.",
-		"Valtio":         "Proxy-based state with automatic re-renders. Minimal API. Generates state objects with snapshot reads.",
-		"Context API":    "React's built-in context. Simple; no extra dependencies. Suitable for low-frequency state updates.",
-		"XState":         "Finite state machine library. Explicit states and transitions. Generates machine definitions.",
-		"NgRx":           "Redux-inspired state management for Angular. Actions, reducers, effects, and selectors.",
-		"None":           "No dedicated state management library. Component-local state only.",
+		"Redux Toolkit": "Opinionated Redux with reducers, actions, and thunks. Best for large apps with complex shared state.",
+		"Zustand":       "Lightweight state management with hooks. Minimal boilerplate. Generates typed stores.",
+		"Pinia":         "Vue's official state management. Composition API-based. Generates typed stores with actions and getters.",
+		"MobX":          "Observable-based reactive state. Automatically tracks dependencies. Generates observable stores.",
+		"Jotai":         "Atomic state management for React. Each atom is a unit of state. Generates typed atoms.",
+		"Valtio":        "Proxy-based state with automatic re-renders. Minimal API. Generates state objects with snapshot reads.",
+		"Context API":   "React's built-in context. Simple; no extra dependencies. Suitable for low-frequency state updates.",
+		"XState":        "Finite state machine library. Explicit states and transitions. Generates machine definitions.",
+		"NgRx":          "Redux-inspired state management for Angular. Actions, reducers, effects, and selectors.",
+		"None":          "No dedicated state management library. Component-local state only.",
 	},
 
 	"data_fetching": {
@@ -488,10 +488,10 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"realtime": {
-		"WebSocket":  "Persistent bidirectional connection. Low latency, true push. Generates WebSocket client with reconnect logic.",
-		"SSE":        "Server-Sent Events. Server pushes; client reads. Simpler than WebSocket for one-way streams.",
-		"Polling":    "Periodic HTTP requests to check for updates. Simple; no persistent connection.",
-		"None":       "No real-time data channel. Data refreshed on explicit user action only.",
+		"WebSocket": "Persistent bidirectional connection. Low latency, true push. Generates WebSocket client with reconnect logic.",
+		"SSE":       "Server-Sent Events. Server pushes; client reads. Simpler than WebSocket for one-way streams.",
+		"Polling":   "Periodic HTTP requests to check for updates. Simple; no persistent connection.",
+		"None":      "No real-time data channel. Data refreshed on explicit user action only.",
 	},
 
 	"auth_flow": {
@@ -503,19 +503,19 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"pwa_support": {
-		"None":                            "No PWA features. Standard web application.",
+		"None":                              "No PWA features. Standard web application.",
 		"Basic (manifest + service worker)": "Web app manifest and basic service worker for install prompt and offline shell. Generates manifest.json and SW registration.",
-		"Full offline":                    "Comprehensive offline-first PWA. Generates service worker with cache strategies (Workbox) for full offline functionality.",
-		"Push notifications":              "Service worker with Web Push API. Generates push subscription management and notification display logic.",
+		"Full offline":                      "Comprehensive offline-first PWA. Generates service worker with cache strategies (Workbox) for full offline functionality.",
+		"Push notifications":                "Service worker with Web Push API. Generates push subscription management and notification display logic.",
 	},
 
 	"image_opt": {
-		"Next/Image (built-in)":  "Next.js Image component with automatic resizing, lazy loading, and WebP conversion. Zero extra cost for Next.js projects.",
-		"Cloudinary":             "Cloud-based image and video management. Generates Cloudinary SDK integration with transformation URL helpers.",
-		"Imgix":                  "Real-time image processing CDN. URL-based transformations. Generates Imgix URL builder helpers.",
-		"Sharp (self-hosted)":    "Node.js image processing library for server-side resizing and format conversion. Generates Sharp transform pipeline.",
-		"CDN transform":          "Use CDN-native image transformation (Cloudflare Images, BunnyCDN). No application-level code needed.",
-		"None":                   "No image optimization. Images served as-is.",
+		"Next/Image (built-in)": "Next.js Image component with automatic resizing, lazy loading, and WebP conversion. Zero extra cost for Next.js projects.",
+		"Cloudinary":            "Cloud-based image and video management. Generates Cloudinary SDK integration with transformation URL helpers.",
+		"Imgix":                 "Real-time image processing CDN. URL-based transformations. Generates Imgix URL builder helpers.",
+		"Sharp (self-hosted)":   "Node.js image processing library for server-side resizing and format conversion. Generates Sharp transform pipeline.",
+		"CDN transform":         "Use CDN-native image transformation (Cloudflare Images, BunnyCDN). No application-level code needed.",
+		"None":                  "No image optimization. Images served as-is.",
 	},
 
 	"error_boundary": {
@@ -542,11 +542,11 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"border_radius": {
-		"Sharp (0)":    "Zero border radius. Hard-edged UI. Technical, developer-tool aesthetic.",
-		"Subtle (4px)": "Very slight rounding. Softens edges without looking rounded. Neutral; works across most design systems.",
+		"Sharp (0)":     "Zero border radius. Hard-edged UI. Technical, developer-tool aesthetic.",
+		"Subtle (4px)":  "Very slight rounding. Softens edges without looking rounded. Neutral; works across most design systems.",
 		"Rounded (8px)": "Moderate rounding. Friendly and approachable. Popular in consumer SaaS.",
-		"Pill (999px)": "Fully rounded buttons and badges. Playful, modern aesthetic.",
-		"Custom":       "Custom border-radius value. Specify your own design token.",
+		"Pill (999px)":  "Fully rounded buttons and badges. Playful, modern aesthetic.",
+		"Custom":        "Custom border-radius value. Specify your own design token.",
 	},
 
 	"spacing": {
@@ -556,8 +556,8 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"elevation": {
-		"Flat":     "No shadows or depth. Borders separate elements. Clean, minimal aesthetic.",
-		"Subtle":   "Soft shadows for depth cues. Subtle layer separation without heavy drop shadows.",
+		"Flat":      "No shadows or depth. Borders separate elements. Clean, minimal aesthetic.",
+		"Subtle":    "Soft shadows for depth cues. Subtle layer separation without heavy drop shadows.",
 		"Prominent": "Strong shadows and depth. Cards and modals clearly float above the background.",
 	},
 
@@ -568,41 +568,41 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"vibe": {
-		"Professional":  "Clean, corporate aesthetic. Neutral palette. High information density. Suited for enterprise SaaS.",
-		"Friendly":      "Warm colors, rounded elements, approachable typography. Suited for consumer apps.",
-		"Playful":       "Bold colors, expressive animations, personality-forward. Suited for consumer products.",
-		"Minimal":       "Extensive whitespace, limited color, restrained typography. Suited for content sites.",
-		"Technical":     "Dark background, monospace accents, data-dense layout. Developer-facing tools.",
-		"Custom":        "Custom vibe. Describe your design intent in the description field.",
+		"Professional": "Clean, corporate aesthetic. Neutral palette. High information density. Suited for enterprise SaaS.",
+		"Friendly":     "Warm colors, rounded elements, approachable typography. Suited for consumer apps.",
+		"Playful":      "Bold colors, expressive animations, personality-forward. Suited for consumer products.",
+		"Minimal":      "Extensive whitespace, limited color, restrained typography. Suited for content sites.",
+		"Technical":    "Dark background, monospace accents, data-dense layout. Developer-facing tools.",
+		"Custom":       "Custom vibe. Describe your design intent in the description field.",
 	},
 
 	"font": {
-		"Inter":           "Highly legible geometric sans-serif. Excellent screen rendering. Default for many design systems.",
-		"Geist":           "Vercel's clean sans-serif. Optimized for developer tools and dashboards.",
-		"DM Sans":         "Rounded, friendly geometric sans-serif. Warm and modern.",
-		"System":          "Platform system font stack. Zero download. Fastest loading.",
-		"Custom":          "Custom font selection. Specify font-family, weights, and load strategy.",
+		"Inter":   "Highly legible geometric sans-serif. Excellent screen rendering. Default for many design systems.",
+		"Geist":   "Vercel's clean sans-serif. Optimized for developer tools and dashboards.",
+		"DM Sans": "Rounded, friendly geometric sans-serif. Warm and modern.",
+		"System":  "Platform system font stack. Zero download. Fastest loading.",
+		"Custom":  "Custom font selection. Specify font-family, weights, and load strategy.",
 	},
 
 	// ── FRONTEND: Analytics ───────────────────────────────────────────────────
 
 	"analytics": {
-		"PostHog":               "Open-source product analytics with feature flags, session recording, and funnel analysis.",
-		"Google Analytics 4":    "Google's event-based analytics platform. Deep integration with Google Ads. Generates GA4 gtag setup.",
-		"Plausible":             "Privacy-first, lightweight analytics. GDPR-compliant. No cookies. Generates script snippet.",
-		"Mixpanel":              "Event-based user analytics with cohort analysis. Generates Mixpanel SDK init and event helpers.",
-		"Segment":               "Customer data platform. Routes events to multiple analytics destinations. Generates Segment analytics.js setup.",
-		"Custom":                "Custom analytics integration. Generates typed event tracking helpers.",
-		"None":                  "No analytics configured.",
+		"PostHog":            "Open-source product analytics with feature flags, session recording, and funnel analysis.",
+		"Google Analytics 4": "Google's event-based analytics platform. Deep integration with Google Ads. Generates GA4 gtag setup.",
+		"Plausible":          "Privacy-first, lightweight analytics. GDPR-compliant. No cookies. Generates script snippet.",
+		"Mixpanel":           "Event-based user analytics with cohort analysis. Generates Mixpanel SDK init and event helpers.",
+		"Segment":            "Customer data platform. Routes events to multiple analytics destinations. Generates Segment analytics.js setup.",
+		"Custom":             "Custom analytics integration. Generates typed event tracking helpers.",
+		"None":               "No analytics configured.",
 	},
 
 	"telemetry": {
-		"Sentry":              "Error tracking and performance monitoring. Captures exceptions with full stack traces and context. Generates Sentry SDK init.",
-		"Datadog RUM":         "Real User Monitoring from Datadog. Tracks page load, errors, and user interactions. Generates Datadog RUM init.",
-		"LogRocket":           "Session replay with error tracking. Shows exactly what users experienced when errors occurred.",
-		"New Relic Browser":   "Full-stack observability with browser agent. Tracks page performance and JS errors.",
-		"Custom":              "Custom frontend error tracking. Generates typed error reporter scaffold.",
-		"None":                "No frontend RUM or error tracking.",
+		"Sentry":            "Error tracking and performance monitoring. Captures exceptions with full stack traces and context. Generates Sentry SDK init.",
+		"Datadog RUM":       "Real User Monitoring from Datadog. Tracks page load, errors, and user interactions. Generates Datadog RUM init.",
+		"LogRocket":         "Session replay with error tracking. Shows exactly what users experienced when errors occurred.",
+		"New Relic Browser": "Full-stack observability with browser agent. Tracks page performance and JS errors.",
+		"Custom":            "Custom frontend error tracking. Generates typed error reporter scaffold.",
+		"None":              "No frontend RUM or error tracking.",
 	},
 
 	// ── FRONTEND: Navigation ──────────────────────────────────────────────────
@@ -656,45 +656,45 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── FRONTEND: i18n ────────────────────────────────────────────────────────
 
 	"translation_strategy": {
-		"i18n library":  "Dedicated i18n library (next-intl, vue-i18n, i18next). Generates library config, translation files, and locale switching.",
-		"Static files":  "JSON translation files loaded statically. Simple; no runtime dependency on i18n library.",
-		"CDN":           "Translation strings fetched from a CDN or localization platform (Lokalise, Phrase). Generates fetch-on-load logic.",
-		"Custom":        "Custom translation mechanism. Generates a typed translation function scaffold.",
+		"i18n library": "Dedicated i18n library (next-intl, vue-i18n, i18next). Generates library config, translation files, and locale switching.",
+		"Static files": "JSON translation files loaded statically. Simple; no runtime dependency on i18n library.",
+		"CDN":          "Translation strings fetched from a CDN or localization platform (Lokalise, Phrase). Generates fetch-on-load logic.",
+		"Custom":       "Custom translation mechanism. Generates a typed translation function scaffold.",
 	},
 
 	"timezone_handling": {
-		"Server-side":    "Timestamps stored and formatted on the server. Consistent across all clients.",
-		"Client-side":    "Timestamps formatted in the user's local timezone by the browser.",
-		"Both":           "Server normalizes to UTC; client formats to local timezone. Best of both worlds.",
-		"UTC always":     "All dates displayed in UTC. No timezone conversion. Suitable for developer tools.",
+		"Server-side":     "Timestamps stored and formatted on the server. Consistent across all clients.",
+		"Client-side":     "Timestamps formatted in the user's local timezone by the browser.",
+		"Both":            "Server normalizes to UTC; client formats to local timezone. Best of both worlds.",
+		"UTC always":      "All dates displayed in UTC. No timezone conversion. Suitable for developer tools.",
 		"User preference": "User sets their preferred timezone in profile settings.",
 	},
 
 	// ── INFRASTRUCTURE: Networking ────────────────────────────────────────────
 
 	"dns_provider": {
-		"Cloudflare":   "DNS with DDoS protection and edge caching. Generates Terraform Cloudflare DNS resources.",
-		"Route53":      "AWS Route 53. Tight integration with AWS services. Generates Terraform aws_route53_zone resources.",
-		"Cloud DNS":    "Google Cloud DNS. Generates Terraform google_dns_managed_zone resources.",
-		"Azure DNS":    "Azure DNS. Generates Terraform azurerm_dns_zone resources.",
-		"Other":        "Custom DNS provider. Generates placeholder DNS configuration.",
+		"Cloudflare": "DNS with DDoS protection and edge caching. Generates Terraform Cloudflare DNS resources.",
+		"Route53":    "AWS Route 53. Tight integration with AWS services. Generates Terraform aws_route53_zone resources.",
+		"Cloud DNS":  "Google Cloud DNS. Generates Terraform google_dns_managed_zone resources.",
+		"Azure DNS":  "Azure DNS. Generates Terraform azurerm_dns_zone resources.",
+		"Other":      "Custom DNS provider. Generates placeholder DNS configuration.",
 	},
 
 	"tls_ssl": {
-		"Let's Encrypt":  "Free automated TLS certificates via ACME. Generates cert-manager or Caddy configuration.",
-		"Cloudflare":     "Cloudflare-managed TLS. Generates Cloudflare SSL configuration and origin certificate.",
-		"ACM":            "AWS Certificate Manager. Free TLS for AWS resources. Generates Terraform aws_acm_certificate resources.",
-		"Manual":         "Manually managed certificates. Generates TLS secret mounts and renewal reminder configuration.",
-		"None (dev)":     "No TLS. HTTP only. For local development only.",
+		"Let's Encrypt": "Free automated TLS certificates via ACME. Generates cert-manager or Caddy configuration.",
+		"Cloudflare":    "Cloudflare-managed TLS. Generates Cloudflare SSL configuration and origin certificate.",
+		"ACM":           "AWS Certificate Manager. Free TLS for AWS resources. Generates Terraform aws_acm_certificate resources.",
+		"Manual":        "Manually managed certificates. Generates TLS secret mounts and renewal reminder configuration.",
+		"None (dev)":    "No TLS. HTTP only. For local development only.",
 	},
 
 	"cdn": {
-		"Cloudflare CDN":   "Cloudflare's global edge network. Caches static assets. Generates Cloudflare page rules and cache config.",
-		"AWS CloudFront":   "AWS CDN. Tight S3 and ALB integration. Generates Terraform CloudFront distribution resources.",
-		"GCP Cloud CDN":    "GCP CDN for Load Balancer backends. Generates Terraform backend service with CDN policy.",
-		"Azure CDN":        "Azure CDN profiles. Generates Terraform azurerm_cdn_profile resources.",
-		"BunnyCDN":         "Cost-effective CDN with image optimization and edge scripting.",
-		"None":             "No CDN. Assets served directly from origin.",
+		"Cloudflare CDN": "Cloudflare's global edge network. Caches static assets. Generates Cloudflare page rules and cache config.",
+		"AWS CloudFront": "AWS CDN. Tight S3 and ALB integration. Generates Terraform CloudFront distribution resources.",
+		"GCP Cloud CDN":  "GCP CDN for Load Balancer backends. Generates Terraform backend service with CDN policy.",
+		"Azure CDN":      "Azure CDN profiles. Generates Terraform azurerm_cdn_profile resources.",
+		"BunnyCDN":       "Cost-effective CDN with image optimization and edge scripting.",
+		"None":           "No CDN. Assets served directly from origin.",
 	},
 
 	"domain_strategy": {
@@ -712,45 +712,45 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"cors_strategy": {
-		"Permissive":      "Allow all origins (*). Suitable for public APIs with no sensitive data.",
+		"Permissive":       "Allow all origins (*). Suitable for public APIs with no sensitive data.",
 		"Strict allowlist": "Only explicitly listed origins are allowed. Generates allowed-origins environment variable.",
-		"Same-origin":     "Requests only allowed from the same origin. Strictest; no cross-origin access.",
+		"Same-origin":      "Requests only allowed from the same origin. Strictest; no cross-origin access.",
 	},
 
 	"ssl_cert": {
-		"cert-manager (k8s)":   "Kubernetes cert-manager operator. Automatically provisions and renews Let's Encrypt certificates.",
-		"Caddy (auto)":         "Caddy web server with automatic HTTPS. Handles certificate provisioning and renewal.",
-		"AWS ACM":              "AWS Certificate Manager. Generates ACM certificate request and DNS validation records.",
-		"Manual rotation":      "Certificates managed and rotated manually or by a custom script.",
-		"Cloudflare (edge)":    "Cloudflare manages TLS at the edge. Origin certificate optional.",
-		"None":                 "No SSL certificate management configured.",
+		"cert-manager (k8s)": "Kubernetes cert-manager operator. Automatically provisions and renews Let's Encrypt certificates.",
+		"Caddy (auto)":       "Caddy web server with automatic HTTPS. Handles certificate provisioning and renewal.",
+		"AWS ACM":            "AWS Certificate Manager. Generates ACM certificate request and DNS validation records.",
+		"Manual rotation":    "Certificates managed and rotated manually or by a custom script.",
+		"Cloudflare (edge)":  "Cloudflare manages TLS at the edge. Origin certificate optional.",
+		"None":               "No SSL certificate management configured.",
 	},
 
 	// ── INFRASTRUCTURE: CI/CD ─────────────────────────────────────────────────
 
 	"deploy_strategy": {
-		"Rolling":     "Gradually replaces old instances with new ones. Zero downtime. Some versions run simultaneously briefly.",
-		"Blue-green":  "Two identical environments; traffic switches instantly. Zero downtime. Easy rollback.",
-		"Canary":      "Small percentage of traffic routed to new version first. Monitors for errors before full rollout.",
-		"Recreate":    "Old version stopped before new version starts. Brief downtime. Simplest strategy.",
+		"Rolling":    "Gradually replaces old instances with new ones. Zero downtime. Some versions run simultaneously briefly.",
+		"Blue-green": "Two identical environments; traffic switches instantly. Zero downtime. Easy rollback.",
+		"Canary":     "Small percentage of traffic routed to new version first. Monitors for errors before full rollout.",
+		"Recreate":   "Old version stopped before new version starts. Brief downtime. Simplest strategy.",
 	},
 
 	"iac_tool": {
-		"Terraform":   "HashiCorp's declarative IaC. Provider-agnostic. Generates .tf files for all infrastructure with state management.",
-		"Pulumi":      "IaC using TypeScript, Python, or Go. Generates Pulumi stacks with typed infrastructure components.",
-		"CDK":         "AWS Cloud Development Kit. Define infrastructure in TypeScript/Python against AWS constructs.",
-		"Ansible":     "Agentless configuration management via YAML playbooks. Generates Ansible roles and inventory.",
-		"Helm":        "Kubernetes package manager. Generates Helm chart templates and values.yaml.",
-		"None":        "No IaC tooling. Infrastructure managed manually.",
+		"Terraform": "HashiCorp's declarative IaC. Provider-agnostic. Generates .tf files for all infrastructure with state management.",
+		"Pulumi":    "IaC using TypeScript, Python, or Go. Generates Pulumi stacks with typed infrastructure components.",
+		"CDK":       "AWS Cloud Development Kit. Define infrastructure in TypeScript/Python against AWS constructs.",
+		"Ansible":   "Agentless configuration management via YAML playbooks. Generates Ansible roles and inventory.",
+		"Helm":      "Kubernetes package manager. Generates Helm chart templates and values.yaml.",
+		"None":      "No IaC tooling. Infrastructure managed manually.",
 	},
 
 	"registry": {
-		"ECR":            "AWS Elastic Container Registry. Tight IAM integration. Generates ECR repository and push permissions.",
-		"GCR/Artifact":   "Google Container Registry or Artifact Registry. Generates GCP service account and push config.",
-		"ACR":            "Azure Container Registry. Generates Azure managed identity and ACR pull config.",
-		"Docker Hub":     "Public/private Docker Hub registry. Generates docker login step in CI pipeline.",
-		"GHCR":           "GitHub Container Registry. Free for public images; integrated with GitHub Actions.",
-		"Self-hosted":    "Self-hosted registry (Harbor, Nexus). Generates registry credentials and trust config.",
+		"ECR":          "AWS Elastic Container Registry. Tight IAM integration. Generates ECR repository and push permissions.",
+		"GCR/Artifact": "Google Container Registry or Artifact Registry. Generates GCP service account and push config.",
+		"ACR":          "Azure Container Registry. Generates Azure managed identity and ACR pull config.",
+		"Docker Hub":   "Public/private Docker Hub registry. Generates docker login step in CI pipeline.",
+		"GHCR":         "GitHub Container Registry. Free for public images; integrated with GitHub Actions.",
+		"Self-hosted":  "Self-hosted registry (Harbor, Nexus). Generates registry credentials and trust config.",
 	},
 
 	"secrets_mgmt": {
@@ -773,22 +773,22 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── INFRASTRUCTURE: Compute ───────────────────────────────────────────────
 
 	"compute_env": {
-		"Bare Metal":            "Physical servers without virtualization. Maximum performance and I/O throughput. Generates server provisioning scripts.",
-		"VM":                    "Virtual machines on cloud or on-premises. Familiar deployment model. Generates Terraform VM resources.",
-		"Containers (Docker)":   "Docker containers on a single host or cluster. Portable and reproducible. Generates Dockerfiles.",
-		"Kubernetes":            "Container orchestration at scale. Self-healing, autoscaling. Generates Kubernetes manifests.",
-		"Serverless (FaaS)":     "Functions invoked on demand. No server management. Generates Lambda/Cloud Functions handlers.",
-		"PaaS":                  "Platform as a Service. Push to deploy; infrastructure abstracted. Generates platform config files.",
+		"Bare Metal":          "Physical servers without virtualization. Maximum performance and I/O throughput. Generates server provisioning scripts.",
+		"VM":                  "Virtual machines on cloud or on-premises. Familiar deployment model. Generates Terraform VM resources.",
+		"Containers (Docker)": "Docker containers on a single host or cluster. Portable and reproducible. Generates Dockerfiles.",
+		"Kubernetes":          "Container orchestration at scale. Self-healing, autoscaling. Generates Kubernetes manifests.",
+		"Serverless (FaaS)":   "Functions invoked on demand. No server management. Generates Lambda/Cloud Functions handlers.",
+		"PaaS":                "Platform as a Service. Push to deploy; infrastructure abstracted. Generates platform config files.",
 	},
 
 	"cloud_provider": {
-		"AWS":              "Amazon Web Services. Widest service catalog. Generates Terraform AWS resources and IAM configuration.",
-		"GCP":              "Google Cloud Platform. Strong in data analytics and ML. Generates Terraform GCP resources.",
-		"Azure":            "Microsoft Azure. Strong enterprise and Active Directory integration. Generates Terraform Azure resources.",
-		"Cloudflare":       "Cloudflare's edge platform (Workers, R2, D1). Generates Wrangler config and edge function scaffolding.",
-		"Hetzner":          "Cost-effective European cloud. VMs, dedicated servers. Generates Terraform Hetzner resources.",
-		"Self-hosted":      "On-premises or co-located servers. Full control. Generates Ansible playbooks.",
-		"Other (specify)":  "Custom cloud provider. Generates generic infrastructure configuration placeholders.",
+		"AWS":             "Amazon Web Services. Widest service catalog. Generates Terraform AWS resources and IAM configuration.",
+		"GCP":             "Google Cloud Platform. Strong in data analytics and ML. Generates Terraform GCP resources.",
+		"Azure":           "Microsoft Azure. Strong enterprise and Active Directory integration. Generates Terraform Azure resources.",
+		"Cloudflare":      "Cloudflare's edge platform (Workers, R2, D1). Generates Wrangler config and edge function scaffolding.",
+		"Hetzner":         "Cost-effective European cloud. VMs, dedicated servers. Generates Terraform Hetzner resources.",
+		"Self-hosted":     "On-premises or co-located servers. Full control. Generates Ansible playbooks.",
+		"Other (specify)": "Custom cloud provider. Generates generic infrastructure configuration placeholders.",
 	},
 
 	"orchestrator": {
@@ -837,11 +837,11 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"error_tracking": {
-		"Sentry":    "Error tracking with full stack traces, breadcrumbs, and context. Generates Sentry SDK init.",
-		"Datadog":   "Datadog error tracking integrated with APM and logs.",
-		"Rollbar":   "Real-time error monitoring with deployment tracking. Generates Rollbar SDK init.",
-		"Built-in":  "Platform or framework built-in error logging (CloudWatch, GCP Error Reporting). No extra dependency.",
-		"None":      "No error tracking configured.",
+		"Sentry":   "Error tracking with full stack traces, breadcrumbs, and context. Generates Sentry SDK init.",
+		"Datadog":  "Datadog error tracking integrated with APM and logs.",
+		"Rollbar":  "Real-time error monitoring with deployment tracking. Generates Rollbar SDK init.",
+		"Built-in": "Platform or framework built-in error logging (CloudWatch, GCP Error Reporting). No extra dependency.",
+		"None":     "No error tracking configured.",
 	},
 
 	"health_checks": {
@@ -850,13 +850,13 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"alerting": {
-		"PagerDuty":        "On-call incident management. Generates PagerDuty integration key and escalation policy.",
-		"OpsGenie":         "Atlassian alert management and on-call scheduling. Generates OpsGenie API integration.",
-		"Alertmanager":     "Prometheus Alertmanager. Routes alerts to receivers (Slack, email, PagerDuty). Generates alertmanager.yml.",
-		"Datadog Monitors": "Datadog's built-in alerting on metrics and logs. Generates monitor Terraform resources.",
+		"PagerDuty":         "On-call incident management. Generates PagerDuty integration key and escalation policy.",
+		"OpsGenie":          "Atlassian alert management and on-call scheduling. Generates OpsGenie API integration.",
+		"Alertmanager":      "Prometheus Alertmanager. Routes alerts to receivers (Slack, email, PagerDuty). Generates alertmanager.yml.",
+		"Datadog Monitors":  "Datadog's built-in alerting on metrics and logs. Generates monitor Terraform resources.",
 		"CloudWatch Alarms": "AWS CloudWatch threshold-based alarms. Generates Terraform CloudWatch alarm resources.",
-		"Slack webhooks":   "Simple Slack notifications for alerts. No on-call management. Generates Slack webhook integration.",
-		"None":             "No alerting configured.",
+		"Slack webhooks":    "Simple Slack notifications for alerts. No on-call management. Generates Slack webhook integration.",
+		"None":              "No alerting configured.",
 	},
 
 	"log_retention": {
@@ -870,31 +870,31 @@ var fieldDescriptions = map[string]map[string]string{
 	// ── CROSSCUT: Testing ─────────────────────────────────────────────────────
 
 	"unit": {
-		"Go testing":  "Go's built-in testing package. Table-driven tests. Generates _test.go files with TestXxx functions.",
-		"Testify":     "Go test assertions and mocking. Generates test files using assert, require, and mock packages.",
-		"Jest":        "JavaScript/TypeScript test runner with built-in mocking and coverage. Generates jest.config.ts and test files.",
-		"Vitest":      "Vite-native unit testing. Faster than Jest for Vite projects. Generates vitest.config.ts.",
-		"pytest":      "Python's most popular test framework. Fixtures and parametrize. Generates conftest.py and test_*.py files.",
-		"unittest":    "Python's built-in test framework. Generates unittest.TestCase subclasses.",
-		"JUnit":       "Java standard unit testing. Generates JUnit 5 test classes with @Test annotations.",
-		"Kotest":      "Kotlin-native testing DSL. Generates Kotest Spec classes.",
-		"TestNG":      "Java testing with data providers. Generates TestNG annotated test classes.",
-		"xUnit":       ".NET community test framework. Generates xUnit test classes with [Fact] and [Theory].",
-		"NUnit":       ".NET testing with [Test] attributes. Generates NUnit test fixtures.",
-		"MSTest":      "Microsoft's .NET test framework. Generates MSTest test classes.",
-		"cargo test":  "Rust's built-in test runner. Generates #[test] and #[cfg(test)] annotated functions.",
-		"RSpec":       "Ruby BDD-style testing. Generates RSpec spec files with describe/it blocks.",
-		"minitest":    "Ruby standard library test framework. Generates Minitest::Test subclasses.",
-		"PHPUnit":     "PHP unit testing framework. Generates PHPUnit TestCase subclasses.",
-		"Pest":        "PHP elegant testing with expressive syntax. Generates Pest test files.",
-		"Other":       "Custom test framework. Generates placeholder test structure.",
+		"Go testing": "Go's built-in testing package. Table-driven tests. Generates _test.go files with TestXxx functions.",
+		"Testify":    "Go test assertions and mocking. Generates test files using assert, require, and mock packages.",
+		"Jest":       "JavaScript/TypeScript test runner with built-in mocking and coverage. Generates jest.config.ts and test files.",
+		"Vitest":     "Vite-native unit testing. Faster than Jest for Vite projects. Generates vitest.config.ts.",
+		"pytest":     "Python's most popular test framework. Fixtures and parametrize. Generates conftest.py and test_*.py files.",
+		"unittest":   "Python's built-in test framework. Generates unittest.TestCase subclasses.",
+		"JUnit":      "Java standard unit testing. Generates JUnit 5 test classes with @Test annotations.",
+		"Kotest":     "Kotlin-native testing DSL. Generates Kotest Spec classes.",
+		"TestNG":     "Java testing with data providers. Generates TestNG annotated test classes.",
+		"xUnit":      ".NET community test framework. Generates xUnit test classes with [Fact] and [Theory].",
+		"NUnit":      ".NET testing with [Test] attributes. Generates NUnit test fixtures.",
+		"MSTest":     "Microsoft's .NET test framework. Generates MSTest test classes.",
+		"cargo test": "Rust's built-in test runner. Generates #[test] and #[cfg(test)] annotated functions.",
+		"RSpec":      "Ruby BDD-style testing. Generates RSpec spec files with describe/it blocks.",
+		"minitest":   "Ruby standard library test framework. Generates Minitest::Test subclasses.",
+		"PHPUnit":    "PHP unit testing framework. Generates PHPUnit TestCase subclasses.",
+		"Pest":       "PHP elegant testing with expressive syntax. Generates Pest test files.",
+		"Other":      "Custom test framework. Generates placeholder test structure.",
 	},
 
 	"integration": {
-		"Testcontainers":    "Real Docker containers for databases and brokers in tests. Language-specific SDK. Generates container setup helpers.",
-		"Docker Compose":    "Multi-container test environments. Generates compose file for integration test dependencies.",
-		"In-memory fakes":   "In-process implementations of external dependencies. Fast; no Docker. Generates fake adapters.",
-		"None":              "No integration testing framework.",
+		"Testcontainers":  "Real Docker containers for databases and brokers in tests. Language-specific SDK. Generates container setup helpers.",
+		"Docker Compose":  "Multi-container test environments. Generates compose file for integration test dependencies.",
+		"In-memory fakes": "In-process implementations of external dependencies. Fast; no Docker. Generates fake adapters.",
+		"None":            "No integration testing framework.",
 	},
 
 	"e2e": {
@@ -919,37 +919,37 @@ var fieldDescriptions = map[string]map[string]string{
 	},
 
 	"load": {
-		"k6":       "Go-based load testing with JavaScript scripting. Generates k6 test scripts with virtual user scenarios.",
+		"k6":        "Go-based load testing with JavaScript scripting. Generates k6 test scripts with virtual user scenarios.",
 		"Artillery": "Node.js load testing toolkit. YAML-based scenarios. Generates Artillery config and scenario files.",
-		"JMeter":   "Java-based load testing with GUI. Generates JMeter JMX test plan.",
-		"Locust":   "Python-based distributed load testing. Generates locustfile.py with user tasks.",
-		"None":     "No load testing configured.",
+		"JMeter":    "Java-based load testing with GUI. Generates JMeter JMX test plan.",
+		"Locust":    "Python-based distributed load testing. Generates locustfile.py with user tasks.",
+		"None":      "No load testing configured.",
 	},
 
 	"contract": {
-		"Pact":                    "Consumer-driven contract testing. Generates Pact consumer and provider test files.",
-		"Schemathesis":            "API schema-based fuzzing and contract validation. Generates Schemathesis test config.",
-		"Dredd":                   "HTTP API testing against OpenAPI specs. Generates Dredd hooks and configuration.",
-		"AsyncAPI validator":      "Validates async event messages against AsyncAPI schemas. Generates validator setup.",
-		"Spring Cloud Contract":   "JVM contract testing framework. Generates contract Groovy files and base test classes.",
-		"None":                    "No contract testing.",
+		"Pact":                  "Consumer-driven contract testing. Generates Pact consumer and provider test files.",
+		"Schemathesis":          "API schema-based fuzzing and contract validation. Generates Schemathesis test config.",
+		"Dredd":                 "HTTP API testing against OpenAPI specs. Generates Dredd hooks and configuration.",
+		"AsyncAPI validator":    "Validates async event messages against AsyncAPI schemas. Generates validator setup.",
+		"Spring Cloud Contract": "JVM contract testing framework. Generates contract Groovy files and base test classes.",
+		"None":                  "No contract testing.",
 	},
 
 	// ── CROSSCUT: Standards ────────────────────────────────────────────────────
 
 	"dep_updates": {
-		"Dependabot":  "GitHub automated dependency update PRs. Generates .github/dependabot.yml with update schedules.",
-		"Renovate":    "More configurable automated updates. Monorepo support and custom grouping. Generates renovate.json.",
-		"Manual":      "Dependencies updated manually. No automated PR generation.",
-		"None":        "No dependency update automation.",
+		"Dependabot": "GitHub automated dependency update PRs. Generates .github/dependabot.yml with update schedules.",
+		"Renovate":   "More configurable automated updates. Monorepo support and custom grouping. Generates renovate.json.",
+		"Manual":     "Dependencies updated manually. No automated PR generation.",
+		"None":       "No dependency update automation.",
 	},
 
 	"feature_flags": {
-		"LaunchDarkly":       "Feature flag SaaS with targeting, gradual rollouts, and A/B testing. Generates LaunchDarkly SDK init.",
-		"Unleash":            "Open-source feature flags. Self-hosted or cloud. Generates Unleash client setup.",
-		"Flagsmith":          "Open-source feature flags and remote config. Generates Flagsmith SDK integration.",
-		"Custom (env vars)":  "Feature flags as environment variables. No external service. Generates typed accessors.",
-		"None":               "No feature flag system.",
+		"LaunchDarkly":      "Feature flag SaaS with targeting, gradual rollouts, and A/B testing. Generates LaunchDarkly SDK init.",
+		"Unleash":           "Open-source feature flags. Self-hosted or cloud. Generates Unleash client setup.",
+		"Flagsmith":         "Open-source feature flags and remote config. Generates Flagsmith SDK integration.",
+		"Custom (env vars)": "Feature flags as environment variables. No external service. Generates typed accessors.",
+		"None":              "No feature flag system.",
 	},
 
 	"changelog": {
