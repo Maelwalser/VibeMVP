@@ -144,7 +144,7 @@ func (ce ContractsEditor) updateEPForm(key tea.KeyMsg) (ContractsEditor, tea.Cmd
 	case "enter", " ":
 		if ce.epFormIdx < n {
 			f := ce.epFieldByKey(visible[ce.epFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor
@@ -226,7 +226,7 @@ func (ce ContractsEditor) updateVersioning(key tea.KeyMsg) (ContractsEditor, tea
 		}
 	case "enter", " ":
 		f := &ce.versioningFields[ce.verFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			ce.dd.Open = true
 			ce.dd.OptIdx = f.SelIdx
 		} else {
@@ -365,7 +365,7 @@ func (ce ContractsEditor) updateExtForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 	case "enter", " ":
 		if ce.extFormIdx < n {
 			f := ce.extFormFieldByKey(visible[ce.extFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor
@@ -540,7 +540,7 @@ func (ce ContractsEditor) updateExtSubForm(key tea.KeyMsg) (ContractsEditor, tea
 	case "enter", " ":
 		if ce.extIntFormIdx < n {
 			f := ce.extIntFormFieldByKey(visible[ce.extIntFormIdx].Key)
-			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) {
+			if f != nil && (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 				ce.dd.Open = true
 				if f.Kind == KindMultiSelect {
 					ce.dd.OptIdx = f.DDCursor

@@ -314,11 +314,13 @@ func (be BackendEditor) updateAuthConfig(key tea.KeyMsg) (BackendEditor, tea.Cmd
 				if f.Key == "service_unit" {
 					be.refreshAuthServiceUnitOptions(f)
 				}
-				be.dd.Open = true
-				if f.Kind == KindSelect {
-					be.dd.OptIdx = f.SelIdx
-				} else {
-					be.dd.OptIdx = f.DDCursor
+				if len(f.Options) > 0 {
+					be.dd.Open = true
+					if f.Kind == KindSelect {
+						be.dd.OptIdx = f.SelIdx
+					} else {
+						be.dd.OptIdx = f.DDCursor
+					}
 				}
 			} else {
 				return be.tryEnterInsert()
@@ -434,7 +436,7 @@ func (be BackendEditor) updateAuthRoleForm(key tea.KeyMsg) (BackendEditor, tea.C
 	case "enter", " ":
 		if be.authRoleFormIdx < n {
 			f := &be.authRoleForm[be.authRoleFormIdx]
-			if f.Kind == KindMultiSelect {
+			if f.Kind == KindMultiSelect && len(f.Options) > 0 {
 				be.dd.Open = true
 				be.dd.OptIdx = f.DDCursor
 			} else if f.Kind == KindText {
@@ -958,8 +960,10 @@ func (be BackendEditor) updateSecurity(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 					opts := be.rateBackendOptions()
 					ensureSecuritySelection(f, opts)
 				}
-				be.dd.Open = true
-				be.dd.OptIdx = f.SelIdx
+				if len(f.Options) > 0 {
+					be.dd.Open = true
+					be.dd.OptIdx = f.SelIdx
+				}
 			}
 		}
 	case "H", "shift+left":

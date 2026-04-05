@@ -30,11 +30,15 @@ func (fe FrontendEditor) updateI18n(key tea.KeyMsg) (FrontendEditor, tea.Cmd) {
 		f := &fe.i18nFields[fe.i18nFormIdx]
 		switch f.Kind {
 		case KindSelect:
-			fe.dd.Open = true
-			fe.dd.OptIdx = f.SelIdx
+			if len(f.Options) > 0 {
+				fe.dd.Open = true
+				fe.dd.OptIdx = f.SelIdx
+			}
 		case KindMultiSelect:
-			fe.dd.Open = true
-			fe.dd.OptIdx = f.DDCursor
+			if len(f.Options) > 0 {
+				fe.dd.Open = true
+				fe.dd.OptIdx = f.DDCursor
+			}
 		default:
 			return fe.tryEnterInsert()
 		}
@@ -128,8 +132,10 @@ func (fe FrontendEditor) updateA11ySEO(key tea.KeyMsg) (FrontendEditor, tea.Cmd)
 				fe.a11yFields = refreshMetaTagOptions(fe.a11yFields, fieldGet(fe.techFields, "framework"))
 				f = &fe.a11yFields[fe.a11yFormIdx]
 			}
-			fe.dd.Open = true
-			fe.dd.OptIdx = f.SelIdx
+			if len(f.Options) > 0 {
+				fe.dd.Open = true
+				fe.dd.OptIdx = f.SelIdx
+			}
 		} else {
 			return fe.tryEnterInsert()
 		}

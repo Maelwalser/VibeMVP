@@ -82,7 +82,7 @@ func (dt DataTabEditor) updateCachingForm(key tea.KeyMsg) (DataTabEditor, tea.Cm
 		dt.cachingFormIdx = prevCachingFormIdx(dt.cachingForm, dt.cachingFormIdx)
 	case "enter", " ":
 		f := &dt.cachingForm[dt.cachingFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -214,7 +214,7 @@ func (dt DataTabEditor) updateGovForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		dt.govFormIdx = prevFormIdx(dt.govForm, dt.govFormIdx, isDisabled)
 	case "enter", " ":
 		f := &dt.govForm[dt.govFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx
@@ -323,7 +323,7 @@ func (dt DataTabEditor) updateFSForm(key tea.KeyMsg) (DataTabEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &dt.fsForm[dt.fsFormIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			dt.dd.Open = true
 			if f.Kind == KindSelect {
 				dt.dd.OptIdx = f.SelIdx

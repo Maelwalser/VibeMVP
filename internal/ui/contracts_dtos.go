@@ -157,7 +157,7 @@ func (ce ContractsEditor) updateDTOForm(key tea.KeyMsg) (ContractsEditor, tea.Cm
 		if f == nil {
 			break
 		}
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			ce.dd.Open = true
 			if f.Kind == KindSelect {
 				ce.dd.OptIdx = f.SelIdx
@@ -354,7 +354,7 @@ func (ce ContractsEditor) updateDTOFieldForm(key tea.KeyMsg) (ContractsEditor, t
 		if f == nil {
 			break
 		}
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			ce.dd.Open = true
 			if f.Kind == KindSelect {
 				ce.dd.OptIdx = f.SelIdx

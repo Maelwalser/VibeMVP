@@ -111,7 +111,7 @@ func (be BackendEditor) updateJobsForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 	case "enter", " ":
 		if be.jobsFormIdx < n {
 			f := &be.jobsForm[be.jobsFormIdx]
-			if f.Kind == KindSelect {
+			if f.Kind == KindSelect && len(f.Options) > 0 {
 				be.dd.Open = true
 				be.dd.OptIdx = f.SelIdx
 			} else {

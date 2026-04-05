@@ -243,7 +243,7 @@ func (de DataEditor) updateNormalEntitySettings(key tea.KeyMsg) (DataEditor, tea
 		de.entFormIdx = len(de.entForm) - 1
 	case "enter", " ":
 		f := &de.entForm[de.entFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			de.dd.Open = true
 			de.dd.OptIdx = f.SelIdx
 		} else {
@@ -352,7 +352,7 @@ func (de DataEditor) updateNormalColForm(key tea.KeyMsg) (DataEditor, tea.Cmd) {
 		de.colFormIdx = len(de.colForm) - 1
 	case "enter", " ":
 		f := &de.colForm[de.colFormIdx]
-		if f.Kind == KindSelect {
+		if f.Kind == KindSelect && len(f.Options) > 0 {
 			de.dd.Open = true
 			de.dd.OptIdx = f.SelIdx
 		} else {

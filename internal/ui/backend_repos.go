@@ -718,7 +718,7 @@ func (be BackendEditor) updateRepoForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) 
 		}
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			be.dd.Open = true
 			if f.Kind == KindSelect {
 				be.dd.OptIdx = f.SelIdx
@@ -847,7 +847,7 @@ func (be BackendEditor) updateOpForm(key tea.KeyMsg) (BackendEditor, tea.Cmd) {
 		}
 	case "enter", " ":
 		f := &ed.form[ed.formIdx]
-		if f.Kind == KindSelect || f.Kind == KindMultiSelect {
+		if (f.Kind == KindSelect || f.Kind == KindMultiSelect) && len(f.Options) > 0 {
 			be.dd.Open = true
 			if f.Kind == KindSelect {
 				be.dd.OptIdx = f.SelIdx

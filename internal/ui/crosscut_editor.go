@@ -358,7 +358,7 @@ func (cc CrossCutEditor) updateFields(key tea.KeyMsg) (CrossCutEditor, tea.Cmd) 
 		case "enter", " ":
 			if idx < n {
 				f := &fields[idx]
-				if f.Kind == KindSelect {
+				if f.Kind == KindSelect && len(f.Options) > 0 {
 					cc.dd.Open = true
 					cc.dd.OptIdx = f.SelIdx
 				} else {
