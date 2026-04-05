@@ -664,10 +664,25 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		}
 	}
 
+	// For monolith, language/framework live at the pillar level — strip them from
+	// individual services to avoid redundant duplication in the manifest.
+	services := be.Services
+	if arch == "monolith" {
+		stripped := make([]manifest.ServiceDef, len(be.Services))
+		for i, s := range be.Services {
+			s.Language = ""
+			s.LanguageVersion = ""
+			s.Framework = ""
+			s.FrameworkVersion = ""
+			stripped[i] = s
+		}
+		services = stripped
+	}
+
 	bp := manifest.BackendPillar{
 		ArchPattern:  manifest.ArchPattern(arch),
 		StackConfigs: stackConfigs,
-		Services:     be.Services,
+		Services:     services,
 		CommLinks:    be.CommLinks,
 		Auth:         auth,
 		JobQueues:    be.jobQueues,
