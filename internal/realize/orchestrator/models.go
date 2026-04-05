@@ -168,13 +168,13 @@ func describeProvider(taskID string, providers manifest.ProviderAssignments, kin
 }
 
 // buildProviderAssignments constructs a per-section ProviderAssignments map from the
-// manifest's ConfiguredProviders registry and per-section SectionModels overrides.
+// loaded providers config and per-section SectionModels overrides in the manifest.
 //
 // SectionModels values are formatted as "Provider · Tier" (e.g. "Claude · Sonnet").
 // Sections with no override or "default" are omitted; the orchestrator falls back to
 // its default agent for those.
-func buildProviderAssignments(m *manifest.Manifest) manifest.ProviderAssignments {
-	if len(m.ConfiguredProviders) == 0 {
+func buildProviderAssignments(m *manifest.Manifest, configuredProviders manifest.ProviderAssignments) manifest.ProviderAssignments {
+	if len(configuredProviders) == 0 {
 		return nil
 	}
 
@@ -194,7 +194,7 @@ func buildProviderAssignments(m *manifest.Manifest) manifest.ProviderAssignments
 		}
 		provLabel, tier := parts[0], parts[1]
 
-		pa, exists := m.ConfiguredProviders[provLabel]
+		pa, exists := configuredProviders[provLabel]
 		if !exists || pa.Credential == "" {
 			continue
 		}

@@ -311,12 +311,12 @@ func (m Model) LoadManifestIntoModel(path string) (Model, error) {
 	m.infraEditor = m.infraEditor.FromInfraPillar(mf.Infra)
 	m.crossCutEditor = m.crossCutEditor.FromCrossCutPillar(mf.CrossCut)
 	m.realizeEditor = m.realizeEditor.FromRealizeOptions(mf.Realize)
-	// Restore configured provider selections.
-	if len(mf.ConfiguredProviders) > 0 {
+	// Restore configured provider selections from the separate providers.json file.
+	if provPA, err := manifest.LoadProviders(manifest.ProvidersPath()); err == nil && len(provPA) > 0 {
 		if m.modal.menu.configured == nil {
 			m.modal.menu.configured = make(map[string]ProviderSelection)
 		}
-		for label, pa := range mf.ConfiguredProviders {
+		for label, pa := range provPA {
 			m.modal.menu.configured[label] = ProviderSelection{
 				Provider:   pa.Provider,
 				Model:      pa.Model,
@@ -492,6 +492,16 @@ func (m Model) execSave() (tea.Model, tea.Cmd) {
 		m.cmd.isErr = true
 		return m, nil
 	}
+	// Save provider credentials to a separate file alongside the manifest so
+	// that manifest.json stays credential-free and safe to commit.
+	if pa := m.modal.menu.ToManifestConfiguredProviders(); len(pa) > 0 {
+		provPath := manifest.ProvidersPath()
+		if err := manifest.SaveProviders(provPath, pa); err != nil {
+			m.cmd.status = fmt.Sprintf("Error saving providers: %v", err)
+			m.cmd.isErr = true
+			return m, nil
+		}
+	}
 	m.modified = false
 	savePath := "manifest.json"
 	if m.filePath != "" {
@@ -514,8 +524,6 @@ func (m Model) BuildManifest() *manifest.Manifest {
 		Infra:               m.infraEditor.ToManifestInfraPillar(),
 		CrossCut:            m.crossCutEditor.ToManifestCrossCutPillar(),
 		Realize:             m.realizeEditor.ToManifestRealizeOptions(),
-		ConfiguredProviders: m.modal.menu.ToManifestConfiguredProviders(),
-
 		// Legacy flat fields for backward compatibility
 		Databases: dataPillar.Databases,
 		Entities:  dataPillar.Entities,

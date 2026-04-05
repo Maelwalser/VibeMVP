@@ -664,19 +664,17 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		}
 	}
 
-	// For monolith, language/framework live at the pillar level — strip them from
-	// individual services to avoid redundant duplication in the manifest.
-	services := be.Services
-	if arch == "monolith" {
-		stripped := make([]manifest.ServiceDef, len(be.Services))
-		for i, s := range be.Services {
-			s.Language = ""
-			s.LanguageVersion = ""
-			s.Framework = ""
-			s.FrameworkVersion = ""
-			stripped[i] = s
-		}
-		services = stripped
+	// Language/framework fields are always hidden from the service form — they are
+	// never set per-service. For monolith they live at the pillar level; for all
+	// other arches they live in the referenced stack config. Strip them from every
+	// service to keep the manifest clean.
+	services := make([]manifest.ServiceDef, len(be.Services))
+	for i, s := range be.Services {
+		s.Language = ""
+		s.LanguageVersion = ""
+		s.Framework = ""
+		s.FrameworkVersion = ""
+		services[i] = s
 	}
 
 	bp := manifest.BackendPillar{
@@ -732,7 +730,7 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		}
 	}
 
-	// Legacy compat fields (compute/cloud now live in InfraPillar.Environments)
+	// Monolith: language/framework live at the pillar level (CONFIG tab).
 	if arch == "monolith" {
 		bp.Language = fieldGet(be.EnvFields, "monolith_lang")
 		bp.LanguageVersion = fieldGet(be.EnvFields, "monolith_lang_ver")
@@ -747,12 +745,9 @@ func (be BackendEditor) ToManifest() manifest.BackendPillar {
 		if len(healthDeps) > 0 {
 			bp.Env = &manifest.EnvConfig{HealthDeps: healthDeps}
 		}
-	} else if len(be.Services) > 0 {
-		bp.Language = be.Services[0].Language
-		bp.LanguageVersion = be.Services[0].LanguageVersion
-		bp.Framework = be.Services[0].Framework
-		bp.FrameworkVersion = be.Services[0].FrameworkVersion
 	}
+	// For all other arches, stack details live in stack_configs; services reference
+	// them via config_ref. No top-level language/framework fields are emitted.
 	return bp
 }
 
