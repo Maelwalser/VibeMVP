@@ -122,9 +122,6 @@ type Manifest struct {
 	CrossCut  CrossCutPillar  `json:"cross_cutting"`
 	Realize   RealizeOptions  `json:"realize,omitempty"`
 
-	// Configured providers (from the Shift+M provider menu), keyed by provider label.
-	ConfiguredProviders ProviderAssignments `json:"configured_providers,omitempty"`
-
 	// Legacy fields kept for backward compatibility during transition.
 	Databases []DBSourceDef   `json:"databases,omitempty"`
 	Entities  []EntityDef     `json:"entities,omitempty"`
@@ -151,16 +148,15 @@ func Load(path string) (*Manifest, error) {
 func (m Manifest) MarshalJSON() ([]byte, error) {
 	// shadow uses pointer pillar fields so encoding/json's omitempty works.
 	type shadow struct {
-		CreatedAt           time.Time           `json:"created_at"`
-		Description         string              `json:"description,omitempty"`
-		Data                *DataPillar         `json:"data,omitempty"`
-		Backend             *BackendPillar      `json:"backend,omitempty"`
-		Contracts           *ContractsPillar    `json:"contracts,omitempty"`
-		Frontend            *FrontendPillar     `json:"frontend,omitempty"`
-		Infrastructure      *InfraPillar        `json:"infrastructure,omitempty"`
-		CrossCutting        *CrossCutPillar     `json:"cross_cutting,omitempty"`
-		Realize             *RealizeOptions     `json:"realize,omitempty"`
-		ConfiguredProviders ProviderAssignments `json:"configured_providers,omitempty"`
+		CreatedAt      time.Time        `json:"created_at"`
+		Description    string           `json:"description,omitempty"`
+		Data           *DataPillar      `json:"data,omitempty"`
+		Backend        *BackendPillar   `json:"backend,omitempty"`
+		Contracts      *ContractsPillar `json:"contracts,omitempty"`
+		Frontend       *FrontendPillar  `json:"frontend,omitempty"`
+		Infrastructure *InfraPillar     `json:"infrastructure,omitempty"`
+		CrossCutting   *CrossCutPillar  `json:"cross_cutting,omitempty"`
+		Realize        *RealizeOptions  `json:"realize,omitempty"`
 		// Legacy fields retained for backward compatibility.
 		Databases []DBSourceDef    `json:"databases,omitempty"`
 		Entities  []EntityDef      `json:"entities,omitempty"`
@@ -170,11 +166,10 @@ func (m Manifest) MarshalJSON() ([]byte, error) {
 	}
 
 	s := shadow{
-		CreatedAt:           m.CreatedAt,
-		Description:         m.Description,
-		ConfiguredProviders: m.ConfiguredProviders,
-		Databases:           m.Databases,
-		Entities:            m.Entities,
+		CreatedAt:   m.CreatedAt,
+		Description: m.Description,
+		Databases:   m.Databases,
+		Entities:    m.Entities,
 	}
 
 	// Only include legacy struct pillars if they have data.

@@ -94,14 +94,14 @@ func (o *Orchestrator) resolveDefaultProvider() manifest.ProviderAssignment {
 }
 
 // resolveDefaultProviderFromManifest extends resolveDefaultProvider by also
-// checking the manifest's realize.provider field and its configured credentials.
+// checking the manifest's realize.provider field against the loaded providers config.
 // Priority: --provider flag → manifest provider → env vars → Claude.
-func (o *Orchestrator) resolveDefaultProviderFromManifest(m *manifest.Manifest) manifest.ProviderAssignment {
+func (o *Orchestrator) resolveDefaultProviderFromManifest(m *manifest.Manifest, providers manifest.ProviderAssignments) manifest.ProviderAssignment {
 	if o.cfg.Provider != "" {
 		return o.resolveDefaultProvider()
 	}
 	if m.Realize.Provider != "" {
-		if pa, ok := m.ConfiguredProviders[m.Realize.Provider]; ok && pa.Credential != "" {
+		if pa, ok := providers[m.Realize.Provider]; ok && pa.Credential != "" {
 			return pa
 		}
 	}
@@ -142,8 +142,14 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		return fmt.Errorf("build dag: %w", err)
 	}
 
-	// Build provider assignments from the new manifest structure.
-	providers := buildProviderAssignments(m)
+	// Load provider credentials from the separate providers.json file (not manifest).
+	configuredProviders, err := manifest.LoadProviders(manifest.ProvidersPath())
+	if err != nil {
+		return fmt.Errorf("load providers: %w", err)
+	}
+
+	// Build per-section provider assignments from credentials + section model overrides.
+	providers := buildProviderAssignments(m, configuredProviders)
 
 	// Resolve tier model overrides from the manifest's realize options.
 	tierOverrides := buildTierOverrides(m)
@@ -180,7 +186,7 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 
 	// defaultProvider is used for tasks that have no per-section manifest override.
 	// Priority: --provider flag → manifest provider → env vars → Claude.
-	defaultProvider := o.resolveDefaultProviderFromManifest(m)
+	defaultProvider := o.resolveDefaultProviderFromManifest(m, configuredProviders)
 
 	// Resolve the minimum Go runtime version from the Go module proxy once here
 	// so every task — plan, infra, frontend — uses the same consistent version.
