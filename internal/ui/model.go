@@ -55,6 +55,12 @@ type realizeState struct {
 	triggered bool
 }
 
+// archState holds architecture-overview screen state.
+type archState struct {
+	screen ArchScreen
+	show   bool
+}
+
 // Model is the root bubbletea model for the declaration UI.
 type Model struct {
 	sections      []Section
@@ -79,6 +85,7 @@ type Model struct {
 	cmd     cmdState
 	modal   modalState
 	realize realizeState
+	arch    archState
 
 	filePath      string // active save path; empty = use onSave callback default
 	modified      bool
@@ -120,6 +127,7 @@ func NewModel(onSave SaveFunc) Model {
 		crossCutEditor:    newCrossCutEditor(),
 		realizeEditor:     newRealizeEditor(),
 		realize:           realizeState{screen: newRealizationScreen()},
+		arch:              archState{screen: newArchScreen()},
 		modal:             modalState{menu: menu},
 		onSave:            onSave,
 	}
@@ -213,6 +221,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Route all messages to the architecture overview while it is active.
+	if m.arch.show {
+		var cmd tea.Cmd
+		m.arch.screen, cmd = m.arch.screen.Update(msg)
+		if m.arch.screen.WantsQuit() {
+			m.arch.show = false
+			m.arch.screen = newArchScreen()
+		}
+		return m, cmd
+	}
+
 	switch m.mode {
 	case ModeNormal:
 		return m.updateNormal(msg)
@@ -259,6 +278,12 @@ func (m Model) updateNormal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "M":
 		m.modal.open = true
+		return m, nil
+
+	case "P":
+		mf := m.BuildManifest()
+		m.arch.screen = m.arch.screen.Open(mf)
+		m.arch.show = true
 		return m, nil
 
 	case "ctrl+c":

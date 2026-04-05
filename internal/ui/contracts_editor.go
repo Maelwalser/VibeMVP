@@ -681,7 +681,7 @@ func (ce *ContractsEditor) CurrentField() *Field {
 			}
 		}
 	case contractsTabVersioning:
-		if ce.verFormIdx >= 0 && ce.verFormIdx < len(ce.versioningFields) {
+		if ce.versioningEnabled && ce.verFormIdx >= 0 && ce.verFormIdx < len(ce.versioningFields) {
 			return &ce.versioningFields[ce.verFormIdx]
 		}
 	case contractsTabExternal:

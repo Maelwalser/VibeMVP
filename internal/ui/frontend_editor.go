@@ -827,11 +827,17 @@ func (fe FrontendEditor) tryEnterInsert() (FrontendEditor, tea.Cmd) {
 func (fe *FrontendEditor) CurrentField() *Field {
 	switch fe.activeTab {
 	case feTabTech:
+		if !fe.techEnabled {
+			return nil
+		}
 		visible := fe.visibleTechFields()
 		if fe.techFormIdx >= 0 && fe.techFormIdx < len(visible) {
 			return fe.techFieldByKey(visible[fe.techFormIdx].Key)
 		}
 	case feTabTheme:
+		if !fe.themeEnabled {
+			return nil
+		}
 		if fe.themeFormIdx >= 0 && fe.themeFormIdx < len(fe.themeFields) {
 			return &fe.themeFields[fe.themeFormIdx]
 		}
@@ -846,14 +852,23 @@ func (fe *FrontendEditor) CurrentField() *Field {
 			return &fe.pageForm[fe.pageFormIdx]
 		}
 	case feTabNav:
+		if !fe.navEnabled {
+			return nil
+		}
 		if fe.navFormIdx >= 0 && fe.navFormIdx < len(fe.navFields) {
 			return &fe.navFields[fe.navFormIdx]
 		}
 	case feTabI18n:
+		if !fe.i18nEnabled {
+			return nil
+		}
 		if fe.i18nFormIdx >= 0 && fe.i18nFormIdx < len(fe.i18nFields) {
 			return &fe.i18nFields[fe.i18nFormIdx]
 		}
 	case feTabA11ySEO:
+		if !fe.a11yEnabled {
+			return nil
+		}
 		if fe.a11yFormIdx >= 0 && fe.a11yFormIdx < len(fe.a11yFields) {
 			return &fe.a11yFields[fe.a11yFormIdx]
 		}

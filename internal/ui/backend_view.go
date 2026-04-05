@@ -138,8 +138,27 @@ func (be *BackendEditor) currentEditableFields() *[]Field {
 }
 
 // CurrentField returns the currently highlighted form field for the description panel.
-// Returns nil when in list/non-form views (services list, comm list, etc.).
+// Returns nil when in list/non-form views (services list, comm list, etc.) or when
+// the active tab has not been configured yet.
 func (be *BackendEditor) CurrentField() *Field {
+	switch be.activeTab() {
+	case beTabEnv:
+		if be.currentArch() == "monolith" && !be.envEnabled {
+			return nil
+		}
+	case beTabAPIGW:
+		if !be.apiGWEnabled {
+			return nil
+		}
+	case beTabSecurity:
+		if !be.secEnabled {
+			return nil
+		}
+	case beTabAuth:
+		if !be.authEnabled {
+			return nil
+		}
+	}
 	return be.mutableFieldPtr()
 }
 
