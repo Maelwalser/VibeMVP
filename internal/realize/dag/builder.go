@@ -135,6 +135,8 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 				Databases:   m.Data.Databases,
 				AllServices: m.Backend.Services,
 				Auth:        m.Backend.Auth,
+				Endpoints:   m.Contracts.Endpoints,
+				DTOs:        m.Contracts.DTOs,
 				OutputDir:   backendBaseDir(svcDirs),
 			},
 		})
@@ -154,6 +156,10 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 				AllServices: m.Backend.Services,
 				Messaging:   m.Backend.Messaging,
 				CommLinks:   m.Backend.CommLinks,
+				DTOs: mergeDTOs(
+					dtosForCommLinks(m.Backend.CommLinks, m.Contracts.DTOs),
+					dtosForEvents(m.Backend.Events, m.Contracts.DTOs),
+				),
 			},
 		})
 	}
@@ -196,6 +202,14 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	cronJobs := cronJobsForService(svc.Name, m.Backend.JobQueues)
 	outputDir := svcDirs[slug]
 
+	// Pre-compute resolved cross-references so every layer gets the right context.
+	svcEndpoints := endpointsForService(svc.Name, m.Contracts.Endpoints)
+	svcDTOs := mergeDTOs(
+		dtosForEndpoints(svcEndpoints, m.Contracts.DTOs),
+		dtosForCommLinks(links, m.Contracts.DTOs),
+		dtosForJobQueues(jobQueues, m.Contracts.DTOs),
+	)
+
 	planID := svcPlanID(slug)
 	depsID := svcDepsID(slug)
 	repoID := "svc." + slug + ".repository"
@@ -222,6 +236,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Cachings:     m.Data.Cachings,
 			FileStorages: m.Data.FileStorages,
 			Auth:         m.Backend.Auth,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
@@ -285,6 +301,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			FileStorages: m.Data.FileStorages,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
@@ -305,7 +323,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			ArchPattern:  m.Backend.ArchPattern,
 			Service:      &svcCopy,
 			Domains:      m.Data.Domains,
-			Endpoints:    m.Contracts.Endpoints,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			CommLinks:    links,
 			Auth:         m.Backend.Auth,
 			FileStorages: m.Data.FileStorages,
@@ -340,10 +359,97 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Auth:         m.Backend.Auth,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
+			Endpoints:    svcEndpoints,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
 	})
+}
+
+// ── manifest cross-reference resolvers ───────────────────────────────────────
+
+// endpointsForService filters endpoints to those whose ServiceUnit matches name.
+func endpointsForService(name string, all []manifest.EndpointDef) []manifest.EndpointDef {
+	out := make([]manifest.EndpointDef, 0)
+	for _, e := range all {
+		if e.ServiceUnit == name {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// dtosByName resolves a slice of DTO name strings to their full DTODef objects.
+// Preserves order, deduplicates by name.
+func dtosByName(names []string, all []manifest.DTODef) []manifest.DTODef {
+	seen := make(map[string]bool, len(names))
+	idx := make(map[string]manifest.DTODef, len(all))
+	for _, d := range all {
+		idx[d.Name] = d
+	}
+	out := make([]manifest.DTODef, 0, len(names))
+	for _, n := range names {
+		if n == "" || seen[n] {
+			continue
+		}
+		if d, ok := idx[n]; ok {
+			out = append(out, d)
+			seen[n] = true
+		}
+	}
+	return out
+}
+
+// dtosForEndpoints collects the DTOs referenced by RequestDTO and ResponseDTO fields.
+func dtosForEndpoints(endpoints []manifest.EndpointDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(endpoints)*2)
+	for _, e := range endpoints {
+		names = append(names, e.RequestDTO, e.ResponseDTO)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForCommLinks collects the DTOs referenced in CommLink.DTOs and CommLink.ResponseDTOs.
+func dtosForCommLinks(links []manifest.CommLink, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0)
+	for _, l := range links {
+		names = append(names, l.DTOs...)
+		names = append(names, l.ResponseDTOs...)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForJobQueues collects the DTOs referenced as PayloadDTO in job queue definitions.
+func dtosForJobQueues(queues []manifest.JobQueueDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(queues))
+	for _, q := range queues {
+		names = append(names, q.PayloadDTO)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForEvents collects the DTOs referenced as DTO in EventDef entries.
+func dtosForEvents(events []manifest.EventDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(events))
+	for _, e := range events {
+		names = append(names, e.DTO)
+	}
+	return dtosByName(names, all)
+}
+
+// mergeDTOs merges multiple DTO slices, deduplicating by Name.
+func mergeDTOs(slices ...[]manifest.DTODef) []manifest.DTODef {
+	seen := make(map[string]bool)
+	out := make([]manifest.DTODef, 0)
+	for _, s := range slices {
+		for _, d := range s {
+			if !seen[d.Name] {
+				out = append(out, d)
+				seen[d.Name] = true
+			}
+		}
+	}
+	return out
 }
 
 // commLinksFor returns the comm links involving the given service.
@@ -402,16 +508,17 @@ func (b *Builder) addContractsTask(m *manifest.Manifest, d *DAG) {
 		Label:        "Generate DTOs, API types, and OpenAPI spec",
 		Dependencies: deps,
 		Payload: TaskPayload{
-			ArchPattern: m.Backend.ArchPattern,
-			EnvConfig:   m.Backend.Env.OrZero(),
-			Domains:     m.Data.Domains,
-			AllServices: m.Backend.Services,
-			DTOs:        m.Contracts.DTOs,
-			Endpoints:   m.Contracts.Endpoints,
-			Versioning:  m.Contracts.Versioning.OrZero(),
-			Auth:        m.Backend.Auth,
-			OutputDir:   contractsOutputDir(m, svcDirs),
-			ServiceDirs: svcDirs,
+			ArchPattern:  m.Backend.ArchPattern,
+			EnvConfig:    m.Backend.Env.OrZero(),
+			Domains:      m.Data.Domains,
+			AllServices:  m.Backend.Services,
+			DTOs:         m.Contracts.DTOs,
+			Endpoints:    m.Contracts.Endpoints,
+			Versioning:   m.Contracts.Versioning.OrZero(),
+			ExternalAPIs: m.Contracts.ExternalAPIs,
+			Auth:         m.Backend.Auth,
+			OutputDir:    contractsOutputDir(m, svcDirs),
+			ServiceDirs:  svcDirs,
 		},
 	})
 }

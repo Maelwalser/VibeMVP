@@ -35,9 +35,10 @@ type TaskPayload struct {
 	CronJobs  []manifest.CronJobDef  `json:"cron_jobs,omitempty"`
 
 	// Contracts pillar
-	DTOs       []manifest.DTODef      `json:"dtos,omitempty"`
-	Endpoints  []manifest.EndpointDef `json:"endpoints,omitempty"`
-	Versioning manifest.APIVersioning `json:"versioning,omitempty"`
+	DTOs         []manifest.DTODef         `json:"dtos,omitempty"`
+	Endpoints    []manifest.EndpointDef    `json:"endpoints,omitempty"`
+	Versioning   manifest.APIVersioning    `json:"versioning,omitempty"`
+	ExternalAPIs []manifest.ExternalAPIDef `json:"external_apis,omitempty"`
 
 	// Frontend pillar
 	Frontend *manifest.FrontendPillar `json:"frontend,omitempty"`
