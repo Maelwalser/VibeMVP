@@ -14,6 +14,7 @@ A vim-inspired TUI for declaratively specifying a complete software system archi
 - [The TUI Editor](#the-tui-editor)
   - [Key Bindings](#key-bindings)
   - [Sections Overview](#sections-overview)
+- [The Architecture Overview](#architecture-diagram-overview)
 - [manifest.json Reference](#manifestjson-reference)
 - [Provider Configuration](#provider-configuration)
 - [Code Generation (`realize`)](#code-generation-realize)
@@ -128,6 +129,13 @@ VibeMenu uses a vim-modal editing system with three modes:
 | `b` / `Esc` | Back to parent / exit insert |
 | `F` | Drill into nested fields (DTOs) |
 | `A` | Drill into attributes (Domains) |
+
+## Architecture Diagram Overview
+`P` Open architecture diagram overview
+
+<img width="1900" height="1138" alt="image" src="https://github.com/user-attachments/assets/333e5fac-cf88-4490-918a-ddba848df91d" />
+
+
 
 ### Sections Overview
 
