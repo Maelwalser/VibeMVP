@@ -225,7 +225,7 @@ mvn checkstyle:check
 <plugin>
   <groupId>org.apache.maven.plugins</groupId>
   <artifactId>maven-checkstyle-plugin</artifactId>
-  <version>3.3.1</version>
+  <version><!-- use version from Dependency & API Reference --></version>
   <configuration>
     <configLocation>checkstyle.xml</configLocation>
     <failsOnError>true</failsOnError>
@@ -299,13 +299,13 @@ mvn checkstyle:check
 ```
 
 ```kotlin
-// build.gradle.kts
+// build.gradle.kts — use versions from "Dependency & API Reference" section
 plugins {
-    id("org.jlleitschuh.gradle.ktlint") version "12.1.0"
+    id("org.jlleitschuh.gradle.ktlint") version "<version>"
 }
 
 ktlint {
-    version.set("1.2.1")
+    version.set("<version>")
     android.set(false)
     outputToConsole.set(true)
     reporters {

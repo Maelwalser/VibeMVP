@@ -19,16 +19,18 @@ frontend/
 
 ### Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "solid-js": "^1.9.0",
-    "@solidjs/router": "^0.14.0"
+    "solid-js": "<version>",
+    "@solidjs/router": "<version>"
   },
   "devDependencies": {
-    "vite-plugin-solid": "^2.10.0",
-    "typescript": "^5",
-    "vite": "^5"
+    "vite-plugin-solid": "<version>",
+    "typescript": "<version>",
+    "vite": "<version>"
   }
 }
 ```

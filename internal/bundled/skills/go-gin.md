@@ -17,14 +17,17 @@ service-name/
 
 ## go.mod Boilerplate
 
-```go
-module github.com/your-org/service-name
+Use the **exact module path and versions from the "Dependency & API Reference" section** of your
+task prompt — never hardcode version strings. The example below shows the package names only:
 
-go 1.22
+```go
+module <module_path from payload>
+
+go <version from Dependency & API Reference>
 
 require (
-    github.com/gin-gonic/gin v1.10.0
-    github.com/jackc/pgx/v5 v5.5.0
+    github.com/gin-gonic/gin <version from Dependency & API Reference>
+    github.com/jackc/pgx/v5 <version from Dependency & API Reference>
 )
 ```
 

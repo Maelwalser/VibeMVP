@@ -26,19 +26,21 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^6.26.0"
+    "react": "<version>",
+    "react-dom": "<version>",
+    "react-router-dom": "<version>"
   },
   "devDependencies": {
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^4.3.0",
-    "typescript": "^5",
-    "vite": "^5.4.0"
+    "@types/react": "<version>",
+    "@types/react-dom": "<version>",
+    "@vitejs/plugin-react": "<version>",
+    "typescript": "<version>",
+    "vite": "<version>"
   }
 }
 ```

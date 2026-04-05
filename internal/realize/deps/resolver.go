@@ -137,9 +137,18 @@ func (a *Agent) resolveNode(ctx context.Context) ([]dag.GeneratedFile, error) {
 			fmt.Printf("[deps] npm install --package-lock-only in %s\n", dir)
 		}
 
-		out, err := runCmd(ctx, dir, "npm", "install", "--package-lock-only", "--ignore-scripts")
+		out, err := runCmd(ctx, dir, "npm", "install", "--package-lock-only", "--ignore-scripts", "--legacy-peer-deps")
 		if err != nil {
 			return nil, fmt.Errorf("npm install in %s failed: %w\n%s", dir, err, out)
+		}
+
+		// Run full npm install so node_modules exists for tsc verification.
+		// Non-fatal: lock file is the critical output; missing node_modules just
+		// degrades TypeScript verification to a skip rather than a hard failure.
+		if out2, err2 := runCmd(ctx, dir, "npm", "install", "--ignore-scripts", "--legacy-peer-deps"); err2 != nil {
+			if a.verbose {
+				fmt.Printf("[deps] npm install (full) warning in %s: %s\n", dir, out2)
+			}
 		}
 
 		// Read the generated package-lock.json.

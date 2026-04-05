@@ -32,21 +32,23 @@ service-name/
 
 ## package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "@nestjs/common": "^10.3.0",
-    "@nestjs/core": "^10.3.0",
-    "@nestjs/platform-express": "^10.3.0",
-    "class-validator": "^0.14.1",
-    "class-transformer": "^0.5.1",
-    "reflect-metadata": "^0.2.1",
-    "rxjs": "^7.8.1"
+    "@nestjs/common": "<version>",
+    "@nestjs/core": "<version>",
+    "@nestjs/platform-express": "<version>",
+    "class-validator": "<version>",
+    "class-transformer": "<version>",
+    "reflect-metadata": "<version>",
+    "rxjs": "<version>"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.3.0",
-    "@nestjs/testing": "^10.3.0",
-    "typescript": "^5.3.3"
+    "@nestjs/cli": "<version>",
+    "@nestjs/testing": "<version>",
+    "typescript": "<version>"
   }
 }
 ```

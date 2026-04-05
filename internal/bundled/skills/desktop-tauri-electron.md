@@ -27,6 +27,8 @@ app/
 
 ### Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never hardcode version strings.
+
 ```toml
 # src-tauri/Cargo.toml
 [package]
@@ -35,11 +37,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tauri = { version = "2.1.0", features = [] }
-tauri-plugin-fs = "2.1.0"
-tauri-plugin-dialog = "2.0.4"
-tauri-plugin-notification = "2.0.2"
-tauri-plugin-shell = "2.0.1"
+tauri = { version = "<version>", features = [] }
+tauri-plugin-fs = "<version>"
+tauri-plugin-dialog = "<version>"
+tauri-plugin-notification = "<version>"
+tauri-plugin-shell = "<version>"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

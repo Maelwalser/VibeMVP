@@ -32,16 +32,18 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "@sveltejs/kit": "^2.8.0",
-    "svelte": "^5.0.0"
+    "@sveltejs/kit": "<version>",
+    "svelte": "<version>"
   },
   "devDependencies": {
-    "@sveltejs/adapter-auto": "^3.3.0",
-    "typescript": "^5",
-    "vite": "^5"
+    "@sveltejs/adapter-auto": "<version>",
+    "typescript": "<version>",
+    "vite": "<version>"
   }
 }
 ```

@@ -659,9 +659,9 @@ class UserRepositoryTest : FunSpec({
 #### Gradle Configuration
 
 ```kotlin
-// build.gradle.kts
+// build.gradle.kts — use version from "Dependency & API Reference" section
 plugins {
-    id("org.jetbrains.kotlinx.kover") version "0.9.7"
+    id("org.jetbrains.kotlinx.kover") version "<version>"
 }
 
 kover {

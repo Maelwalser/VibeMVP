@@ -18,13 +18,15 @@ service-name/
 
 ## build.gradle.kts Boilerplate
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never hardcode version strings.
+
 ```kotlin
 plugins {
-    kotlin("jvm") version "2.0.0"
-    kotlin("plugin.spring") version "2.0.0"    // all-open for Spring
-    kotlin("plugin.jpa") version "2.0.0"       // no-arg for JPA entities
-    id("org.springframework.boot") version "3.3.0"
-    id("io.spring.dependency-management") version "1.1.4"
+    kotlin("jvm") version "<version>"
+    kotlin("plugin.spring") version "<version>"    // all-open for Spring
+    kotlin("plugin.jpa") version "<version>"       // no-arg for JPA entities
+    id("org.springframework.boot") version "<version>"
+    id("io.spring.dependency-management") version "<version>"
 }
 
 dependencies {

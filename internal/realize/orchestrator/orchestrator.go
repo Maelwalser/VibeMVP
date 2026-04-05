@@ -224,6 +224,13 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		}
 	}
 
+	// Pre-flight import path fix: resolve "svcdir/internal/pkg" → correct module
+	// path before the compiler even runs. This is a pure filesystem operation (no
+	// compiler invocation) so it is fast and safe to run unconditionally.
+	if fixes := verify.FixImportPaths(o.cfg.OutputDir); fixes != "" {
+		o.log("realize: import path pre-flight: %s", fixes)
+	}
+
 	// Run a project-wide integration build after all tasks complete.
 	// This catches cross-task compilation errors (import path mismatches, type
 	// field access on wrong struct, missing multi-return handling) that per-task
@@ -232,16 +239,33 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	// the pipeline — the user receives all generated code plus a clear diagnostic.
 	o.log("realize: running integration build across all output files...")
 	intResult := verify.RunIntegrationBuild(ctx, o.cfg.OutputDir)
+	if !intResult.Passed {
+		// Before reporting failure, apply deterministic fixes across all output files
+		// (placeholder import paths, gofmt, escape sequences) and re-check.
+		o.log("realize: integration build failed — applying deterministic fixes and retrying...")
+		if fixes := applyIntegrationFixes(o.cfg.OutputDir); fixes != "" {
+			o.log("realize: integration fixes applied: %s", fixes)
+		}
+		intResult = verify.RunIntegrationBuild(ctx, o.cfg.OutputDir)
+	}
 	if intResult.Passed {
 		o.log("realize: integration build passed ✓ — all generated code compiles together")
 	} else {
-		o.log("realize: ⚠ integration build found cross-task errors:\n%s", intResult.Output)
-		o.log("realize: NOTE — the above errors were not caught by per-task verification because")
-		o.log("realize:       tasks are verified in isolation. Common causes:")
-		o.log("realize:       1. Wrong import paths — check that all internal imports use module path '%s'", modulePathFromOutput(o.cfg.OutputDir))
-		o.log("realize:       2. Duplicate type declarations — two tasks defined conflicting interfaces")
-		o.log("realize:       3. Function signature mismatch — caller ignores an error return value")
-		o.log("realize:       Run 'go build ./...' inside the backend directory to reproduce the errors.")
+		// Deterministic fixes did not resolve all errors. Attempt LLM-driven repair.
+		o.log("realize: attempting LLM repair of remaining integration errors...")
+		intResult = repairIntegrationErrors(ctx, o.cfg.OutputDir, intResult, defaultProvider, tierOverrides, o.cfg.Verbose)
+		if intResult.Passed {
+			o.log("realize: integration build passed ✓ after LLM repair")
+		} else {
+			o.log("realize: ⚠ integration build found cross-task errors:\n%s", intResult.Output)
+			o.log("realize: NOTE — the above errors were not caught by per-task verification because")
+			o.log("realize:       tasks are verified in isolation. Common causes:")
+			o.log("realize:       1. Wrong import paths — check that all internal imports use module path '%s'", modulePathFromOutput(o.cfg.OutputDir))
+			o.log("realize:       2. Duplicate type declarations — two tasks defined conflicting interfaces")
+			o.log("realize:       3. Function signature mismatch — caller ignores an error return value")
+			o.log("realize:       4. Constructor called with wrong argument count — check 'Critical Constructor Signatures'")
+			o.log("realize:       Run 'go build ./...' inside the backend directory to reproduce the errors.")
+		}
 	}
 
 	o.log("realize: complete — output written to %s", o.cfg.OutputDir)
@@ -281,10 +305,18 @@ func (o *Orchestrator) runWave(
 			defer func() { <-sem }()
 
 			task := d.Tasks[id]
-			techs := technologiesFor(task)
-			skillDocs := reg.LookupAll(task.Kind, techs)
 
 			o.log("[%s] starting: %s", task.ID, task.Label)
+
+			// Reconciliation tasks use a specialized runner that reads ALL generated
+			// Go source files from disk and patches only the files that fail to
+			// compile — no standard TaskRunner, no per-file verification loop.
+			if task.Kind == dag.TaskKindReconciliation {
+				return runReconciliationTask(gctx, task, writer, st, defaultProvider, tierOverrides, o.cfg.Verbose, o.cfg.LogFunc)
+			}
+
+			techs := technologiesFor(task)
+			skillDocs := reg.LookupAll(task.Kind, techs)
 
 			// Dependency resolution tasks run a package manager directly — no LLM.
 			// All other tasks resolve a provider (manifest override or default Claude)
@@ -520,4 +552,47 @@ func technologiesFor(task *dag.Task) []string {
 	}
 
 	return techs
+}
+
+// applyIntegrationFixes runs deterministic fix passes across all Go source files in
+// the output directory. This is called once after the integration build fails to
+// auto-correct mechanical errors before the final diagnostic is emitted.
+// Returns a summary of fixes applied, or "" if nothing changed.
+func applyIntegrationFixes(outputDir string) string {
+	var summaries []string
+
+	// Cross-module import path fix runs first so the subsequent per-file fixes
+	// operate on already-corrected imports and don't waste effort on stale paths.
+	if f := verify.FixImportPaths(outputDir); f != "" {
+		summaries = append(summaries, f)
+	}
+
+	var allGoFiles []string
+	_ = filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".tmp" || name == "vendor" || name == ".realize" ||
+				name == "node_modules" || name == ".next" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			rel, err := filepath.Rel(outputDir, path)
+			if err == nil {
+				allGoFiles = append(allGoFiles, rel)
+			}
+		}
+		return nil
+	})
+	if len(allGoFiles) > 0 {
+		if f := verify.ApplyDeterministicFixes(outputDir, allGoFiles, "go"); f != "" {
+			summaries = append(summaries, f)
+		}
+	}
+
+	return strings.Join(summaries, "; ")
 }

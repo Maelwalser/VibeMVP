@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 )
 
-// PythonVerifier runs `ruff check` (and `mypy` if available) on generated Python code.
-// Both tools degrade gracefully if not installed.
+// PythonVerifier runs `ruff check`, `mypy` (if available), and `python -m py_compile`
+// on generated Python code. All tools degrade gracefully if not installed.
 type PythonVerifier struct{}
 
 func NewPythonVerifier() *PythonVerifier { return &PythonVerifier{} }
@@ -26,6 +26,7 @@ func (p *PythonVerifier) Verify(ctx context.Context, outputDir string, files []s
 	var combined bytes.Buffer
 	allPassed := true
 
+	// ── ruff check ──────────────────────────────────────────────────────────
 	ruffPath, ruffErr := exec.LookPath("ruff")
 	if ruffErr != nil {
 		combined.WriteString("ruff not found in PATH — skipping ruff check\n")
@@ -38,6 +39,39 @@ func (p *PythonVerifier) Verify(ctx context.Context, outputDir string, files []s
 			out, err := runCmd(ctx, absDir, ruffPath, "check", ".")
 			combined.WriteString(fmt.Sprintf("=== ruff check in %s ===\n%s\n", dir, out))
 			if err != nil {
+				allPassed = false
+			}
+		}
+	}
+
+	// ── mypy ────────────────────────────────────────────────────────────────
+	mypyPath, mypyErr := exec.LookPath("mypy")
+	if mypyErr != nil {
+		combined.WriteString("mypy not found in PATH — skipping mypy check\n")
+	} else {
+		for _, dir := range dirs {
+			absDir := filepath.Join(outputDir, dir)
+			out, err := runCmd(ctx, absDir, mypyPath, "--ignore-missing-imports", ".")
+			combined.WriteString(fmt.Sprintf("=== mypy in %s ===\n%s\n", dir, out))
+			if err != nil {
+				allPassed = false
+			}
+		}
+	}
+
+	// ── py_compile syntax check ──────────────────────────────────────────────
+	pythonPath, _ := exec.LookPath("python3")
+	if pythonPath == "" {
+		combined.WriteString("python3 not found in PATH — skipping py_compile check\n")
+	} else {
+		for _, f := range files {
+			if filepath.Ext(f) != ".py" {
+				continue
+			}
+			absFile := filepath.Join(outputDir, f)
+			out, err := runCmd(ctx, filepath.Dir(absFile), pythonPath, "-m", "py_compile", absFile)
+			if err != nil {
+				combined.WriteString(fmt.Sprintf("=== py_compile %s ===\n%s\n", f, out))
 				allPassed = false
 			}
 		}

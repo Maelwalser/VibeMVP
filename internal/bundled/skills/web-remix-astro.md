@@ -26,14 +26,16 @@ frontend/
 
 ### Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "@remix-run/node": "^2.13.0",
-    "@remix-run/react": "^2.13.0",
-    "@remix-run/serve": "^2.13.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "@remix-run/node": "<version>",
+    "@remix-run/react": "<version>",
+    "@remix-run/serve": "<version>",
+    "react": "<version>",
+    "react-dom": "<version>"
   }
 }
 ```

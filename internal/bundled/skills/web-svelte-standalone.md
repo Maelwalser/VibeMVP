@@ -19,15 +19,17 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "svelte": "^5.0.0"
+    "svelte": "<version>"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^4.0.0",
-    "typescript": "^5",
-    "vite": "^5"
+    "@sveltejs/vite-plugin-svelte": "<version>",
+    "typescript": "<version>",
+    "vite": "<version>"
   }
 }
 ```

@@ -67,7 +67,21 @@ func deriveModulePath(svcName string) string {
 
 func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 	svcDirs := serviceOutputDirs(m)
+
+	// For monolith/modular architectures, data schema files live within the single
+	// Go module — they share the same module path as the backend service tasks.
+	// Injecting ModulePath here lets the data task generate correct import paths and
+	// ensures downstream agents see the right module name in Shared Team Context.
+	// For microservices, each service has its own module; data tasks have no single
+	// module path (leave empty; each service injects its own ModulePath).
+	dataModulePath := ""
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		dataModulePath = "monolith" // matches deriveModulePath for the synthetic "monolith" service
+	}
+
 	basePayload := TaskPayload{
+		ModulePath:   dataModulePath,
 		ArchPattern:  m.Backend.ArchPattern,
 		EnvConfig:    m.Backend.Env.OrZero(),
 		Domains:      m.Data.Domains,
@@ -101,6 +115,56 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 	dataDeps := []string{"data.schemas", "data.migrations"}
 	svcDirs := serviceOutputDirs(m)
 
+	// Auth task generates the internal/auth/ package (JWT token logic, claims, role constants).
+	// IMPORTANT: registered BEFORE addServiceTaskChain so that the service.logic and
+	// service.handler tasks can detect it and add it as a dependency — giving those tasks
+	// access to the exact TokenManager method signatures in shared memory.
+	// ModulePath and Service are injected so the agent knows the Go module name and
+	// HTTP framework (e.g. Fiber), preventing net/http vs Fiber mismatches.
+	if m.Backend.Auth != nil && m.Backend.Auth.Strategy != "" {
+		authSvc := manifest.ServiceDef{
+			Name:      "monolith",
+			Language:  m.Backend.Language,
+			Framework: m.Backend.Framework,
+		}
+		switch m.Backend.ArchPattern {
+		case manifest.ArchMonolith, manifest.ArchModularMonolith:
+			if len(m.Backend.Services) > 0 {
+				authSvc = m.Backend.Services[0]
+				authSvc.Name = "monolith"
+			}
+		}
+		authSvcCopy := authSvc
+		authModPath := "monolith"
+		switch m.Backend.ArchPattern {
+		case manifest.ArchMonolith, manifest.ArchModularMonolith:
+			// fixed module name for monolith
+		default:
+			if len(m.Backend.Services) > 0 {
+				authModPath = deriveModulePath(m.Backend.Services[0].Name)
+			}
+		}
+		add(d, &Task{
+			ID:           "backend.auth",
+			Kind:         TaskKindAuth,
+			Label:        "Generate authentication middleware",
+			Dependencies: dataDeps,
+			Payload: TaskPayload{
+				ModulePath:  authModPath,
+				ArchPattern: m.Backend.ArchPattern,
+				EnvConfig:   m.Backend.Env.OrZero(),
+				Service:     &authSvcCopy,
+				Domains:     m.Data.Domains,
+				Databases:   m.Data.Databases,
+				AllServices: m.Backend.Services,
+				Auth:        m.Backend.Auth,
+				Endpoints:   m.Contracts.Endpoints,
+				DTOs:        m.Contracts.DTOs,
+				OutputDir:   backendBaseDir(svcDirs),
+			},
+		})
+	}
+
 	switch m.Backend.ArchPattern {
 	case manifest.ArchMonolith, manifest.ArchModularMonolith:
 		svc := manifest.ServiceDef{
@@ -121,20 +185,37 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 		}
 	}
 
-	// Auth middleware generates Go code — it belongs alongside the backend module.
-	if m.Backend.Auth != nil && m.Backend.Auth.Strategy != "" {
+	// Reconciliation task: runs after ALL service chains complete.
+	// Performs a project-wide go build ./... and patches only the files that fail
+	// to compile, fixing cross-task type mismatches and import-path drift that
+	// per-task verification cannot catch because each task is verified in isolation.
+	// Only emitted when there are service tasks to reconcile.
+	svcBootstrapIDs := serviceIDs(m)
+	if len(svcBootstrapIDs) > 0 {
+		reconcileDeps := make([]string, len(svcBootstrapIDs))
+		copy(reconcileDeps, svcBootstrapIDs)
+		if _, hasAuth := d.Tasks["backend.auth"]; hasAuth {
+			reconcileDeps = append(reconcileDeps, "backend.auth")
+		}
+		// ModulePath is "monolith" for monolith/modular-monolith arches; the runner
+		// uses it to build the correct module-relative import paths in error messages.
+		// For microservices each service has its own module — leave ModulePath empty
+		// so the reconciliation runner scans per-service module directories.
+		modulePath := ""
+		switch m.Backend.ArchPattern {
+		case manifest.ArchMonolith, manifest.ArchModularMonolith:
+			modulePath = "monolith"
+		}
 		add(d, &Task{
-			ID:           "backend.auth",
-			Kind:         TaskKindAuth,
-			Label:        "Generate authentication middleware",
-			Dependencies: dataDeps,
+			ID:           "backend.reconcile",
+			Kind:         TaskKindReconciliation,
+			Label:        "Reconcile cross-service types and imports",
+			Dependencies: reconcileDeps,
 			Payload: TaskPayload{
+				ModulePath:  modulePath,
 				ArchPattern: m.Backend.ArchPattern,
-				EnvConfig:   m.Backend.Env.OrZero(),
-				Domains:     m.Data.Domains,
-				Databases:   m.Data.Databases,
 				AllServices: m.Backend.Services,
-				Auth:        m.Backend.Auth,
+				ServiceDirs: svcDirs,
 				OutputDir:   backendBaseDir(svcDirs),
 			},
 		})
@@ -154,6 +235,10 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 				AllServices: m.Backend.Services,
 				Messaging:   m.Backend.Messaging,
 				CommLinks:   m.Backend.CommLinks,
+				DTOs: mergeDTOs(
+					dtosForCommLinks(m.Backend.CommLinks, m.Contracts.DTOs),
+					dtosForEvents(m.Backend.Events, m.Contracts.DTOs),
+				),
 			},
 		})
 	}
@@ -198,6 +283,14 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	svcExternalAPIs := externalAPIsForService(svc.Name, m.Contracts.ExternalAPIs)
 	outputDir := svcDirs[slug]
 
+	// Pre-compute resolved cross-references so every layer gets the right context.
+	svcEndpoints := endpointsForService(svc.Name, m.Contracts.Endpoints)
+	svcDTOs := mergeDTOs(
+		dtosForEndpoints(svcEndpoints, m.Contracts.DTOs),
+		dtosForCommLinks(links, m.Contracts.DTOs),
+		dtosForJobQueues(jobQueues, m.Contracts.DTOs),
+	)
+
 	planID := svcPlanID(slug)
 	depsID := svcDepsID(slug)
 	repoID := "svc." + slug + ".repository"
@@ -225,6 +318,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			FileStorages: svcFileStorages,
 			ExternalAPIs: svcExternalAPIs,
 			Auth:         m.Backend.Auth,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
@@ -251,11 +346,13 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 1 — repository: data-access interfaces + DB implementations.
 	// Small: ~200–400 lines of Go. Depends on resolved module graph from deps.
+	// Also depends on dataDeps directly so domain struct definitions appear in
+	// DepsOf() shared context — agents must see actual field layouts, not just type names.
 	add(d, &Task{
 		ID:           repoID,
 		Kind:         TaskKindServiceRepository,
 		Label:        fmt.Sprintf("%s — repository layer", svc.Name),
-		Dependencies: []string{depsID},
+		Dependencies: append([]string{depsID}, dataDeps...),
 		Payload: TaskPayload{
 			ModulePath:  modPath,
 			ArchPattern: m.Backend.ArchPattern,
@@ -270,11 +367,20 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 2 — service/business logic: orchestrates repositories.
 	// Small: ~150–300 lines of Go per domain entity.
+	// Also depends on dataDeps so domain struct/error definitions are visible
+	// in shared context for correct type usage (e.g. UUID handling, sentinel errors).
+	// Also depends on backend.auth (when present) so the service agent sees the exact
+	// TokenManager method signatures generated by the auth task — prevents callers from
+	// inventing methods like ParseRefreshToken or passing wrong argument types.
+	svcLogicDeps := append([]string{repoID}, dataDeps...)
+	if _, hasAuth := d.Tasks["backend.auth"]; hasAuth {
+		svcLogicDeps = append(svcLogicDeps, "backend.auth")
+	}
 	add(d, &Task{
 		ID:           svcID,
 		Kind:         TaskKindServiceLogic,
 		Label:        fmt.Sprintf("%s — service layer", svc.Name),
-		Dependencies: []string{repoID},
+		Dependencies: svcLogicDeps,
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
@@ -285,6 +391,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			ExternalAPIs: svcExternalAPIs,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
@@ -293,17 +401,26 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	// Layer 3 — handlers: HTTP routes and request/response mapping.
 	// Small: ~200–400 lines of Go. Auth config injected so handlers can
 	// apply the correct middleware.
+	// Also depends on dataDeps so handler knows actual domain field types when
+	// creating response structs — prevents string/bool/time.Time mismatches.
+	// Also depends on backend.auth (when present) so the handler agent sees the exact
+	// auth.TokenManager and auth.Claims types — needed for framework-correct middleware generation.
+	handlerDeps := append([]string{svcID}, dataDeps...)
+	if _, hasAuth := d.Tasks["backend.auth"]; hasAuth {
+		handlerDeps = append(handlerDeps, "backend.auth")
+	}
 	add(d, &Task{
 		ID:           handlerID,
 		Kind:         TaskKindServiceHandler,
 		Label:        fmt.Sprintf("%s — handler layer", svc.Name),
-		Dependencies: []string{svcID},
+		Dependencies: handlerDeps,
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
 			Service:      &svcCopy,
 			Domains:      m.Data.Domains,
-			Endpoints:    m.Contracts.Endpoints,
+			Endpoints:    svcEndpoints,
+			DTOs:         svcDTOs,
 			CommLinks:    links,
 			Auth:         m.Backend.Auth,
 			FileStorages: svcFileStorages,
@@ -317,11 +434,16 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 
 	// Layer 4 — bootstrap: main.go, go.mod, config, middleware wiring.
 	// Small: ~100–200 lines. Wires all layers together.
+	// Depends on ALL three implementation layers (not just handler) so that
+	// DepsOf(bootstrap) includes repository and service constructor signatures.
+	// Without this, the bootstrap agent cannot know the exact constructor argument
+	// list for NewUserRepository or NewUserService, causing "too many arguments"
+	// and "undefined" cross-task compile errors.
 	add(d, &Task{
 		ID:           bootID,
 		Kind:         TaskKindServiceBootstrap,
 		Label:        fmt.Sprintf("%s — bootstrap", svc.Name),
-		Dependencies: []string{handlerID},
+		Dependencies: []string{repoID, svcID, handlerID},
 		Payload: TaskPayload{
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
@@ -335,10 +457,24 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Auth:         m.Backend.Auth,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
+			Endpoints:    svcEndpoints,
 			ServiceDirs:  svcDirs,
 			OutputDir:    outputDir,
 		},
 	})
+}
+
+// ── manifest cross-reference resolvers ───────────────────────────────────────
+
+// endpointsForService filters endpoints to those whose ServiceUnit matches name.
+func endpointsForService(name string, all []manifest.EndpointDef) []manifest.EndpointDef {
+	out := make([]manifest.EndpointDef, 0)
+	for _, e := range all {
+		if e.ServiceUnit == name {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // externalAPIsForService returns the external APIs that belong to the given
@@ -363,6 +499,79 @@ func fileStoragesForService(name string, storages []manifest.FileStorageDef) []m
 	for _, s := range storages {
 		if s.UsedByService == "" || s.UsedByService == name {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// dtosByName resolves a slice of DTO name strings to their full DTODef objects.
+// Preserves order, deduplicates by name.
+func dtosByName(names []string, all []manifest.DTODef) []manifest.DTODef {
+	seen := make(map[string]bool, len(names))
+	idx := make(map[string]manifest.DTODef, len(all))
+	for _, d := range all {
+		idx[d.Name] = d
+	}
+	out := make([]manifest.DTODef, 0, len(names))
+	for _, n := range names {
+		if n == "" || seen[n] {
+			continue
+		}
+		if d, ok := idx[n]; ok {
+			out = append(out, d)
+			seen[n] = true
+		}
+	}
+	return out
+}
+
+// dtosForEndpoints collects the DTOs referenced by RequestDTO and ResponseDTO fields.
+func dtosForEndpoints(endpoints []manifest.EndpointDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(endpoints)*2)
+	for _, e := range endpoints {
+		names = append(names, e.RequestDTO, e.ResponseDTO)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForCommLinks collects the DTOs referenced in CommLink.DTOs and CommLink.ResponseDTOs.
+func dtosForCommLinks(links []manifest.CommLink, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0)
+	for _, l := range links {
+		names = append(names, l.DTOs...)
+		names = append(names, l.ResponseDTOs...)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForJobQueues collects the DTOs referenced as PayloadDTO in job queue definitions.
+func dtosForJobQueues(queues []manifest.JobQueueDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(queues))
+	for _, q := range queues {
+		names = append(names, q.PayloadDTO)
+	}
+	return dtosByName(names, all)
+}
+
+// dtosForEvents collects the DTOs referenced as DTO in EventDef entries.
+func dtosForEvents(events []manifest.EventDef, all []manifest.DTODef) []manifest.DTODef {
+	names := make([]string, 0, len(events))
+	for _, e := range events {
+		names = append(names, e.DTO)
+	}
+	return dtosByName(names, all)
+}
+
+// mergeDTOs merges multiple DTO slices, deduplicating by Name.
+func mergeDTOs(slices ...[]manifest.DTODef) []manifest.DTODef {
+	seen := make(map[string]bool)
+	out := make([]manifest.DTODef, 0)
+	for _, s := range slices {
+		for _, d := range s {
+			if !seen[d.Name] {
+				out = append(out, d)
+				seen[d.Name] = true
+			}
 		}
 	}
 	return out
@@ -477,6 +686,11 @@ func (b *Builder) addFrontendTask(m *manifest.Manifest, d *DAG) {
 func (b *Builder) addInfraTasks(m *manifest.Manifest, d *DAG) {
 	// Depends on all service tasks + optional frontend.
 	baseDeps := append(serviceIDs(m), "data.schemas")
+	// Reconciliation must complete before infra so Dockerfiles are built against
+	// a codebase that has already been patched for cross-task compile errors.
+	if _, ok := d.Tasks["backend.reconcile"]; ok {
+		baseDeps = append(baseDeps, "backend.reconcile")
+	}
 	if _, ok := d.Tasks["frontend"]; ok {
 		baseDeps = append(baseDeps, "frontend")
 	}

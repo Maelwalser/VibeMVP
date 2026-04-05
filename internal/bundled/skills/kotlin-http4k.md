@@ -17,12 +17,14 @@ service-name/
 
 ## build.gradle.kts Boilerplate
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never hardcode version strings.
+
 ```kotlin
 plugins {
-    kotlin("jvm") version "2.0.0"
+    kotlin("jvm") version "<version>"
 }
 
-val http4kVersion = "5.26.0.0"
+val http4kVersion = "<version>"  // from Dependency & API Reference
 
 dependencies {
     implementation(platform("org.http4k:http4k-bom:$http4kVersion"))

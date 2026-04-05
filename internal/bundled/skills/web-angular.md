@@ -30,15 +30,17 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "@angular/animations": "^19.0.0",
-    "@angular/common": "^19.0.0",
-    "@angular/core": "^19.0.0",
-    "@angular/forms": "^19.0.0",
-    "@angular/router": "^19.0.0",
-    "rxjs": "~7.8.0"
+    "@angular/animations": "<version>",
+    "@angular/common": "<version>",
+    "@angular/core": "<version>",
+    "@angular/forms": "<version>",
+    "@angular/router": "<version>",
+    "rxjs": "<version>"
   }
 }
 ```

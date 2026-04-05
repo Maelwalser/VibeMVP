@@ -28,4 +28,10 @@ type Context struct {
 	// package path instead of redefining the type. This prevents duplicate
 	// interface/struct declarations across independently generated tasks.
 	ExistingTypeRegistry map[string]memory.TypeEntry
+	// AllConstructors is a snapshot of every constructor and factory signature
+	// extracted from committed files at their original, untruncated content.
+	// Injected into the prompt so agents (especially bootstrap wiring) call
+	// constructors with the correct argument count and return signature, even
+	// when the corresponding file excerpt was truncated by the memory budget.
+	AllConstructors []memory.ConstructorSig
 }

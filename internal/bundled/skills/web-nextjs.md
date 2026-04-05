@@ -36,18 +36,20 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "next": "15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "next": "<version>",
+    "react": "<version>",
+    "react-dom": "<version>"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "typescript": "^5",
-    "tailwindcss": "^3.4.0"
+    "@types/node": "<version>",
+    "@types/react": "<version>",
+    "typescript": "<version>",
+    "tailwindcss": "<version>"
   }
 }
 ```

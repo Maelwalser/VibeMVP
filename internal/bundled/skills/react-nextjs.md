@@ -25,6 +25,8 @@ frontend/
 
 ## package.json
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "name": "frontend",
@@ -38,18 +40,18 @@ frontend/
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "next": "<version>",
+    "react": "<version>",
+    "react-dom": "<version>"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "typescript": "^5",
-    "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10",
-    "postcss": "^8"
+    "@types/node": "<version>",
+    "@types/react": "<version>",
+    "@types/react-dom": "<version>",
+    "typescript": "<version>",
+    "tailwindcss": "<version>",
+    "autoprefixer": "<version>",
+    "postcss": "<version>"
   }
 }
 ```

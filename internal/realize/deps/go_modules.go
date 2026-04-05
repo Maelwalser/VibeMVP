@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,18 +34,40 @@ var WellKnownGoModules = map[string]ModuleInfo{
 			{Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
 		},
 	},
-	"PostgreSQL": {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"},
-	"MySQL":      {Module: "github.com/go-sql-driver/mysql", Version: "v1.8.1"},
-	"SQLite":     {Module: "modernc.org/sqlite", Version: "v1.34.4"},
-	"MongoDB":    {Module: "go.mongodb.org/mongo-driver", Version: "v1.17.1"},
+	"PostgreSQL":  {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"},
+	"MySQL":       {Module: "github.com/go-sql-driver/mysql", Version: "v1.8.1"},
+	"SQLite":      {Module: "modernc.org/sqlite", Version: "v1.34.4"},
+	"MongoDB":     {Module: "go.mongodb.org/mongo-driver", Version: "v1.17.1"},
+	"Redis":       {Module: "github.com/redis/go-redis/v9", Version: "v9.7.3"},
+	"sqlx":        {Module: "github.com/jmoiron/sqlx", Version: "v1.4.0"},
+	"CockroachDB": {Module: "github.com/jackc/pgx/v5", Version: "v5.7.2"}, // CockroachDB uses pgx wire protocol
+
+	// ── ORM ────────────────────────────────────────────────────────
+	"GORM":          {Module: "gorm.io/gorm", Version: "v1.25.12"},
+	"gorm-postgres": {Module: "gorm.io/driver/postgres", Version: "v1.5.11"},
+	"gorm-mysql":    {Module: "gorm.io/driver/mysql", Version: "v1.5.7"},
+	"gorm-sqlite":   {Module: "gorm.io/driver/sqlite", Version: "v1.5.7"},
+	"ent":           {Module: "entgo.io/ent", Version: "v0.14.1"},
+
+	// ── Messaging / event streaming ────────────────────────────────
+	"NATS":     {Module: "github.com/nats-io/nats.go", Version: "v1.37.0"},
+	"Kafka":    {Module: "github.com/segmentio/kafka-go", Version: "v0.4.47"},
+	"RabbitMQ": {Module: "github.com/rabbitmq/amqp091-go", Version: "v1.10.0"},
+
+	// ── RPC / API ──────────────────────────────────────────────────
+	"gRPC":       {Module: "google.golang.org/grpc", Version: "v1.70.0"},
+	"protobuf":   {Module: "google.golang.org/protobuf", Version: "v1.36.5"},
+	"ConnectRPC": {Module: "connectrpc.com/connect", Version: "v1.18.1"},
 
 	// ── Auth ───────────────────────────────────────────────────────
 	"JWT":    {Module: "github.com/golang-jwt/jwt/v5", Version: "v5.2.1"},
 	"bcrypt": {Module: "golang.org/x/crypto", Version: "v0.31.0"},
 
 	// ── Testing ────────────────────────────────────────────────────
-	"testify": {Module: "github.com/stretchr/testify", Version: "v1.9.0"},
-	"pgxmock": {Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
+	"testify":  {Module: "github.com/stretchr/testify", Version: "v1.9.0"},
+	"pgxmock":  {Module: "github.com/pashagolub/pgxmock/v4", Version: "v4.4.0"},
+	"gomock":   {Module: "go.uber.org/mock", Version: "v0.5.0"},
+	"httptest": {Module: "net/http/httptest", Version: ""}, // stdlib — no version needed
 
 	// ── Validation ─────────────────────────────────────────────────
 	"validator": {Module: "github.com/go-playground/validator/v10", Version: "v10.22.1"},
@@ -52,15 +75,29 @@ var WellKnownGoModules = map[string]ModuleInfo{
 	// ── Logging ────────────────────────────────────────────────────
 	"zap":     {Module: "go.uber.org/zap", Version: "v1.27.0"},
 	"zerolog": {Module: "github.com/rs/zerolog", Version: "v1.33.0"},
+	"slog":    {Module: "log/slog", Version: ""}, // stdlib — no version needed
+
+	// ── Observability ──────────────────────────────────────────────
+	"prometheus": {Module: "github.com/prometheus/client_golang", Version: "v1.21.1"},
+	"otel":       {Module: "go.opentelemetry.io/otel", Version: "v1.34.0"},
+	"otel-http":  {Module: "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp", Version: "v1.34.0"},
 
 	// ── UUID ───────────────────────────────────────────────────────
 	"uuid": {Module: "github.com/google/uuid", Version: "v1.6.0"},
 
-	// ── Message brokers ────────────────────────────────────────────
-	"NATS": {Module: "github.com/nats-io/nats.go", Version: "v1.37.0"},
-
 	// ── Config ─────────────────────────────────────────────────────
 	"envconfig": {Module: "github.com/kelseyhightower/envconfig", Version: "v1.4.0"},
+	"viper":     {Module: "github.com/spf13/viper", Version: "v1.19.0"},
+	"godotenv":  {Module: "github.com/joho/godotenv", Version: "v1.5.1"},
+
+	// ── Scheduling ─────────────────────────────────────────────────
+	"cron": {Module: "github.com/robfig/cron/v3", Version: "v3.0.1"},
+
+	// ── HTTP routing ───────────────────────────────────────────────
+	"gorilla/mux": {Module: "github.com/gorilla/mux", Version: "v1.8.1"},
+
+	// ── Serialisation ──────────────────────────────────────────────
+	"sonic": {Module: "github.com/bytedance/sonic", Version: "v1.13.2"},
 }
 
 // GoDevTool describes a Go tool installed in Dockerfiles (not in go.mod).
@@ -97,11 +134,18 @@ func GoModForService(modulePath, framework, goVersion string, technologies []str
 	seen := make(map[string]bool)
 
 	addModule := func(info ModuleInfo) {
+		// Skip stdlib sentinels (no module path version needed).
+		if info.Version == "" {
+			return
+		}
 		if !seen[info.Module] {
 			seen[info.Module] = true
 			requires = append(requires, fmt.Sprintf("\t%s %s", info.Module, info.Version))
 		}
 		for _, td := range info.TestDeps {
+			if td.Version == "" {
+				continue
+			}
 			if !seen[td.Module] {
 				seen[td.Module] = true
 				requires = append(requires, fmt.Sprintf("\t%s %s", td.Module, td.Version))
@@ -122,6 +166,8 @@ func GoModForService(modulePath, framework, goVersion string, technologies []str
 			addModule(info)
 		}
 	}
+
+	sort.Strings(requires)
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("module %s\n\ngo %s\n\n", modulePath, goVersion))
@@ -284,6 +330,14 @@ func parseRequires(gomod string) map[string]string {
 	inRequire := false
 	for _, line := range strings.Split(gomod, "\n") {
 		line = strings.TrimSpace(line)
+		// Single-line form: require github.com/foo/bar v1.2.3
+		if strings.HasPrefix(line, "require ") && !strings.HasSuffix(strings.TrimSpace(line), "(") {
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				versions[parts[1]] = parts[2]
+			}
+			continue
+		}
 		if line == "require (" {
 			inRequire = true
 			continue
@@ -294,6 +348,7 @@ func parseRequires(gomod string) map[string]string {
 		}
 		if inRequire {
 			parts := strings.Fields(line)
+			// parts[0]=module, parts[1]=version, optional parts[2]="//" parts[3]="indirect"
 			if len(parts) >= 2 {
 				versions[parts[0]] = parts[1]
 			}
@@ -302,16 +357,19 @@ func parseRequires(gomod string) map[string]string {
 	return versions
 }
 
-// SaveResolvedDeps persists resolved deps for downstream tasks.
+// resolveGoDevToolVersion fetches the latest version of a Go dev tool from the Go
+// module proxy, then reads its go.mod to find the minimum Go version it requires.
+// Both version and MinGoVersion are updated from live registry data.
+// Falls back to t on any error.
 func resolveGoDevToolVersion(ctx context.Context, t GoDevTool) GoDevTool {
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
 	encoded := goModProxyPath(t.ModulePath)
 
-	// Step 1: resolve @latest version tag.
+	// Step 1: resolve @latest version tag — fresh timeout so this request gets
+	// its full budget regardless of any prior work done by the caller.
 	latestURL := "https://proxy.golang.org/" + encoded + "/@latest"
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, latestURL, nil)
+	req1Ctx, cancel1 := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel1()
+	req, err := http.NewRequestWithContext(req1Ctx, http.MethodGet, latestURL, nil)
 	if err != nil {
 		return t
 	}
@@ -335,8 +393,12 @@ func resolveGoDevToolVersion(ctx context.Context, t GoDevTool) GoDevTool {
 
 	// Step 2: fetch the go.mod for that version to read the `go` directive,
 	// which tells us the minimum Go version the tool requires.
+	// Use a fresh timeout — the first request has already consumed some of any
+	// shared deadline, so a new context ensures step 2 gets its own full window.
 	modURL := "https://proxy.golang.org/" + encoded + "/@v/" + latest.Version + ".mod"
-	modReq, err := http.NewRequestWithContext(reqCtx, http.MethodGet, modURL, nil)
+	req2Ctx, cancel2 := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel2()
+	modReq, err := http.NewRequestWithContext(req2Ctx, http.MethodGet, modURL, nil)
 	if err != nil {
 		return resolved
 	}

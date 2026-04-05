@@ -1,5 +1,31 @@
 # Go PostgreSQL Repository (pgx/v5)
 
+## WRONG vs CORRECT — PgxPool Imports (Most Common Compile Error)
+
+❌ **WRONG** — causes `undefined: pgx.CommandTag` compile error:
+```go
+// pgx.CommandTag does NOT exist in pgx/v5 — CommandTag moved to the pgconn sub-package.
+Exec(ctx context.Context, sql string, arguments ...any) (pgx.CommandTag, error)
+```
+
+❌ **WRONG** — causes `undefined: pgx` and `undefined: pgconn` errors:
+```go
+// pgxpool is the concrete POOL package — it does NOT export pgx.Tx or pgconn.CommandTag
+import "github.com/jackc/pgx/v5/pgxpool"
+```
+
+✅ **CORRECT** — interfaces.go MUST import BOTH of these packages:
+```go
+import (
+    "context"
+    "github.com/jackc/pgx/v5"          // → pgx.Tx, pgx.Rows, pgx.Row, pgx.Batch, pgx.BatchResults
+    "github.com/jackc/pgx/v5/pgconn"   // → pgconn.CommandTag  ← sub-package, NOT pgx.CommandTag
+)
+```
+`pgxpool` belongs in the repository IMPLEMENTATION file (`postgres/db.go`), not in `interfaces.go`.
+
+**`CommandTag` is in `pgconn`, NEVER in `pgx`**: always write `pgconn.CommandTag`, not `pgx.CommandTag`.
+
 ## The PgxPool Interface (MANDATORY)
 Define in `internal/repository/interfaces.go`. NEVER use `*pgxpool.Pool` in struct fields —
 doing so prevents pgxmock injection in tests and causes the type mismatch compile error.
@@ -67,10 +93,13 @@ List only what your code directly imports. The dependency resolution step runs
 `go mod tidy` to add transitive deps from the module proxy automatically.
 Do NOT guess pseudo-versions for transitive packages — this is handled for you.
 
+Use the **exact versions from the "Dependency & API Reference" section** of your task prompt —
+never hardcode version strings in this skill. The correct versions are pinned there per project.
+
 ```
 require (
-    github.com/jackc/pgx/v5 v5.5.5
-    github.com/pashagolub/pgxmock/v3 v3.3.0
+    github.com/jackc/pgx/v5 <version from Dependency & API Reference>
+    github.com/pashagolub/pgxmock/v4 <version from Dependency & API Reference>
 )
 ```
 

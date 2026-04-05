@@ -18,9 +18,11 @@ service-name/
 
 ## build.gradle Boilerplate
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never hardcode version strings.
+
 ```groovy
 plugins {
-    id("io.micronaut.application") version "4.3.0"
+    id("io.micronaut.application") version "<version>"
 }
 
 micronaut {

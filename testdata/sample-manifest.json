@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-05T18:47:56.981224065+02:00",
+  "created_at": "2026-04-05T18:53:27.792084789+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [
@@ -39,43 +39,52 @@
         "attributes": [
           {
             "name": "id",
-            "type": "varchar",
+            "type": "UUID",
+            "constraints": "Primary Key, Auto-generated",
             "sensitive": false
           },
           {
             "name": "email",
-            "type": "varchar",
-            "sensitive": false
+            "type": "String",
+            "constraints": "Required, Unique",
+            "sensitive": false,
+            "validation": "valid email format"
           },
           {
             "name": "password_hash",
-            "type": "varchar",
+            "type": "String",
+            "constraints": "Required",
             "sensitive": false
           },
           {
             "name": "is_active",
-            "type": "varchar",
+            "type": "Boolean",
+            "constraints": "Required",
             "default": "true",
             "sensitive": false
           },
           {
             "name": "refresh_token",
-            "type": "varchar",
+            "type": "String",
+            "constraints": "Nullable",
             "sensitive": false
           },
           {
             "name": "refresh_token_expires_at",
-            "type": "varchar",
+            "type": "DateTime",
+            "constraints": "Nullable",
             "sensitive": false
           },
           {
             "name": "created_at",
-            "type": "varchar",
+            "type": "DateTime",
+            "constraints": "Required, Auto-generated",
             "sensitive": false
           },
           {
             "name": "updated_at",
-            "type": "varchar",
+            "type": "DateTime",
+            "constraints": "Required, Auto-updated",
             "sensitive": false
           }
         ]
@@ -94,7 +103,7 @@
     ]
   },
   "backend": {
-    "arch_pattern": "hybrid",
+    "arch_pattern": "monolith",
     "stack_configs": [
       {
         "name": "stack",
@@ -193,7 +202,7 @@
       "provider": "self-managed",
       "service_unit": "auth-api",
       "authz_model": "RBAC",
-      "token_storage": "Authorization header (Bearer)",
+      "token_storage": "HttpOnly cookie",
       "permissions": [
         {
           "name": "profile:read",
@@ -612,9 +621,9 @@
     ]
   },
   "realize": {
-    "app_name": "test",
+    "app_name": "app",
     "output_dir": "generated-code",
-    "concurrency": 1,
+    "concurrency": 4,
     "verify": true,
     "dry_run": false,
     "provider": "Claude",

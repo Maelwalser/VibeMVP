@@ -89,10 +89,12 @@ mvn flyway:clean     # DROP ALL OBJECTS — dev only!
 
 ## Gradle Plugin
 
+> ⚠ **Use version from the "Dependency & API Reference" section** of your task prompt — never hardcode version strings.
+
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("org.flywaydb.flyway") version "10.8.1"
+    id("org.flywaydb.flyway") version "<version>"
 }
 
 flyway {

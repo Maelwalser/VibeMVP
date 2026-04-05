@@ -239,9 +239,9 @@ var universalSkillsForKind = map[dag.TaskKind][]string{
 		"backend-patterns", "security-review", "api-design",
 		"grpc-gateway", // gRPC-JSON transcoding
 	},
-	// Contracts: API design is the primary skill here
+	// Contracts: API design + DTO patterns + coding standards for self-contained imports
 	dag.TaskKindContracts: {
-		"api-design", "coding-standards",
+		"api-design", "coding-standards", "domain-dtos",
 	},
 	// Frontend: frontend patterns + coding standards
 	dag.TaskKindFrontend: {

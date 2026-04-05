@@ -19,19 +19,21 @@ service-name/
 
 ## package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "fastify": "^4.26.0",
-    "@fastify/cors": "^9.0.1",
-    "@fastify/helmet": "^11.1.1",
-    "@fastify/rate-limit": "^9.1.0",
-    "@sinclair/typebox": "^0.32.18"
+    "fastify": "<version>",
+    "@fastify/cors": "<version>",
+    "@fastify/helmet": "<version>",
+    "@fastify/rate-limit": "<version>",
+    "@sinclair/typebox": "<version>"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3",
-    "ts-node": "^10.9.2"
+    "@types/node": "<version>",
+    "typescript": "<version>",
+    "ts-node": "<version>"
   }
 }
 ```

@@ -139,6 +139,17 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		r.log("[%s] go.mod locked from deps phase", r.task.ID)
 	}
 
+	// Augment the pre-computed deps context with the locked go.mod so the agent
+	// sees the exact resolved versions and does not invent its own. This prevents
+	// version drift between what go mod tidy resolved and what the agent writes.
+	effectiveDepsContext := r.depsContext
+	if lockedGoMod != "" {
+		effectiveDepsContext += "\n## LOCKED DEPENDENCIES — DO NOT OVERRIDE\n\n"
+		effectiveDepsContext += "The following go.mod was resolved by the package manager. "
+		effectiveDepsContext += "Do NOT generate go.mod or go.sum. Do NOT change any version.\n\n"
+		effectiveDepsContext += "```\n" + lockedGoMod + "\n```\n"
+	}
+
 	// Stage files from completed dependency tasks so go build can resolve
 	// cross-task packages (e.g. internal/domain from data.schemas is visible
 	// to svc.monolith.plan's verifier without burning a retry slot).
@@ -175,8 +186,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			PreviousErrors:       lastVerifyOutput,
 			DependencyOutputs:    r.memory.DepsOf(r.task),
 			AttemptNumber:        attempt,
-			DepsContext:          r.depsContext,
+			DepsContext:          effectiveDepsContext,
 			ExistingTypeRegistry: r.memory.TypeRegistry(),
+			AllConstructors:      r.memory.AllConstructors(),
 		}
 
 		result, err := a.Run(ctx, ac)
@@ -212,9 +224,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 		}
 
-		// Apply deterministic fixes (gofmt, invalid escape sequences, duplicate
-		// type declarations) before every verification — not just on retries.
-		if fixes := verify.ApplyDeterministicFixes(tmpDir, verify.FilePaths(result.Files)); fixes != "" {
+		// Apply deterministic fixes (language-specific formatting, import cleanup,
+		// etc.) before every verification — not just on retries.
+		if fixes := verify.ApplyDeterministicFixes(tmpDir, verify.FilePaths(result.Files), r.verifier.Language()); fixes != "" {
 			r.log("[%s] applied deterministic fixes: %s", r.task.ID, fixes)
 		}
 
@@ -234,6 +246,21 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 
 		if vResult.Passed {
 			return r.commit(ctx, tmpDir, result.Files)
+		}
+
+		// Before consuming a retry slot, try the disk-based UUID→string fix.
+		// This catches the common pattern of passing uuid.UUID where string is
+		// expected without needing an LLM call.
+		if attempt < r.maxRetries {
+			if uuidFix := verify.ApplyUUIDToStringFixes(tmpDir, vResult.Output); uuidFix != "" {
+				r.log("[%s] %s", r.task.ID, uuidFix)
+				// Re-apply language fixes after rewriting.
+				verify.ApplyDeterministicFixes(tmpDir, verify.FilePaths(lastFiles), r.verifier.Language())
+				if fixResult, ferr := r.verifier.Verify(ctx, tmpDir, verify.FilePaths(lastFiles)); ferr == nil && fixResult.Passed {
+					r.log("[%s] uuid fix resolved verification — skipping LLM retry", r.task.ID)
+					return r.commit(ctx, tmpDir, lastFiles)
+				}
+			}
 		}
 
 		// Before consuming a retry slot, try the in-memory fix layer (unused
@@ -269,8 +296,13 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	if err := r.writer.CommitWithPrefix(tmpDir, outputDir, files); err != nil {
 		return fmt.Errorf("task %s: commit files: %w", r.task.ID, err)
 	}
-	// Record with prefixed paths so downstream tasks can locate files on disk.
-	files = applyOutputDirPrefix(files, outputDir)
+	// Apply output dir prefix to get disk-relative paths for rawPaths storage.
+	// The un-prefixed files are passed to registerExportedTypes so the type registry
+	// stores module-relative package paths (e.g. "internal/domain") rather than
+	// filesystem paths (e.g. "backend/internal/domain") — preventing agents from
+	// constructing wrong import paths like "backend/internal/domain" when the correct
+	// Go import is "monolith/internal/domain".
+	prefixedFiles := applyOutputDirPrefix(files, outputDir)
 	// Keep the shared service temp dir alive until the bootstrap task completes
 	// so each layer's files accumulate for go build verification.
 	_, isSvcTask := serviceSlug(r.task.ID)
@@ -279,12 +311,18 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 			r.log("[%s] warning: failed to remove temp dir %s: %v", r.task.ID, tmpDir, err)
 		}
 	}
-	r.memory.Record(r.task, files)
+	// Record: passes prefixedFiles for rawPaths (disk staging) but Record internally
+	// strips outputDir when building excerpts for agent context.
+	r.memory.Record(r.task, prefixedFiles, outputDir)
+	// Register types and constructors from un-prefixed files so package paths are
+	// module-relative. Constructors are extracted from full content here — before
+	// any excerpt truncation — so downstream prompts see accurate signatures.
 	r.registerExportedTypes(files)
+	r.registerConstructors(files)
 	if err := r.state.MarkCompleted(r.task.ID); err != nil {
 		r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 	}
-	r.log("[%s] done (%d files)", r.task.ID, len(files))
+	r.log("[%s] done (%d files)", r.task.ID, len(prefixedFiles))
 	return nil
 }
 
@@ -301,6 +339,18 @@ func (r *TaskRunner) registerExportedTypes(files []dag.GeneratedFile) {
 	}
 	if len(types) > 0 {
 		r.memory.RegisterTypes(types)
+	}
+}
+
+// registerConstructors extracts exported constructor and factory signatures from
+// each committed file (at original, untruncated content) and stores them in
+// shared memory. This ensures downstream tasks — especially bootstrap wiring — see
+// accurate signatures even when file excerpts are truncated by the memory budget.
+func (r *TaskRunner) registerConstructors(files []dag.GeneratedFile) {
+	for _, f := range files {
+		if sigs := memory.ExtractConstructorSigs(f.Path, f.Content); len(sigs) > 0 {
+			r.memory.RegisterConstructors(f.Path, sigs)
+		}
 	}
 }
 

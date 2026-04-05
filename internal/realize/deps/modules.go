@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -163,7 +164,7 @@ func InfraPromptContext(ctx context.Context, hasGoServices bool, hasFrontend boo
 		// Resolve npm package versions from the registry at runtime.
 		resolved := resolveAllNpmVersions(ctx)
 
-		b.WriteString("### Node.js Docker Base Image\n\n```dockerfile\nFROM node:20-alpine\n```\n\n")
+		b.WriteString("### Node.js Docker Base Image\n\n```dockerfile\nFROM node:22-alpine\n```\n\n")
 		b.WriteString("### npm Package Versions\n\n")
 		b.WriteString("| Package | Version |\n|---------|--------|\n")
 		pkgs := make([]string, 0, len(resolved))
@@ -178,8 +179,10 @@ func InfraPromptContext(ctx context.Context, hasGoServices bool, hasFrontend boo
 		b.WriteString(LibraryAPIDocs["next"])
 		b.WriteString("\n")
 
-		// Tailwind CSS v4 breaking changes — injected when tailwindcss >= 4.x is resolved.
-		if twVer := resolved["tailwindcss"]; twVer != "" && twVer[0] >= '4' {
+		// Tailwind CSS v4 breaking changes — injected when tailwindcss major version >= 4.
+		// Parse the major version number properly rather than comparing the ASCII byte,
+		// which would misclassify "10.x.x" as < "4" (first char '1' < '4').
+		if twVer := resolved["tailwindcss"]; twVer != "" && tailwindMajor(twVer) >= 4 {
 			b.WriteString("### Tailwind CSS v4 — CRITICAL Configuration Rules\n\n")
 			b.WriteString("Tailwind CSS 4.x moved its PostCSS plugin to a separate package. " +
 				"Using `tailwindcss` directly as a PostCSS plugin will crash the build.\n\n")
@@ -228,4 +231,17 @@ func LoadResolvedDeps(dir, taskID string) (*ResolvedDeps, error) {
 	}
 	var d ResolvedDeps
 	return &d, json.Unmarshal(data, &d)
+}
+
+// tailwindMajor parses the major version number from a semver string such as
+// "3.4.17" or "4.0.0". Returns 0 on parse failure.
+// Using strconv rather than comparing ASCII bytes avoids misclassifying
+// versions >= 10.x as less than 4.x.
+func tailwindMajor(version string) int {
+	major := strings.SplitN(strings.TrimPrefix(version, "v"), ".", 2)[0]
+	n, err := strconv.Atoi(major)
+	if err != nil {
+		return 0
+	}
+	return n
 }

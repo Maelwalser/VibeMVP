@@ -19,20 +19,22 @@ service-name/
 
 ## package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
-    "express-rate-limit": "^7.1.5"
+    "express": "<version>",
+    "cors": "<version>",
+    "helmet": "<version>",
+    "express-rate-limit": "<version>"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3",
-    "ts-node": "^10.9.2"
+    "@types/express": "<version>",
+    "@types/cors": "<version>",
+    "@types/node": "<version>",
+    "typescript": "<version>",
+    "ts-node": "<version>"
   }
 }
 ```

@@ -19,13 +19,16 @@ HTTP/JSON transcoding for gRPC services using `grpc-ecosystem/grpc-gateway/v2`. 
 
 ## Package Setup
 
+Use the **exact versions from the "Dependency & API Reference" section** of your task prompt —
+never hardcode version strings. The example below shows the package names only:
+
 ```go
-// go.mod — required dependencies
+// go.mod — required dependencies (versions from Dependency & API Reference)
 require (
-    google.golang.org/grpc              v1.64.0
-    google.golang.org/protobuf          v1.34.2
-    github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
-    google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4
+    google.golang.org/grpc              <version from Dependency & API Reference>
+    google.golang.org/protobuf          <version from Dependency & API Reference>
+    github.com/grpc-ecosystem/grpc-gateway/v2 <version from Dependency & API Reference>
+    google.golang.org/genproto/googleapis/api <version from Dependency & API Reference>
 )
 ```
 

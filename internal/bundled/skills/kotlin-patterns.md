@@ -531,13 +531,13 @@ val first20 = fibonacci.take(20).toList()
 ### build.gradle.kts Configuration
 
 ```kotlin
-// Check for latest versions: https://kotlinlang.org/docs/releases.html
+// Use versions from the "Dependency & API Reference" section — never hardcode version strings.
 plugins {
-    kotlin("jvm") version "2.3.10"
-    kotlin("plugin.serialization") version "2.3.10"
-    id("io.ktor.plugin") version "3.4.0"
-    id("org.jetbrains.kotlinx.kover") version "0.9.7"
-    id("io.gitlab.arturbosch.detekt") version "1.23.8"
+    kotlin("jvm") version "<version>"
+    kotlin("plugin.serialization") version "<version>"
+    id("io.ktor.plugin") version "<version>"
+    id("org.jetbrains.kotlinx.kover") version "<version>"
+    id("io.gitlab.arturbosch.detekt") version "<version>"
 }
 
 group = "com.example"

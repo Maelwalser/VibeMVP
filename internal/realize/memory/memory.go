@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -25,6 +26,20 @@ type TaskOutput struct {
 	Files  []FileExcerpt
 }
 
+// ConstructorSig records one exported constructor or factory function signature
+// extracted from a committed file at its original, untruncated content.
+// Stored in SharedMemory so downstream prompts receive accurate signatures even
+// when file excerpts are truncated by the shared memory budget.
+type ConstructorSig struct {
+	// File is the module-relative source path, e.g. "internal/repository/postgres/user.go".
+	File string
+	// Package is the directory portion of File, e.g. "internal/repository/postgres".
+	Package string
+	// Signature is the full function declaration line with the body stripped,
+	// e.g. "func NewUserRepository(db *pgxpool.Pool) (*UserRepository, error)".
+	Signature string
+}
+
 // TypeEntry records where an exported type is first defined across the project.
 // Used to build the cross-task type registry that prevents duplicate declarations.
 type TypeEntry struct {
@@ -32,6 +47,10 @@ type TypeEntry struct {
 	Package string
 	// File is the relative source file path, e.g. "internal/domain/user.go".
 	File string
+	// Definition is the full type declaration body (struct/interface fields included).
+	// Injected into downstream agent prompts so they know method signatures without
+	// having to re-read the full file excerpt.
+	Definition string
 }
 
 // SharedMemory is a thread-safe store of completed task outputs.
@@ -42,6 +61,7 @@ type SharedMemory struct {
 	outputs      map[string]*TaskOutput
 	rawPaths     map[string][]string  // task ID → committed file paths (untruncated)
 	typeRegistry map[string]TypeEntry // exported type name → first-seen location
+	constructors []ConstructorSig     // all constructor sigs extracted at commit time
 }
 
 // New returns an empty SharedMemory.
@@ -55,9 +75,20 @@ func New() *SharedMemory {
 
 // Record stores the output of a completed task. Only contextually useful files
 // are retained (interface/type/schema/contract files); large files are truncated.
+//
+// files should contain the disk-prefixed paths (e.g. "backend/internal/domain/user.go").
+// outputDir is stripped from file paths before building agent context excerpts, so
+// agents see module-relative paths like "internal/domain/user.go" — not the filesystem
+// output directory prefix. This prevents agents from constructing wrong import paths
+// such as "backend/internal/domain" instead of the module-relative "internal/domain".
+//
+// rawPaths keeps the full prefixed paths so CommittedPaths can stage files correctly.
 // Safe for concurrent use.
-func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
-	excerpts := buildExcerpts(files)
+func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile, outputDir string) {
+	// Strip the output dir prefix for agent context: agents work with module-relative
+	// paths, not filesystem paths. The OutputDir is a deployment artifact only.
+	contextFiles := stripOutputDirFromFiles(files, outputDir)
+	excerpts := buildExcerpts(contextFiles)
 	out := &TaskOutput{
 		TaskID: task.ID,
 		Label:  task.Label,
@@ -67,13 +98,29 @@ func (m *SharedMemory) Record(task *dag.Task, files []dag.GeneratedFile) {
 
 	paths := make([]string, len(files))
 	for i, f := range files {
-		paths[i] = f.Path
+		paths[i] = f.Path // keep prefixed for disk staging
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputs[task.ID] = out
 	m.rawPaths[task.ID] = paths
+}
+
+// stripOutputDirFromFiles returns a copy of files with the outputDir prefix stripped
+// from each path. If outputDir is empty or ".", files are returned unchanged.
+func stripOutputDirFromFiles(files []dag.GeneratedFile, outputDir string) []dag.GeneratedFile {
+	if outputDir == "" || outputDir == "." {
+		return files
+	}
+	prefix := filepath.ToSlash(outputDir) + "/"
+	result := make([]dag.GeneratedFile, len(files))
+	for i, f := range files {
+		normalized := filepath.ToSlash(f.Path)
+		stripped := strings.TrimPrefix(normalized, prefix)
+		result[i] = dag.GeneratedFile{Path: stripped, Content: f.Content}
+	}
+	return result
 }
 
 // RegisterTypes records the exported types produced by a task into the shared type
@@ -92,6 +139,39 @@ func (m *SharedMemory) RegisterTypes(types map[string]TypeEntry) {
 			m.typeRegistry[name] = entry
 		}
 	}
+}
+
+// RegisterConstructors appends constructor signatures extracted from file to the
+// shared registry. Called at commit time on untruncated file content so that
+// downstream prompts always receive accurate signatures regardless of excerpt
+// truncation. Safe for concurrent use.
+func (m *SharedMemory) RegisterConstructors(file string, sigs []string) {
+	if len(sigs) == 0 {
+		return
+	}
+	pkg := filepath.Dir(file)
+	if pkg == "." {
+		pkg = ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, sig := range sigs {
+		m.constructors = append(m.constructors, ConstructorSig{
+			File:      file,
+			Package:   pkg,
+			Signature: sig,
+		})
+	}
+}
+
+// AllConstructors returns a snapshot of every constructor signature registered so far.
+// Safe for concurrent use.
+func (m *SharedMemory) AllConstructors() []ConstructorSig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ConstructorSig, len(m.constructors))
+	copy(result, m.constructors)
+	return result
 }
 
 // TypeRegistry returns a snapshot of all exported types seen so far.
@@ -134,6 +214,8 @@ func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	budget := config.MaxTotalCharsFor(string(task.Kind))
+
 	var results []*TaskOutput
 	total := 0
 
@@ -142,7 +224,7 @@ func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 		if !ok {
 			continue
 		}
-		if total >= config.MaxTotalChars {
+		if total >= budget {
 			break
 		}
 		// Shallow-copy the output, trimming files once the budget is reached.
@@ -152,11 +234,11 @@ func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 			Kind:   out.Kind,
 		}
 		for _, f := range out.Files {
-			if total >= config.MaxTotalChars {
+			if total >= budget {
 				break
 			}
 			content := f.Content
-			remaining := config.MaxTotalChars - total
+			remaining := budget - total
 			if len(content) > remaining {
 				content = content[:remaining] + "\n// [truncated by shared memory budget]"
 			}
@@ -219,8 +301,22 @@ func buildExcerpts(files []dag.GeneratedFile) []FileExcerpt {
 // schema, or contract definitions — the most useful shared context.
 func isHighValue(path string) bool {
 	lower := strings.ToLower(path)
+
+	// All files under a domain/ package contain entity structs and sentinel
+	// errors that every downstream task needs to stay type-consistent.
+	if strings.Contains(lower, "/domain/") {
+		return true
+	}
+	// Repository interface and error files are the binding contract between layers.
+	if strings.HasSuffix(lower, "interfaces.go") {
+		return true
+	}
+	if strings.Contains(lower, "/repository/") && strings.HasSuffix(lower, "errors.go") {
+		return true
+	}
+
 	suffixes := []string{
-		"types.go", "models.go", "schema.go", "interfaces.go",
+		"types.go", "models.go", "schema.go",
 		"entities.go", "domain.go", "dto.go",
 		"types.ts", "models.ts", "schema.ts", "types.tsx",
 	}

@@ -118,6 +118,156 @@ Correct Dockerfile pattern for Next.js:
   CMD ["npm", "run", "dev"]
 `,
 
+	"fastapi": `## FastAPI API Reference
+
+Router and app setup:
+  from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+  app = FastAPI()
+  router = APIRouter(prefix="/api/v1", tags=["users"])
+  app.include_router(router)
+
+Route definitions:
+  @router.get("/users", response_model=list[UserResponse])
+  async def list_users(db: AsyncSession = Depends(get_db)) -> list[UserResponse]:
+      ...
+
+  @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+  async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)) -> UserResponse:
+      ...
+
+  @router.get("/users/{user_id}", response_model=UserResponse)
+  async def get_user(user_id: UUID, db: AsyncSession = Depends(get_db)) -> UserResponse:
+      ...
+
+Pydantic models (v2):
+  from pydantic import BaseModel, EmailStr, Field
+  class UserCreate(BaseModel):
+      name: str = Field(..., min_length=1, max_length=100)
+      email: EmailStr
+
+  class UserResponse(BaseModel):
+      id: UUID
+      name: str
+      email: str
+      model_config = ConfigDict(from_attributes=True)  # replaces orm_mode=True
+
+Dependency injection:
+  async def get_db() -> AsyncGenerator[AsyncSession, None]:
+      async with async_session() as session:
+          yield session
+
+  async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+      ...
+
+Error responses:
+  raise HTTPException(status_code=404, detail="User not found")
+  raise HTTPException(status_code=422, detail=[{"loc": ["body", "email"], "msg": "invalid"}])
+
+CRITICAL: Pydantic v2 breaking changes vs v1:
+  orm_mode = True         ← WRONG (v1)
+  from_attributes = True  ← CORRECT (v2, inside model_config = ConfigDict(...))
+  validator decorator     ← WRONG (v1, use @field_validator in v2)
+`,
+
+	"django-drf": `## Django REST Framework API Reference
+
+ViewSets:
+  from rest_framework import viewsets, permissions, status
+  from rest_framework.response import Response
+  from rest_framework.decorators import action
+
+  class UserViewSet(viewsets.ModelViewSet):
+      queryset = User.objects.all()
+      serializer_class = UserSerializer
+      permission_classes = [permissions.IsAuthenticated]
+
+      @action(detail=True, methods=["post"])
+      def set_password(self, request, pk=None):
+          user = self.get_object()
+          ...
+          return Response({"status": "password set"})
+
+Serializers:
+  from rest_framework import serializers
+
+  class UserSerializer(serializers.ModelSerializer):
+      class Meta:
+          model = User
+          fields = ["id", "name", "email"]
+          read_only_fields = ["id"]
+
+  # Nested serializer:
+  class OrderSerializer(serializers.ModelSerializer):
+      user = UserSerializer(read_only=True)
+      class Meta:
+          model = Order
+          fields = ["id", "user", "total"]
+
+Router:
+  from rest_framework.routers import DefaultRouter
+  router = DefaultRouter()
+  router.register(r"users", UserViewSet)
+  urlpatterns = [path("api/", include(router.urls))]
+
+Permissions:
+  permission_classes = [permissions.IsAuthenticated]
+  permission_classes = [permissions.IsAdminUser]
+  permission_classes = [permissions.AllowAny]
+
+Filtering and pagination:
+  from rest_framework.filters import SearchFilter, OrderingFilter
+  filter_backends = [SearchFilter, OrderingFilter]
+  search_fields = ["name", "email"]
+`,
+
+	"sqlalchemy": `## SQLAlchemy 2.0 API Reference
+
+CRITICAL: SQLAlchemy 2.0 uses new-style Query API. The 1.x session.query() API still works
+but is legacy. Always use the 2.0 select() API.
+
+Model definition (2.0 mapped_column style):
+  from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+  from sqlalchemy import String, Integer, ForeignKey
+  import uuid
+
+  class Base(DeclarativeBase):
+      pass
+
+  class User(Base):
+      __tablename__ = "users"
+      id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+      name: Mapped[str] = mapped_column(String(100))
+      email: Mapped[str] = mapped_column(String(255), unique=True)
+      orders: Mapped[list["Order"]] = relationship(back_populates="user")
+
+Async session (preferred for FastAPI/async):
+  from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+  engine = create_async_engine("postgresql+asyncpg://user:pass@host/db")
+  async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+Queries (2.0 style — use these, NOT session.query()):
+  from sqlalchemy import select, update, delete
+
+  # SELECT
+  result = await session.execute(select(User).where(User.email == email))
+  user = result.scalar_one_or_none()
+
+  # INSERT
+  session.add(User(name="Alice", email="alice@example.com"))
+  await session.commit()
+
+  # UPDATE
+  await session.execute(update(User).where(User.id == uid).values(name="Bob"))
+  await session.commit()
+
+  # DELETE
+  await session.execute(delete(User).where(User.id == uid))
+  await session.commit()
+
+WRONG (1.x style — do NOT use):
+  session.query(User).filter(User.email == email).first()  ← legacy, avoid
+`,
+
 	"golang-jwt": `## golang-jwt/v5 API Reference (github.com/golang-jwt/jwt/v5)
 
 Creating a token:

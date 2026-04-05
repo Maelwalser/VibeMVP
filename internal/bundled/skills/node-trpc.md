@@ -22,18 +22,20 @@ service-name/
 
 ## package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "@trpc/server": "^11.0.0",
-    "zod": "^3.22.4",
-    "express": "^4.18.2",
-    "@trpc/client": "^11.0.0"
+    "@trpc/server": "<version>",
+    "zod": "<version>",
+    "express": "<version>",
+    "@trpc/client": "<version>"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3"
+    "@types/express": "<version>",
+    "@types/node": "<version>",
+    "typescript": "<version>"
   }
 }
 ```

@@ -28,20 +28,22 @@ app/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "expo": "~52.0.0",
-    "expo-router": "~4.0.0",
-    "react": "18.3.1",
-    "react-native": "0.76.3",
-    "expo-status-bar": "~2.0.0",
-    "expo-image": "~2.0.0",
-    "zustand": "^5.0.0"
+    "expo": "<version>",
+    "expo-router": "<version>",
+    "react": "<version>",
+    "react-native": "<version>",
+    "expo-status-bar": "<version>",
+    "expo-image": "<version>",
+    "zustand": "<version>"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.0",
-    "typescript": "^5.3.0"
+    "@babel/core": "<version>",
+    "typescript": "<version>"
   }
 }
 ```

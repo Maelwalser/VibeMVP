@@ -21,7 +21,8 @@ func ExtractGoExportedTypeNames(filePath, content string) map[string]TypeEntry {
 		pkg = ""
 	}
 	result := make(map[string]TypeEntry)
-	for _, line := range strings.Split(content, "\n") {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "type ") {
 			continue
@@ -36,9 +37,208 @@ func ExtractGoExportedTypeNames(filePath, content string) map[string]TypeEntry {
 		if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
 			continue
 		}
-		result[name] = TypeEntry{Package: pkg, File: filePath}
+
+		// Capture the full type body so downstream agents see method/field signatures.
+		var defBuilder strings.Builder
+		defBuilder.WriteString(line + "\n")
+		if strings.HasSuffix(trimmed, "{") {
+			depth := 1
+			for j := i + 1; j < len(lines) && depth > 0; j++ {
+				defBuilder.WriteString(lines[j] + "\n")
+				depth += strings.Count(lines[j], "{") - strings.Count(lines[j], "}")
+			}
+		}
+
+		result[name] = TypeEntry{
+			Package:    pkg,
+			File:       filePath,
+			Definition: defBuilder.String(),
+		}
 	}
 	return result
+}
+
+// ExtractConstructorSigs returns all exported constructor and factory function
+// signature lines from a source file, operating on the full untruncated content.
+// This is called at commit time so signatures are never lost to excerpt truncation.
+//
+// Recognised patterns per language:
+//   - Go (.go, excluding _test.go): package-level and method-based funcs whose name
+//     starts with New, Make, Create, Build, Open, or Must.
+//   - TypeScript (.ts/.tsx): exported class constructors and create*/build* factories.
+//   - Python (.py): class __init__ and top-level create_*/build_*/get_* functions.
+func ExtractConstructorSigs(filePath, content string) []string {
+	lower := strings.ToLower(filePath)
+	switch {
+	case strings.HasSuffix(lower, ".go") && !strings.HasSuffix(lower, "_test.go"):
+		return extractGoCtorSigs(content)
+	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
+		return extractTSCtorSigs(content)
+	case strings.HasSuffix(lower, ".py"):
+		return extractPyCtorSigs(content)
+	default:
+		return nil
+	}
+}
+
+// extractGoCtorSigs extracts exported constructor/factory signatures from Go source.
+// It handles both package-level funcs (func NewFoo) and method-based constructors
+// (func (r *Repo) NewSomething), and recognises a wider set of prefixes than the
+// older prompt-side extractor.
+func extractGoCtorSigs(content string) []string {
+	var sigs []string
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "func ") {
+			continue
+		}
+		name := goFuncName(trimmed)
+		if !isGoCtorName(name) {
+			continue
+		}
+		sig := strings.TrimSuffix(strings.TrimSuffix(trimmed, " {"), "{")
+		sigs = append(sigs, strings.TrimSpace(sig))
+	}
+	return sigs
+}
+
+// goFuncName returns the bare function or method name from a "func ..." declaration.
+// For a method receiver "func (r *Repo) Name(" it skips the receiver group.
+func goFuncName(trimmed string) string {
+	rest := strings.TrimPrefix(trimmed, "func ")
+	if strings.HasPrefix(rest, "(") {
+		end := strings.Index(rest, ")")
+		if end < 0 {
+			return ""
+		}
+		rest = strings.TrimSpace(rest[end+1:])
+	}
+	if idx := strings.Index(rest, "("); idx > 0 {
+		return rest[:idx]
+	}
+	return rest
+}
+
+// isGoCtorName reports whether name is an exported constructor/factory identifier.
+func isGoCtorName(name string) bool {
+	if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	for _, p := range []string{"New", "Make", "Create", "Build", "Open", "Must"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractTSCtorSigs extracts exported class constructors and factory function
+// signatures from TypeScript/TSX source.
+func extractTSCtorSigs(content string) []string {
+	lines := strings.Split(content, "\n")
+	var sigs []string
+	inClass := false
+	className := ""
+	depth := 0
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+
+		if (strings.HasPrefix(trimmed, "export class ") ||
+			strings.HasPrefix(trimmed, "export default class ")) &&
+			strings.Contains(trimmed, "{") {
+			parts := strings.Fields(trimmed)
+			for j, p := range parts {
+				if p == "class" && j+1 < len(parts) {
+					className = strings.TrimRight(parts[j+1], "{")
+					break
+				}
+			}
+			inClass = true
+			depth = 1
+			continue
+		}
+		if inClass {
+			depth += strings.Count(lines[i], "{") - strings.Count(lines[i], "}")
+			if depth <= 0 {
+				inClass = false
+				className = ""
+				depth = 0
+				continue
+			}
+			if strings.HasPrefix(trimmed, "constructor(") {
+				sig := className + " — " + trimmed
+				sig = strings.TrimSuffix(strings.TrimSuffix(sig, " {"), "{")
+				sigs = append(sigs, sig)
+			}
+			continue
+		}
+
+		isFactory := strings.HasPrefix(trimmed, "export function create") ||
+			strings.HasPrefix(trimmed, "export async function create") ||
+			strings.HasPrefix(trimmed, "export function build") ||
+			strings.HasPrefix(trimmed, "export async function build")
+		if isFactory && strings.Contains(trimmed, "(") {
+			sig := strings.TrimSuffix(strings.TrimSuffix(trimmed, " {"), "{")
+			sigs = append(sigs, sig)
+		}
+	}
+	return sigs
+}
+
+// extractPyCtorSigs extracts class __init__ signatures and top-level factory
+// functions from Python source.
+func extractPyCtorSigs(content string) []string {
+	lines := strings.Split(content, "\n")
+	var sigs []string
+	inClass := false
+	className := ""
+	classIndent := 0
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "class ") && strings.Contains(trimmed, ":") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				name := strings.Split(parts[1], "(")[0]
+				name = strings.TrimSuffix(name, ":")
+				className = name
+				classIndent = len(line) - len(strings.TrimLeft(line, " \t"))
+				inClass = true
+			}
+			continue
+		}
+
+		if inClass {
+			if trimmed == "" {
+				continue
+			}
+			currentIndent := len(line) - len(strings.TrimLeft(line, " \t"))
+			if currentIndent <= classIndent && !strings.HasPrefix(trimmed, "#") {
+				inClass = false
+				className = ""
+			}
+			if inClass && strings.HasPrefix(trimmed, "def __init__(") {
+				sig := className + ".__init__" + strings.TrimPrefix(trimmed, "def __init__")
+				sigs = append(sigs, strings.TrimSuffix(sig, ":"))
+				inClass = false
+				className = ""
+			}
+			continue
+		}
+
+		isFactory := strings.HasPrefix(trimmed, "def create_") ||
+			strings.HasPrefix(trimmed, "def build_") ||
+			strings.HasPrefix(trimmed, "def get_") ||
+			strings.HasPrefix(trimmed, "async def create_") ||
+			strings.HasPrefix(trimmed, "async def build_")
+		if isFactory && strings.Contains(trimmed, "(") {
+			sigs = append(sigs, strings.TrimSuffix(trimmed, ":"))
+		}
+	}
+	return sigs
 }
 
 // extractSignatures returns a compact representation of a source file containing
@@ -109,21 +309,37 @@ func extractGoSignatures(content string) string {
 		}
 
 		// Handle type declarations (struct / interface / alias).
+		// Struct/interface bodies are preserved in full — field declarations are
+		// part of the type signature and downstream agents must see them to know
+		// what fields exist. Only function bodies are stripped.
 		if strings.HasPrefix(trimmed, "type ") {
 			out = append(out, line)
 			if strings.HasSuffix(trimmed, "{") {
 				inTypeBody = true
 				depth = 1
-				out = append(out, "\t// ... [body omitted]")
 			}
 			continue
 		}
 		if inTypeBody {
+			out = append(out, line) // keep field/method declarations
 			depth += strings.Count(line, "{") - strings.Count(line, "}")
 			if depth <= 0 {
 				inTypeBody = false
 				depth = 0
-				out = append(out, "}")
+			}
+			continue
+		}
+
+		// Handle var blocks (sentinel errors, package-level vars).
+		if strings.HasPrefix(trimmed, "var ") {
+			out = append(out, line)
+			if trimmed == "var (" {
+				for i++; i < len(lines); i++ {
+					out = append(out, lines[i])
+					if strings.TrimSpace(lines[i]) == ")" {
+						break
+					}
+				}
 			}
 			continue
 		}
@@ -173,47 +389,78 @@ func extractGoSignatures(content string) string {
 }
 
 // extractTSSignatures extracts interface, type alias, and exported function
-// declarations from TypeScript/TSX source, omitting implementation bodies.
+// declarations from TypeScript/TSX source. Interface and type bodies are
+// preserved in full (field declarations are part of the signature). Only
+// function implementation bodies are stripped.
 func extractTSSignatures(content string) string {
 	lines := strings.Split(content, "\n")
 	var out []string
 
-	inBlock := false
+	// inTypeBlock: inside an interface/type/enum body — keep all lines
+	// inFuncBlock: inside a function body — strip lines
+	inTypeBlock := false
+	inFuncBlock := false
 	depth := 0
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
 
-		if inBlock {
+		if inTypeBlock {
+			out = append(out, line) // preserve field declarations
 			depth += strings.Count(line, "{") - strings.Count(line, "}")
 			if depth <= 0 {
-				inBlock = false
+				inTypeBlock = false
+				depth = 0
+			}
+			continue
+		}
+
+		if inFuncBlock {
+			depth += strings.Count(line, "{") - strings.Count(line, "}")
+			if depth <= 0 {
+				inFuncBlock = false
 				depth = 0
 				out = append(out, "}")
 			}
 			continue
 		}
 
-		isDecl := strings.HasPrefix(trimmed, "interface ") ||
+		isTypeDecl := strings.HasPrefix(trimmed, "interface ") ||
 			strings.HasPrefix(trimmed, "export interface ") ||
 			strings.HasPrefix(trimmed, "type ") ||
 			strings.HasPrefix(trimmed, "export type ") ||
 			strings.HasPrefix(trimmed, "export enum ") ||
-			strings.HasPrefix(trimmed, "enum ") ||
-			strings.HasPrefix(trimmed, "export const ") ||
-			strings.HasPrefix(trimmed, "export function ") ||
+			strings.HasPrefix(trimmed, "enum ")
+
+		isFuncDecl := strings.HasPrefix(trimmed, "export function ") ||
 			strings.HasPrefix(trimmed, "export async function ") ||
-			strings.HasPrefix(trimmed, "export default function ") ||
+			strings.HasPrefix(trimmed, "export default function ")
+
+		isOther := strings.HasPrefix(trimmed, "export const ") ||
 			strings.HasPrefix(trimmed, `import `)
 
-		if isDecl {
+		if isTypeDecl {
 			out = append(out, line)
 			if strings.HasSuffix(trimmed, "{") {
-				inBlock = true
+				inTypeBlock = true
+				depth = 1
+			}
+			continue
+		}
+
+		if isFuncDecl {
+			out = append(out, line)
+			if strings.HasSuffix(trimmed, "{") {
+				inFuncBlock = true
 				depth = 1
 				out = append(out, "  // ... [body omitted]")
 			}
+			continue
+		}
+
+		if isOther {
+			out = append(out, line)
 			continue
 		}
 

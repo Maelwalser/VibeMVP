@@ -20,15 +20,17 @@ service-name/
 
 ### package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "hono": "^4.2.0"
+    "hono": "<version>"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.3",
-    "@hono/node-server": "^1.9.0"
+    "@types/node": "<version>",
+    "typescript": "<version>",
+    "@hono/node-server": "<version>"
   }
 }
 ```
@@ -161,13 +163,15 @@ service-name/
 
 ### package.json Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "elysia": "^1.0.15"
+    "elysia": "<version>"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "bun-types": "<version>"
   }
 }
 ```

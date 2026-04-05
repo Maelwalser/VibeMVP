@@ -24,16 +24,18 @@ frontend/
 
 ## Key Dependencies
 
+> ⚠ **Use versions from the "Dependency & API Reference" section** of your task prompt — never use the placeholder versions below.
+
 ```json
 {
   "dependencies": {
-    "nuxt": "^3.14.0",
-    "@pinia/nuxt": "^0.9.0",
-    "pinia": "^2.2.0"
+    "nuxt": "<version>",
+    "@pinia/nuxt": "<version>",
+    "pinia": "<version>"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@nuxt/devtools": "latest"
+    "typescript": "<version>",
+    "@nuxt/devtools": "<version>"
   }
 }
 ```
