@@ -5,9 +5,9 @@ package manifest
 // DTOField describes a single field within a DTO.
 type DTOField struct {
 	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Required   bool   `json:"required"`
-	Nullable   bool   `json:"nullable"`
+	Type       string `json:"type,omitempty"`
+	Required   bool   `json:"required,omitempty"`
+	Nullable   bool   `json:"nullable,omitempty"`
 	Validation string `json:"validation,omitempty"`
 	Default    string `json:"default,omitempty"`
 	Notes      string `json:"notes,omitempty"`
@@ -98,8 +98,8 @@ type ExternalAPIDef struct {
 	CalledByService string                   `json:"called_by_service,omitempty"`
 	Responsibility  string                   `json:"responsibility,omitempty"`
 	Protocol        string                   `json:"protocol,omitempty"`
-	AuthMechanism   string                   `json:"auth_mechanism"`
-	FailureStrategy string                   `json:"failure_strategy"`
+	AuthMechanism   string                   `json:"auth_mechanism,omitempty"`
+	FailureStrategy string                   `json:"failure_strategy,omitempty"`
 	Interactions    []ExternalAPIInteraction `json:"interactions,omitempty"`
 
 	// REST / general HTTP

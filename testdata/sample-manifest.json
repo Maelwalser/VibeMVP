@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-07T22:05:32.900356844+02:00",
+  "created_at": "2026-04-07T21:58:45.990463459+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [

@@ -41,9 +41,9 @@ type ObservabilityConfig struct {
 // ServerEnvironmentDef describes one named deployment environment (e.g. dev, staging, prod).
 type ServerEnvironmentDef struct {
 	Name          string `json:"name"`
-	ComputeEnv    string `json:"compute_env"`
-	CloudProvider string `json:"cloud_provider"`
-	Orchestrator  string `json:"orchestrator"`
+	ComputeEnv    string `json:"compute_env,omitempty"`
+	CloudProvider string `json:"cloud_provider,omitempty"`
+	Orchestrator  string `json:"orchestrator,omitempty"`
 	Regions       string `json:"regions,omitempty"`
 }
 

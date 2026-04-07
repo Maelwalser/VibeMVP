@@ -4,8 +4,68 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 )
+
+// ── Sentinel value sanitization ──────────────────────────────────────────────
+// clearSentinels walks a struct tree via reflection and replaces sentinel string
+// values ("None", "none", "Platform default") with empty strings so that
+// omitempty can elide them from the serialized JSON.
+
+func clearSentinels(v interface{}) {
+	clearSentinelsValue(reflect.ValueOf(v))
+}
+
+var sentinelSet = map[string]bool{
+	"None":             true,
+	"none":             true,
+	"Platform default": true,
+}
+
+func clearSentinelsValue(rv reflect.Value) {
+	switch rv.Kind() {
+	case reflect.Ptr:
+		if rv.IsNil() {
+			return
+		}
+		clearSentinelsValue(rv.Elem())
+		// Nil out pointer to struct that became all-zero after clearing.
+		if rv.Elem().Kind() == reflect.Struct && rv.Elem().Type() != reflect.TypeOf(time.Time{}) &&
+			reflect.DeepEqual(rv.Elem().Interface(), reflect.Zero(rv.Elem().Type()).Interface()) {
+			rv.Set(reflect.Zero(rv.Type()))
+		}
+	case reflect.Struct:
+		if rv.Type() == reflect.TypeOf(time.Time{}) {
+			return
+		}
+		for i := 0; i < rv.NumField(); i++ {
+			clearSentinelsValue(rv.Field(i))
+		}
+	case reflect.String:
+		if sentinelSet[rv.String()] && rv.CanSet() {
+			rv.SetString("")
+		}
+	case reflect.Slice:
+		for i := 0; i < rv.Len(); i++ {
+			clearSentinelsValue(rv.Index(i))
+		}
+	case reflect.Map:
+		if rv.IsNil() {
+			return
+		}
+		for _, key := range rv.MapKeys() {
+			val := rv.MapIndex(key)
+			if val.Kind() == reflect.String && sentinelSet[val.String()] {
+				rv.SetMapIndex(key, reflect.Value{}) // delete entry
+			}
+		}
+		// Nil out empty maps so omitempty elides them.
+		if rv.Len() == 0 && rv.CanSet() {
+			rv.Set(reflect.Zero(rv.Type()))
+		}
+	}
+}
 
 // ── isEmpty helpers ────────────────────────────────────────────────────────────
 // These determine whether a pillar has any meaningful user configuration so that
@@ -53,12 +113,12 @@ func (r RealizeOptions) isEmpty() bool {
 
 // RealizeOptions holds configuration for the code-generation agent run.
 type RealizeOptions struct {
-	AppName       string            `json:"app_name"`
-	OutputDir     string            `json:"output_dir"`
+	AppName       string            `json:"app_name,omitempty"`
+	OutputDir     string            `json:"output_dir,omitempty"`
 	Model         string            `json:"model,omitempty"` // kept for CLI backward compat
-	Concurrency   int               `json:"concurrency"`
-	Verify        bool              `json:"verify"`
-	DryRun        bool              `json:"dry_run"`
+	Concurrency   int               `json:"concurrency,omitempty"`
+	Verify        bool              `json:"verify,omitempty"`
+	DryRun        bool              `json:"dry_run,omitempty"`
 	SectionModels map[string]string `json:"section_models,omitempty"` // kept for backward compat
 	// Provider and tier model assignments (set via the Realize tab UI).
 	Provider   string `json:"provider,omitempty"`    // provider label (e.g. "Claude", "Gemini")
@@ -71,10 +131,10 @@ type RealizeOptions struct {
 
 // ProviderAssignment maps a pillar section to a specific AI provider and auth config.
 type ProviderAssignment struct {
-	Provider   string `json:"provider"`
-	Model      string `json:"model"`
-	Version    string `json:"version"`
-	Auth       string `json:"auth"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Version    string `json:"version,omitempty"`
+	Auth       string `json:"auth,omitempty"`
 	Credential string `json:"credential,omitempty"` // API key or OAuth token
 }
 
@@ -84,25 +144,25 @@ type ProviderAssignments map[string]ProviderAssignment
 // ── Legacy pillars (preserved for existing code compatibility) ────────────────
 
 type TestingPillar struct {
-	UnitCoverage    string       `json:"unit_coverage"`
-	IntegCoverage   string       `json:"integ_coverage"`
-	E2EFramework    E2EFramework `json:"e2e_framework"`
-	E2ECoverage     string       `json:"e2e_coverage"`
+	UnitCoverage    string       `json:"unit_coverage,omitempty"`
+	IntegCoverage   string       `json:"integ_coverage,omitempty"`
+	E2EFramework    E2EFramework `json:"e2e_framework,omitempty"`
+	E2ECoverage     string       `json:"e2e_coverage,omitempty"`
 	TestingStrategy string       `json:"testing_strategy,omitempty"`
 }
 
 type CICDPillar struct {
-	CIPlatform    CIPlatform     `json:"ci_platform"`
-	PipelineGates string         `json:"pipeline_gates"`
-	EnvStrategy   string         `json:"env_strategy"`
-	SecretsMgmt   SecretsBackend `json:"secrets_mgmt"`
+	CIPlatform    CIPlatform     `json:"ci_platform,omitempty"`
+	PipelineGates string         `json:"pipeline_gates,omitempty"`
+	EnvStrategy   string         `json:"env_strategy,omitempty"`
+	SecretsMgmt   SecretsBackend `json:"secrets_mgmt,omitempty"`
 }
 
 type TelemetryPillar struct {
-	LogSolution LogSolution `json:"log_solution"`
-	LogFormat   string      `json:"log_format"`
-	Metrics     string      `json:"metrics"`
-	Tracing     string      `json:"tracing"`
+	LogSolution LogSolution `json:"log_solution,omitempty"`
+	LogFormat   string      `json:"log_format,omitempty"`
+	Metrics     string      `json:"metrics,omitempty"`
+	Tracing     string      `json:"tracing,omitempty"`
 	Alerting    string      `json:"alerting,omitempty"`
 }
 
@@ -146,6 +206,9 @@ func Load(path string) (*Manifest, error) {
 // MarshalJSON serializes the Manifest, omitting any pillar that has no
 // meaningful configuration so the output stays clean.
 func (m Manifest) MarshalJSON() ([]byte, error) {
+	// Strip sentinel values ("None", "Platform default") so omitempty can elide them.
+	clearSentinels(&m)
+
 	// shadow uses pointer pillar fields so encoding/json's omitempty works.
 	type shadow struct {
 		CreatedAt      time.Time        `json:"created_at"`
