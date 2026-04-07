@@ -251,7 +251,7 @@ Tab bars use `renderSubTabBar()`. Bottom hints use `hintBar()`.
 ### 4.8 UI Components
 
 - **DescriptionEditor** (`description_editor.go`): Pillar 0 — free-text textarea for project overview before filling structured pillars.
-- **RealizeEditor** (`realize_editor.go`): Configuration form for code generation with per-section LLM model overrides, concurrency, and verification settings.
+- **RealizeEditor** (`realize_editor.go`): Configuration form for code generation with provider selection, per-tier model assignment, concurrency, and verification settings.
 - **ProviderMenu** (`provider_menu.go` + 3 sibling files): Interactive modal (Shift+M) for selecting and configuring LLM providers (Claude, ChatGPT, Gemini, Mistral, Llama, Custom) with tier selection and OAuth 2.0 PKCE flow.
 - **RealizationScreen** (`realization_screen.go`): Display for code generation progress and output status.
 - **WelcomeScreen** (`welcome.go`): Initial welcome/tutorial screen and manifest initialization.
@@ -341,11 +341,11 @@ Configuration tab for downstream code generation pipeline:
 
 - app_name: application name for generated code
 - output_dir: destination directory for generated files
-- model: global LLM model selection — controls intelligence level for code generation
 - concurrency: parallel task execution limit (1, 2, 4, 8)
 - verify: enable/disable code verification after generation (default: true)
 - dry_run: print task plan without executing agent calls
-- Per-section model overrides (`SectionModels`): different LLM models for each pillar (backend, data, contracts, frontend, infra, crosscut)
+- provider: select from configured providers (populated from Provider Menu)
+- tier_fast / tier_medium / tier_slow: model ID assignment per complexity tier (options depend on selected provider)
 - Provider assignments (`ProviderAssignments`): which LLM provider to use per section
 
 ---
@@ -455,7 +455,7 @@ Saved to `manifest.json` on `:w` / `Ctrl+S`. Structure:
   "frontend":   { "tech": {...}, "theme": {...}, "pages": [...], "navigation": {...}, "i18n": {...}, "a11y_seo": {...}, "assets": [...] },
   "infrastructure": { "networking": {...}, "cicd": {...}, "observability": {...}, "environments": [...] },
   "cross_cutting":  { "testing": {...}, "docs": {...} },
-  "realize":    { "app_name": "...", "output_dir": "...", "model": "...", "section_models": {...}, ... },
+  "realize":    { "app_name": "...", "output_dir": "...", "concurrency": 4, "verify": true, "dry_run": false, "provider": "...", "tier_fast": "...", "tier_medium": "...", "tier_slow": "..." },
   "configured_providers": { ... }
 }
 ```

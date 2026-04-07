@@ -710,8 +710,19 @@ Error boundary options per framework:
 | Enabled             | `false` · `true`                                                                     |
 | Default Locale      | Dropdown — `en` · `en-US` · `en-GB` · `en-AU` · `en-CA` · `fr` · `fr-FR` · `fr-CA` · `de` · `de-DE` · `de-AT` · `es` · `es-ES` · `es-MX` · `es-AR` · `pt` · `pt-BR` · `pt-PT` · `it` · `nl` · `nl-NL` · `pl` · `ru` · `ja` · `zh` · `zh-CN` · `zh-TW` · `ko` · `ar` · `hi` · `tr` · `sv` · `da` · `fi` · `nb` · `cs` · `hu` · `ro` · `vi` · `th` · `id` · `ms` · `uk` · `he` |
 | Supported Locales   | Multi-select from the same locale list above                                         |
-| I18N Library        | `i18next` · `next-intl` · `react-i18next` · `LinguiJS` · `vue-i18n` · `Custom` · `None` |
+| I18N Library        | *(filtered by framework — see table below)*                                              |
 | Timezone Handling   | `UTC always` · `User preference` · `Auto-detect` · `Manual`                          |
+
+I18N library options per framework:
+
+| Framework  | I18N Libraries                                                                |
+|------------|-------------------------------------------------------------------------------|
+| React      | `react-i18next` · `next-intl` · `LinguiJS` · `i18next` · `Custom` · `None`  |
+| Vue        | `vue-i18n` · `i18next` · `Custom` · `None`                                   |
+| Svelte     | `svelte-i18n` · `i18next` · `Custom` · `None`                                |
+| Angular    | `@angular/localize` · `ngx-translate` · `Custom` · `None`                    |
+| Solid / Qwik | `i18next` · `Custom` · `None`                                              |
+| All others | `i18next` · `Custom` · `None`                                                |
 
 ---
 
@@ -722,7 +733,7 @@ Error boundary options per framework:
 | WCAG Level       | `A` · `AA` · `AAA` · `None`                                                                 |
 | SEO Rendering    | `SSR` · `SSG` · `ISR` · `Prerender` · `None`                                                |
 | Sitemap          | `false` · `true`                                                                            |
-| Meta Tags        | `Manual` · `Automatic (react-helmet)` · `Framework-native` · `None`                         |
+| Meta Tags        | `Manual` · `Framework-native` · `None`                                                      |
 | Analytics        | `PostHog` · `Google Analytics 4` · `Plausible` · `Mixpanel` · `Segment` · `Custom` · `None` |
 | Frontend RUM     | `Sentry` · `Datadog RUM` · `LogRocket` · `New Relic Browser` · `Custom` · `None`            |
 
@@ -1012,8 +1023,32 @@ Contract testing options per architecture pattern:
 |--------------------|----------------------------------------------------------------------------------|
 | Dependency Updates | `Dependabot` · `Renovate` · `Manual` · `None`                                   |
 | Feature Flags      | `LaunchDarkly` · `Unleash` · `Flagsmith` · `Custom (env vars)` · `None`          |
-| Backend Linter     | Dynamically filtered by backend language — see §1.4 Linter options table         |
-| Frontend Linter    | `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None`      |
+| Backend Linter     | Dynamically filtered by backend language — see table below                       |
+| Frontend Linter    | Dynamically filtered by frontend language — see table below                      |
+
+Backend linter options per language:
+
+| Language        | Linters                                                   |
+|-----------------|-----------------------------------------------------------|
+| Go              | `golangci-lint` · `staticcheck` · `go vet` · `None`       |
+| TypeScript/Node | `ESLint` · `Biome` · `TSLint (legacy)` · `None`           |
+| Python          | `Ruff` · `Flake8` · `Pylint` · `mypy` · `None`            |
+| Java            | `Checkstyle` · `SpotBugs` · `PMD` · `SonarLint` · `None`  |
+| Kotlin          | `ktlint` · `detekt` · `SonarLint` · `None`                |
+| C#/.NET         | `Roslyn Analyzers` · `StyleCop` · `SonarLint` · `None`    |
+| Rust            | `Clippy` · `cargo-audit` · `None`                          |
+| Ruby            | `RuboCop` · `StandardRB` · `None`                          |
+| PHP             | `PHP-CS-Fixer` · `PHPStan` · `Psalm` · `None`             |
+| Elixir          | `Credo` · `Dialyxir` · `None`                             |
+| Other           | `Custom` · `None`                                          |
+| *(no language)* | `golangci-lint` · `ESLint` · `Ruff` · `Checkstyle` · `Clippy` · `None` |
+
+Frontend linter options per frontend language:
+
+| Language           | Linters                                                              |
+|--------------------|----------------------------------------------------------------------|
+| TypeScript / JavaScript | `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None` |
+| Dart / Kotlin / Swift | `Custom` · `None`                                                 |
 
 > **Uptime SLO** and **Latency P99** are serialized in the manifest (`CrossCutPillar`) but are not currently editable from this tab — configure them directly in `manifest.json` if needed.
 
@@ -1021,38 +1056,57 @@ Contract testing options per architecture pattern:
 
 ## 7 · Realize Tab
 
-> Configure code generation options before running the realization engine.
+> Configure code generation options before running the realization engine. The tab is split into two groups: **App Settings** (output configuration) and **Provider** (model tier assignment).
+
+### 7.1 App Settings
 
 | Field           | Options / Input                                                                                                   |
 |-----------------|-------------------------------------------------------------------------------------------------------------------|
 | App Name        | Free text (e.g., `my-app`) — used as the output project name                                                      |
 | Output Dir      | Free text path (default: `.`)                                                                                     |
-| Model           | `claude-haiku-4-5-20251001` · `claude-sonnet-4-6` · `claude-opus-4-6`                                            |
 | Concurrency     | `1` · `2` · `4` · `8` — max parallel tasks (default: `4`)                                                        |
-| Verify          | `true` · `false` — run language verifier after each generated file                                                |
-| Dry Run         | `false` · `true` — print task plan without invoking agents                                                        |
+| Verify          | `true` · `false` — run language verifier after each generated file (default: `true`)                              |
+| Dry Run         | `false` · `true` — print task plan without invoking agents (default: `false`)                                     |
 
-**Per-section model overrides** *(options populated dynamically from configured providers — see Provider Menu below)*:
+### 7.2 Provider & Tier Assignment
 
-| Field           | Options / Input                                                                               |
-|-----------------|-----------------------------------------------------------------------------------------------|
-| Backend Model   | `default` or provider·tier (e.g., `Claude · Sonnet`, `Gemini · Flash`)                       |
-| Data Model      | `default` or provider·tier                                                                    |
-| Contracts Model | `default` or provider·tier                                                                    |
-| Frontend Model  | `default` or provider·tier                                                                    |
-| Infra Model     | `default` or provider·tier                                                                    |
-| Crosscut Model  | `default` or provider·tier                                                                    |
+> The provider selector is populated from providers configured via the **Provider Menu** (`Shift+M`). Tier model selectors update dynamically when the provider changes.
 
-**Provider Menu** *(Shift+M — configure LLM providers and tiers)*:
+| Field           | Options / Input                                                                                                   |
+|-----------------|-------------------------------------------------------------------------------------------------------------------|
+| Provider        | Select from configured providers (populated from Provider Menu — see §7.3)                                        |
+| Tier Fast       | Select model for low-complexity tasks — options depend on selected provider (see tier table below)                 |
+| Tier Medium     | Select model for medium-complexity tasks — options depend on selected provider                                     |
+| Tier Slow       | Select model for high-complexity / escalation tasks — options depend on selected provider                          |
 
-| Provider | Tiers                        |
-|----------|------------------------------|
-| Claude   | `Haiku` · `Sonnet` · `Opus`  |
-| ChatGPT  | `Mini` · `4o` · `o1`         |
-| Gemini   | `Flash` · `Pro` · `Ultra`    |
-| Mistral  | `Nemo` · `Small` · `Large`   |
-| Llama    | `8B` · `70B` · `405B`        |
-| Custom   | `Custom`                     |
+Tier model options per provider:
+
+| Provider | Fast (Tier Fast)                                  | Medium (Tier Medium)                              | Slow (Tier Slow)                    |
+|----------|---------------------------------------------------|---------------------------------------------------|-------------------------------------|
+| Claude   | `claude-haiku-4-5-20251001`                       | `claude-sonnet-4-6`                               | `claude-opus-4-6`                   |
+| ChatGPT  | `gpt-4o-mini` · `o3-mini`                         | `gpt-4o` · `gpt-4o-2024-11-20`                    | `o1` · `o1-preview`                 |
+| Gemini   | `gemini-2.0-flash` · `gemini-1.5-flash`           | `gemini-2.0-pro-exp` · `gemini-1.5-pro`           | `gemini-ultra`                      |
+| Mistral  | `open-mistral-nemo`                               | `mistral-small-2409` · `mistral-small-2402`        | `mistral-large-2411` · `mistral-large-2407` |
+| Llama    | `llama-3.2-8b-preview` · `llama-3.1-8b-instant`   | `llama-3.3-70b-versatile` · `llama-3.1-70b-versatile` | `llama-3.1-405b-reasoning`     |
+
+> When no provider is selected, the `—` (unset) sentinel is shown for all tier fields. The orchestrator falls back to Claude via the `ANTHROPIC_API_KEY` environment variable.
+
+> **Legacy fields:** `model` and `section_models` still exist in the manifest JSON for backward compatibility but are **not editable** from the Realize tab UI.
+
+### 7.3 Provider Menu *(Shift+M — configure LLM providers)*
+
+Each provider can be independently configured with its own auth method and credential. Configured providers become available in the Realize tab's provider selector.
+
+| Provider | Auth Methods          | Tiers                        |
+|----------|-----------------------|------------------------------|
+| Claude   | `API Key`             | `Haiku` · `Sonnet` · `Opus`  |
+| ChatGPT  | `API Key`             | `Mini` · `4o` · `o1`         |
+| Gemini   | `API Key` · `OAuth`   | `Flash` · `Pro` · `Ultra`    |
+| Mistral  | `API Key`             | `Nemo` · `Small` · `Large`   |
+| Llama    | `API Key`             | `8B` · `70B` · `405B`        |
+| Custom   | `API Key`             | `Custom`                     |
+
+> Credentials are persisted to the OS keyring / config file and loaded on startup. The Gemini provider supports OAuth 2.0 PKCE flow in addition to API key authentication.
 
 ---
 

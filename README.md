@@ -1,10 +1,17 @@
 # VibeMenu
+
 What vibe is on the menu today?
 
 <img width="1900" height="1140" alt="Pasted image" src="https://github.com/user-attachments/assets/4c636af3-6a08-4acb-b7f1-07e6e4965c7e" />
 
+VibeMenu is a Terminal User Interface (TUI) for declaratively specifying a complete software system architecture. Instead of writing boilerplate config files or lengthy architecture documents, you fill in a structured, interactive menu across 8 sections — covering everything from database schemas and API contracts to frontend pages and CI/CD pipelines. The result is a single `manifest.json` that fully describes your system, ready for downstream code generation via the built-in `realize` engine.
 
-A vim-inspired TUI for declaratively specifying a complete software system architecture. Define your stack across 8 structured sections, then generate a `manifest.json` for downstream code generation via the `realize` pipeline.
+**Why VibeMenu?**
+
+- **One manifest, entire stack** — define backend services, data models, API contracts, frontend pages, infrastructure, and testing strategy in a single place.
+- **Smart field filtering** — options are dynamically narrowed based on your choices (e.g., selecting Go as a language filters frameworks to Fiber, Gin, Echo, etc.).
+- **Non-linear editing** — fill sections in any order. Empty cross-references show as "unlinked" placeholders that resolve when you fill in the missing piece.
+- **Multi-provider code generation** — the `realize` engine reads your manifest and dispatches parallel, agentic code generation across Claude, ChatGPT, Gemini, Mistral, and Llama.
 
 > Still in development — not yet production-stable.
 
@@ -12,9 +19,15 @@ A vim-inspired TUI for declaratively specifying a complete software system archi
 
 - [Installation](#installation)
 - [The TUI Editor](#the-tui-editor)
-  - [Key Bindings](#key-bindings)
-  - [Sections Overview](#sections-overview)
-- [The Architecture Overview](#architecture-diagram-overview)
+  - [Section 0 — Description](#section-0--description)
+  - [Section 1 — Backend](#section-1--backend)
+  - [Section 2 — Data](#section-2--data)
+  - [Section 3 — Contracts](#section-3--contracts)
+  - [Section 4 — Frontend](#section-4--frontend)
+  - [Section 5 — Infrastructure](#section-5--infrastructure)
+  - [Section 6 — Cross-Cutting](#section-6--cross-cutting)
+  - [Section 7 — Realize](#section-7--realize)
+- [Architecture Diagram Overview](#architecture-diagram-overview)
 - [manifest.json Reference](#manifestjson-reference)
 - [Provider Configuration](#provider-configuration)
 - [Code Generation (`realize`)](#code-generation-realize)
@@ -96,133 +109,163 @@ realize --skills /path/to/custom/skills --manifest manifest.json
 
 ## The TUI Editor
 
-VibeMenu uses a vim-modal editing system with three modes:
+VibeMenu uses a vim-modal editing system with three modes: **Normal** (navigate sections, lists, tabs), **Insert** (type into text fields), and **Command** (`:w` to save, `:q` to quit, `:wq` to save and quit, `:1`-`:8` to jump to a section).
 
-| Mode | How to enter | Purpose |
-|------|-------------|---------|
-| **Normal** | `Esc` | Navigate sections, lists, tabs |
-| **Insert** | `i` | Type into text fields |
-| **Command** | `:` | Save, quit, jump to section |
-
-### Key Bindings
-
-#### Global (Normal Mode)
-
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Next / previous main section |
-| `j` / `k` | Move down / up within section |
-| `Space` | Cycle a select field |
-| `i` | Enter insert mode |
-| `:` | Enter command mode |
-| `Ctrl+S` | Save manifest |
-| `Shift+M` | Open Provider Menu modal |
-| `Ctrl+C` | Quit |
-
-#### Command Mode
-
-| Command | Action |
-|---------|--------|
-| `:w` / `:write` | Save |
-| `:q` / `:quit` | Quit without save |
-| `:wq` / `:x` | Save and quit |
-| `:tabn` / `:bn` | Next section |
-| `:tabp` / `:bp` | Previous section |
-| `:1`–`:8` | Jump to section N |
-
-#### Sub-Editor (varies by tab)
-
-| Key | Action |
-|-----|--------|
-| `a` | Add item (list view) |
-| `d` | Delete item (list view) |
-| `Enter` / `i` | Edit selected item |
-| `h` / `l` | Switch sub-tab |
-| `b` / `Esc` | Back to parent / exit insert |
-| `F` | Drill into nested fields (DTOs) |
-| `A` | Drill into attributes (Domains) |
-
-## Architecture Diagram Overview
-`P` Open architecture diagram overview
-
-<img width="1900" height="1138" alt="image" src="https://github.com/user-attachments/assets/333e5fac-cf88-4490-918a-ddba848df91d" />
-
-
-
-### Sections Overview
-
-Sections can be filled in **any order**. The dependency graph for downstream code generation is:
+The editor is organized into 8 sections. Each section contains sub-tabs that group related configuration. Sections can be filled in any order — the dependency graph below shows the intended resolution order for code generation:
 
 ```
 Description → Data → Backend → Contracts → Frontend → Infrastructure → Cross-Cutting → Realize
 ```
 
-| # | Section | Sub-tabs |
-|---|---------|---------|
-| 0 | **Description** | Free-text project overview |
-| 1 | **Backend** | Env · Services · Stack Config · Communication · Messaging · API Gateway · Jobs · Security · Auth |
-| 2 | **Data** | Databases · Domains · Caching · File Storage |
-| 3 | **Contracts** | DTOs · Endpoints · API Versioning · External APIs |
-| 4 | **Frontend** | Tech · Theme · Pages · Navigation · i18n · A11y/SEO |
-| 5 | **Infrastructure** | Networking · CI/CD · Observability |
-| 6 | **Cross-Cutting** | Testing · Docs |
-| 7 | **Realize** | Code generation configuration |
+---
 
-#### Section 0 — Description
+### Section 0 — Description
 
-Free-text textarea for describing the project in natural language before filling in structured pillars.
+Free-text textarea for describing the project in natural language. This is injected into the code-generation prompt as high-level context, giving the AI agents an understanding of what the system is supposed to do before they generate code for each pillar.
 
-#### Section 1 — Backend
+---
 
-- **Env**: Architecture pattern (Monolith / Modular Monolith / Microservices / Event-Driven / Hybrid) — conditionally shows/hides sub-tabs
-- **Services**: Name, responsibility, language, framework (dynamically filtered by language), pattern tag
-- **Stack Config**: Reusable language/framework combinations for multi-language setups
-- **Communication**: Service-to-service links with protocol, direction, trigger, sync/async, resilience patterns
-- **Messaging**: Broker config and repeatable event catalog
-- **API Gateway**: Technology, routing rules, features
-- **Jobs**: Background job queues and cron job definitions
-- **Security**: WAF config, CORS settings, session management
-- **Auth**: Strategy, identity provider, role-based access control (RBAC with inheritance), permission definitions, authorization model, token storage, MFA
+### Section 1 — Backend
 
-#### Section 2 — Data
+Sub-tabs: **Env** · **Services** · **Stack Config** · **Communication** · **Messaging** · **API Gateway** · **Jobs** · **Security** · **Auth**
 
-- **Databases**: Alias, category, technology (filtered by category), hosting, HA mode — with type-conditional fields (SSL mode, eviction policy, replication factor, etc.)
-- **Domains**: Bounded contexts with repeatable attributes (name, type, constraints, default, sensitive, validation) and relationships (type, FK field, cascade)
-- **Caching**: Cache layer configuration
-- **File Storage**: Object/file storage config
+The Backend section starts with an **architecture pattern** selector that controls which sub-tabs are visible:
 
-#### Section 3 — Contracts
+| Architecture Pattern | Visible Sub-tabs |
+|---------------------|-----------------|
+| Monolith | Env · Services · Jobs · Security · Auth |
+| Modular Monolith | Env · Services · Stack Config · Communication · Jobs · Security · Auth |
+| Microservices | Env · Services · Stack Config · Communication · API Gateway · Jobs · Security · Auth |
+| Event-Driven | Env · Services · Stack Config · Communication · Messaging · Jobs · Security · Auth |
+| Hybrid | All sub-tabs |
 
-- **DTOs**: Name, category (Request/Response/Event Payload/Shared), source domain, serialization protocol (REST/JSON, Protobuf, Avro, MessagePack, Thrift, FlatBuffers, Cap'n Proto) with protocol-specific fields
-- **Endpoints**: Service unit, name/path, protocol (REST/GraphQL/gRPC/WebSocket/Event), auth roles (multi-select from backend roles), request/response DTOs — with protocol-conditional fields
-- **API Versioning**: Strategy (URL path, header, query param, none), current version, deprecation policy
-- **External APIs**: Third-party integrations with protocol-specific auth and failure strategy configuration
+**Env** — For monoliths, configure the single shared language, framework, and environment. For multi-service architectures, this shows global health dependencies. Languages supported: Go, TypeScript/Node, Python, Java, Kotlin, C#/.NET, Rust, Ruby, PHP, Elixir. Frameworks are dynamically filtered by language (e.g., Go offers Fiber, Gin, Echo, Chi, net/http, Connect; TypeScript/Node offers Express, Fastify, NestJS, Hono, tRPC, Elysia).
 
-#### Section 4 — Frontend
+**Services** — Define your backend service units. Each service has a name, responsibility, language, framework (filtered by language), technologies (WebSocket, gRPC, REST, GraphQL, SSE, tRPC, MQTT, Kafka consumer), error format (filtered by technology), service discovery strategy, and environment assignment. Hybrid architectures add a pattern tag (Monolith part, Modular module, Microservice, Event processor, Serverless function).
 
-- **Tech**: Language, platform, framework (filtered by language+platform), meta-framework, package manager, styling, component library, state management, data fetching, form handling, PWA, realtime, auth flow, bundle optimization, testing, linting
-- **Theme**: Dark mode strategy, border radius, spacing, elevation, motion, vibe, colors
-- **Pages**: Route, auth_required, layout, loading strategy, error handling, auth roles (multi-select), component actions (12+ action types: Fetch, Submit, Download, Upload, Delete, Refresh, Export, Navigate, Toast, State, Custom)
-- **Navigation**: Nav type, breadcrumbs, auth-aware navigation
-- **i18n**: Internationalization config
-- **A11y/SEO**: Accessibility and SEO configuration
-- **Assets**: Design assets (images, icons, fonts, videos, mockups) with usage classification (project or inspiration)
+**Stack Config** — Reusable language/framework combinations that services can reference instead of defining their stack inline. Useful for multi-language architectures where several services share the same tech stack.
 
-#### Section 5 — Infrastructure
+**Communication** — Service-to-service links. Each link defines: from/to service, direction (unidirectional, bidirectional, pub/sub), protocol (REST, gRPC, GraphQL, WebSocket, Message Queue, Event Bus, Internal), trigger description, sync/async mode, resilience patterns (circuit breaker, retry with backoff, timeout, bulkhead), and request/response DTOs.
 
-- **Networking**: DNS, TLS, reverse proxy, CDN
-- **CI/CD**: Platform, container registry, deploy strategy, IaC tool, secrets management
-- **Observability**: Logging, metrics, tracing, error tracking, health checks, alerting
-- Server environments: Named environments with compute/cloud/orchestrator settings
+**Messaging** — Broker configuration for event-driven architectures. Supports Kafka, NATS, RabbitMQ, Redis Streams, AWS SQS/SNS, Google Pub/Sub, Azure Service Bus, and Pulsar. Deployment options are filtered by broker technology and cloud provider. Includes an event catalog where you define events (name, publisher, consumer, DTO, description) and configure serialization format (JSON, Protobuf, Avro, MessagePack, CloudEvents) and delivery guarantees (at-most-once, at-least-once, exactly-once).
 
-#### Section 6 — Cross-Cutting
+**API Gateway** — Technology selection filtered by orchestrator and cloud provider (Kong, Traefik, NGINX Ingress, Envoy, AWS API Gateway, Cloudflare Workers). Configure routing strategy (path-based, header-based, domain-based) and features like rate limiting, JWT validation, SSL termination, load balancing, request caching, CORS handling, circuit breaking, and health checks. Link specific endpoints from the Contracts tab.
 
-- **Testing**: Framework selections dynamically filtered by backend languages and frontend tech (unit, integration, E2E, API, load, contract)
-- **Docs**: API doc format, auto-generation toggle, changelog strategy
+**Jobs** — Background job queues and cron jobs. Queue technology is filtered by backend language (e.g., Go offers Asynq, River, Temporal, Faktory). Configure concurrency, max retries, retry policy (exponential backoff, fixed interval, linear backoff), dead letter queue, worker service, and payload DTO. Cron jobs define a name, cron expression, handler, and timeout.
 
-#### Section 7 — Realize
+**Security** — WAF configuration (provider filtered by cloud provider), CAPTCHA (hCaptcha, reCAPTCHA, Cloudflare Turnstile), bot protection, rate limit strategy and backend, DDoS protection, and internal mTLS.
 
-Code generation configuration: app name, output directory, global model, concurrency, verify toggle, dry run, per-section model overrides, and provider assignments.
+**Auth** — Authentication strategy (JWT, session-based, OAuth 2.0/OIDC, API keys, mTLS), identity provider (Self-managed, Auth0, Clerk, Supabase Auth, Firebase Auth, Keycloak, AWS Cognito), authorization model (RBAC, ABAC, ACL, ReBAC, Policy-based), token storage, session management, refresh token strategy, and MFA support. Includes a full role editor with permissions, role inheritance, and RBAC — roles defined here are referenced by endpoints and frontend pages for access control.
+
+---
+
+### Section 2 — Data
+
+Sub-tabs: **Databases** · **Domains** · **Caching** · **File Storage**
+
+**Databases** — Define database sources with alias, type (PostgreSQL, MySQL, SQLite, MongoDB, DynamoDB, Cassandra, Redis, Memcached, ClickHouse, Elasticsearch), version, namespace, and cache flag. Type-conditional fields appear based on your selection: SSL mode (PostgreSQL/MySQL), consistency level (Cassandra/MongoDB/DynamoDB), replication strategy, and connection pool sizing.
+
+**Domains** — The source of truth for your system's data model. Each domain is a bounded context (e.g., User, Order, Product) with repeatable attributes. Attributes have a name, type (String, Int, Float, Boolean, DateTime, UUID, Enum, JSON/Map, Binary, Array, Ref), constraints (required, unique, not_null, min/max, length limits, email, url, regex, positive, future/past), default value, sensitive flag (for encryption/masking/audit), and validation rules. Relationships between domains support One-to-One, One-to-Many, and Many-to-Many with cascade behavior (CASCADE, SET NULL, RESTRICT, NO ACTION, SET DEFAULT). Domains are referenced throughout Contracts (DTOs), Backend (services), and Frontend (pages).
+
+**Caching** — Named caching configurations with layer type (application-level, dedicated cache, CDN), strategy (cache-aside, read-through, write-through, write-behind, CDN purge), invalidation policy (TTL-based, event-driven, manual, hybrid), TTL, and entity selection from your domains.
+
+**File Storage** — Object/file storage buckets. Supports S3, GCS, Azure Blob, MinIO, Cloudflare R2, and local disk. Configure access mode (public CDN-fronted, private signed URLs, internal only), max upload size, allowed MIME types, signed URL TTL, and which domains store files here.
+
+**Governance** — Data governance policies applied to databases. Configure migration tool (filtered by backend language — e.g., golang-migrate, Atlas, goose for Go; Prisma Migrate, TypeORM for TypeScript), backup strategy, search technology (Elasticsearch, Meilisearch, Algolia, Typesense), retention policy, delete strategy (soft-delete, hard-delete, archival), PII encryption, compliance standards (GDPR, HIPAA, SOC2, PCI-DSS, ISO-27001, CCPA, PIPEDA), data residency, and archival storage.
+
+---
+
+### Section 3 — Contracts
+
+Sub-tabs: **DTOs** · **Endpoints** · **API Versioning** · **External APIs**
+
+**DTOs** — Data Transfer Objects with name, category (Request, Response, Event Payload, Shared/Common), source domain(s), and serialization protocol (REST/JSON, Protobuf, Avro, MessagePack, Thrift, FlatBuffers, Cap'n Proto). Protocol-specific fields appear automatically — Protobuf adds package, syntax, and options; Avro adds namespace and schema registry; Thrift/FlatBuffers/Cap'n Proto add namespace. Each DTO has repeatable fields with name, type, required/nullable flags, validation rules, and protocol-specific metadata (field numbers for Protobuf, field IDs for Thrift/Cap'n Proto).
+
+**Endpoints** — API operations exposed by your service units. Each endpoint defines a service unit, name/path, protocol (REST, GraphQL, gRPC, WebSocket, Event), auth requirement, auth roles (multi-select from Backend roles), request/response DTOs, pagination strategy, rate limit level, and description. Protocol-conditional fields: HTTP method (REST), operation type (GraphQL), stream type (gRPC), direction (WebSocket).
+
+**API Versioning** — Per-protocol versioning strategies. REST supports URL path, header, or query param versioning. GraphQL uses schema versioning or field deprecation. gRPC uses package versioning. WebSocket and Event protocols have their own strategies. Also configures current version, deprecation policy (sunset header, versioned removal notice, changelog entry), and global pagination strategy.
+
+**External APIs** — Third-party integrations (e.g., Stripe, SendGrid, Twilio). Each defines a provider, protocol (REST, GraphQL, gRPC, WebSocket, Webhook, SOAP), auth mechanism (API Key, OAuth2, Bearer, Basic, mTLS), and failure strategy (circuit breaker, retry with backoff, fallback value, timeout). Protocol-specific fields include base URL, rate limits, webhook paths, TLS mode, subprotocol, HMAC headers, and SOAP version. Each external API has repeatable interactions (individual API calls) with name, path, request/response DTOs, and protocol-specific operation details.
+
+---
+
+### Section 4 — Frontend
+
+Sub-tabs: **Tech** · **Theme** · **Pages** · **Navigation** · **i18n** · **A11y/SEO** · **Assets**
+
+**Tech** — Comprehensive frontend technology selection. Language (TypeScript, JavaScript, Dart, Kotlin, Swift), platform (Web SPA, Web SSR/SSG, Mobile cross-platform, Mobile native, Desktop), framework (filtered by language — e.g., React, Vue, Svelte, Angular, Solid, Qwik, HTMX for TypeScript; Flutter for Dart; SwiftUI/UIKit for Swift), meta-framework (filtered by framework — Next.js, Remix, Astro for React; Nuxt for Vue; SvelteKit for Svelte), package manager, styling (Tailwind CSS, CSS Modules, Styled Components, Sass/SCSS, UnoCSS), component library (filtered by framework — shadcn/ui, Radix, Material UI, Ant Design, Headless UI, DaisyUI for React), state management (filtered — Zustand, Redux Toolkit, Jotai for React; Pinia for Vue; Svelte stores for Svelte), data fetching (TanStack Query, SWR, Apollo Client, tRPC client for React), form handling (React Hook Form, Formik for React; Vee-Validate for Vue), validation library, PWA support, realtime strategy (WebSocket, SSE, Polling), image optimization, auth flow type, error boundary, bundle optimization, frontend testing, and linter.
+
+**Theme** — Visual design configuration. Dark mode strategy (toggle, system preference, dark only), border radius (sharp, subtle, rounded, pill), spacing scale, elevation style (shadows, borders, flat), motion (none, subtle transitions, animated), vibe (Professional, Playful, Minimal, Bold, Elegant, Technical, Creative, Friendly, Serious, Modern), font family, colors, and prose description of the visual feel.
+
+**Pages** — Define application pages/routes. Each page has a name, route path, auth requirement, layout (default, sidebar, full-width, blank, custom), description, core actions, loading strategy (skeleton, spinner, progressive, instant SSR/SSG), error handling (inline, toast, error boundary, retry), auth roles (multi-select from Backend roles for role-based page access), and linked pages. Pages can define component actions with 12+ action types: Fetch, Submit, Download, Upload, Delete, Refresh, Export, Navigate, Toast, State, and Custom.
+
+**Navigation** — Nav type (top bar, sidebar, bottom tabs, hamburger menu, combined), breadcrumbs toggle, and auth-aware navigation (show/hide items based on auth state).
+
+**i18n** — Internationalization settings. Enable/disable, default locale (40+ locale options), supported locales, i18n library (i18next, next-intl, react-i18next, LinguiJS, vue-i18n), and timezone handling (UTC always, user preference, auto-detect, manual).
+
+**A11y/SEO** — Accessibility: WCAG level (A, AA, AAA). SEO: rendering strategy (SSR, SSG, ISR, Prerender), sitemap generation, meta tag management (manual, react-helmet, framework-native), analytics (PostHog, Google Analytics 4, Plausible, Mixpanel, Segment), and frontend RUM (Sentry, Datadog RUM, LogRocket, New Relic Browser).
+
+**Assets** — Attach design assets, mockups, or inspiration references. Each asset has a name, path/URL, type (image, icon, font, video, mockup, moodboard), format (png, jpg, svg, gif, mp4, pdf, figma, sketch), usage classification (project or inspiration), and description.
+
+---
+
+### Section 5 — Infrastructure
+
+Sub-tabs: **Environments** · **Networking** · **CI/CD** · **Observability**
+
+**Environments** — Named deployment environments (e.g., dev, staging, prod) referenced by all other pillars. Each environment defines compute type (Bare Metal, VM, Containers, Kubernetes, Serverless, PaaS), cloud provider (AWS, GCP, Azure, Cloudflare, Hetzner, Self-hosted), orchestrator (filtered by compute — Docker Compose, K3s, K8s managed, Nomad, ECS, Cloud Run), and regions.
+
+**Networking** — DNS provider (filtered by cloud — Route53 for AWS, Cloud DNS for GCP, Cloudflare), TLS/SSL (Let's Encrypt, Cloudflare, ACM), reverse proxy (filtered by orchestrator — NGINX Ingress/Traefik/Envoy for Kubernetes; Nginx/Caddy/Traefik for Docker Compose), CDN (CloudFront for AWS, Cloud CDN for GCP, Cloudflare), primary domain, domain strategy (subdomain per service, path-based routing, single domain), CORS configuration, and SSL certificate management.
+
+**CI/CD** — Pipeline configuration. Platform (GitHub Actions, GitLab CI, Jenkins, CircleCI, ArgoCD, Tekton), container registry (filtered by cloud — ECR for AWS, GCR/Artifact Registry for GCP, ACR for Azure), deploy strategy (filtered by orchestrator — rolling, blue-green, canary, recreate), IaC tool (filtered by cloud — Terraform, Pulumi, CloudFormation/CDK for AWS, Bicep for Azure, Wrangler for Cloudflare), secrets management (filtered by cloud — AWS Secrets Manager, GCP Secret Manager, Azure Key Vault, HashiCorp Vault), container runtime (filtered by language — scratch/distroless for Go/Rust, node:alpine for TypeScript, python:slim for Python), and backup/DR strategy.
+
+**Observability** — Logging (filtered by cloud — Loki+Grafana, ELK Stack, CloudWatch, Datadog), metrics (Prometheus+Grafana, Datadog, CloudWatch, New Relic), tracing (filtered by metrics backend — OpenTelemetry+Jaeger, Datadog APM, AWS X-Ray, Cloud Trace), error tracking (Sentry, Datadog, Rollbar), health check generation, alerting (filtered by metrics — Grafana Alerting, PagerDuty, OpsGenie, CloudWatch Alarms), and log retention policy.
+
+---
+
+### Section 6 — Cross-Cutting
+
+Sub-tabs: **Testing** · **Docs** · **Standards**
+
+**Testing** — Framework selections dynamically filtered by your backend languages and frontend tech:
+
+| Test Type | How it's filtered |
+|-----------|------------------|
+| Unit | By backend language (Go testing/Testify for Go, Jest/Vitest for TypeScript, pytest for Python, JUnit for Java, etc.) |
+| Integration | By architecture pattern (Testcontainers/Docker Compose for microservices; in-memory fakes for monoliths) |
+| E2E | By frontend platform (Playwright/Cypress/Selenium for web; Flutter Driver for Dart; Espresso for Android; XCUITest for iOS) |
+| API | By communication protocols (Bruno/Hurl for REST; GraphQL Playground for GraphQL; grpcurl/BloomRPC for gRPC) |
+| Load | k6, Artillery, JMeter (plus Locust when Python is a backend language) |
+| Contract | By architecture pattern (Pact/Schemathesis for microservices; AsyncAPI validator for event-driven) |
+
+**Docs** — Per-protocol documentation format. REST gets OpenAPI/Swagger, GraphQL gets GraphQL Playground/SDL, gRPC gets reflection/buf.build, WebSocket and Events get AsyncAPI/CloudEvents spec. Also configures auto-generation from code annotations and changelog strategy (Conventional Commits, Manual).
+
+**Standards** — Dependency update strategy (Dependabot, Renovate), feature flags (LaunchDarkly, Unleash, Flagsmith), backend linter (filtered by language), and frontend linter (ESLint+Prettier, Biome, oxlint).
+
+---
+
+### Section 7 — Realize
+
+Code generation configuration for the `realize` engine:
+
+| Field | Description |
+|-------|-------------|
+| App Name | Application name used in generated code |
+| Output Dir | Destination directory for generated files |
+| Model | Global LLM model for code generation |
+| Concurrency | Max parallel tasks (1, 2, 4, 8) |
+| Verify | Run language verifiers after generation |
+| Dry Run | Print task plan without calling agents |
+
+**Per-section model overrides** let you assign different LLM providers and tiers to each pillar (backend, data, contracts, frontend, infra, crosscut) using the format `"Provider · Tier"` (e.g., `"Claude · Sonnet"`, `"Gemini · Flash"`). Sections without an override inherit the global model.
+
+---
+
+## Architecture Diagram Overview
+
+Press `P` to open the architecture diagram overview, which visualizes the dependency graph across all configured pillars.
+
+<img width="1900" height="1138" alt="image" src="https://github.com/user-attachments/assets/333e5fac-cf88-4490-918a-ddba848df91d" />
 
 ---
 
@@ -302,18 +345,6 @@ Saved on `:w` or `Ctrl+S`. Unconfigured pillars are omitted automatically.
 }
 ```
 
-### `realize` Options
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `app_name` | string | — | Application name for generated code |
-| `output_dir` | string | `output` | Directory where generated files are written |
-| `model` | string | `claude-sonnet-4-6` | Global LLM model for code generation |
-| `concurrency` | int | `1` | Max parallel tasks during code generation |
-| `verify` | bool | `true` | Run language verifiers (build, vet, tsc) after generation |
-| `dry_run` | bool | `false` | Print task plan without calling any LLM agents |
-| `section_models` | object | — | Per-pillar model override in `"Provider · Tier"` format |
-
 ---
 
 ## Provider Configuration
@@ -352,16 +383,16 @@ The `realize` binary reads `manifest.json` and drives a parallel, agentic code-g
 
 ```
 manifest.json
-    ↓
-DAG construction     → execution graph with dependency edges
-    ↓
-Orchestrator         → parallel task dispatch (bounded by --parallel)
-    ↓  (per task)
-Runner               → deterministic fixes → agent call → verify → retry (escalating tier)
-    ↓
-Shared memory        → stores completed outputs; downstream agents read upstream signatures
-    ↓
-File writer          → writes generated files to --output directory
+    |
+DAG construction     -> execution graph with dependency edges
+    |
+Orchestrator         -> parallel task dispatch (bounded by --parallel)
+    |  (per task)
+Runner               -> deterministic fixes -> agent call -> verify -> retry (escalating tier)
+    |
+Shared memory        -> stores completed outputs; downstream agents read upstream signatures
+    |
+File writer          -> writes generated files to --output directory
 ```
 
 ### CLI Flags
@@ -409,8 +440,8 @@ Each `.md` file defines a named skill. Technology aliases automatically map fram
 
 ```
 .vibemenu/
-└── skills/
-    ├── nextjs.md
-    ├── postgres.md
-    └── terraform-aws.md
+  skills/
+    nextjs.md
+    postgres.md
+    terraform-aws.md
 ```
