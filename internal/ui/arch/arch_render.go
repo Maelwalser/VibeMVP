@@ -771,6 +771,23 @@ func colorizeClipped(lines []string, data archDiagramData, scrollX, scrollY int)
 	addRanges(data.fsNodes, core.ClrYellow)
 	addRanges(data.extNodes, core.ClrMagenta)
 
+	// Unselected edge paths — dim so the selected edge pops (priority 2).
+	for edgeID, segs := range data.edgePathMap {
+		if edgeID == data.selectedID {
+			continue // selected edge gets bright highlight below
+		}
+		for _, seg := range segs {
+			ranges = append(ranges, colorRange{
+				xStart:   seg.x1 - scrollX,
+				xEnd:     seg.x2 - scrollX,
+				yStart:   seg.y1 - scrollY,
+				yEnd:     seg.y2 - scrollY,
+				color:    core.ClrFgDim,
+				priority: 2,
+			})
+		}
+	}
+
 	// Info panel colors — priority 4 (above node colors)
 	for _, cr := range data.infoColorRanges {
 		ranges = append(ranges, colorRange{
