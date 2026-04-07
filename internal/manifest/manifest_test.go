@@ -285,9 +285,9 @@ func TestMarshalJSON_PlaceholderValuesOmitted(t *testing.T) {
 				{
 					Alias:       "primary",
 					Type:        DBPostgres,
-					Consistency: "strong",           // incompatible with PostgreSQL
-					Environment: "(none)",            // placeholder
-					SSLMode:     "require",           // valid for PostgreSQL
+					Consistency: "strong",  // incompatible with PostgreSQL
+					Environment: "(none)",  // placeholder
+					SSLMode:     "require", // valid for PostgreSQL
 				},
 			},
 			Governances: []DataGovernanceConfig{
