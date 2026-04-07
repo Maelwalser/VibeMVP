@@ -59,6 +59,10 @@ func UserMessage(ac *Context) (string, error) {
 			b.WriteString(fmt.Sprintf("⚠ Output directory (**%s**) is the FILESYSTEM location only — it is NOT the Go module name. Import internal packages as `\"%s/internal/...\"`, NEVER as `\"%s/internal/...\"`.\n", outputDir, modulePath, outputDir))
 		}
 	}
+	if desc := ac.Task.Payload.Description; desc != "" {
+		b.WriteString(fmt.Sprintf("\n## Project Context\n\n%s\n", desc))
+	}
+
 	b.WriteString("\n## Manifest Payload\n\n```json\n")
 	b.Write(payloadJSON)
 	b.WriteString("\n```\n")

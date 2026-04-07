@@ -98,9 +98,23 @@ STRICT SCOPE: Output ONLY Go source files under internal/domain/ with package do
 - Each file contains: the entity struct, input/update structs, and domain-specific errors
 - Use github.com/google/uuid for UUID fields and time.Time for timestamps
 - DO NOT generate: repositories, services, handlers, middleware, main.go, go.mod, SQL, Dockerfiles, or any other file
-- DO NOT include any database or HTTP logic in these files`,
+- DO NOT include any database or HTTP logic in these files
 
-	dag.TaskKindDataMigrations: "You are an expert database engineer. Generate database migration files (SQL up/down pairs) that create the tables, indexes, and constraints described in the domain definitions. Output only .sql files under db/migrations/.",
+DATA GOVERNANCE:
+- If the payload contains "governances", apply the governance policies to domain struct design:
+  - PII encryption: mark fields that contain PII with a comment noting they require encryption at rest
+  - Retention policy: if soft-delete or archival is specified, add DeletedAt *time.Time and ArchivedAt *time.Time fields
+  - Compliance frameworks: if audit trail is needed, add CreatedBy and UpdatedBy string fields
+  - Sensitive attributes: domain attributes with sensitive=true should be noted for encryption handling`,
+
+	dag.TaskKindDataMigrations: `You are an expert database engineer. Generate database migration files (SQL up/down pairs) that create the tables, indexes, and constraints described in the domain definitions. Output only .sql files under db/migrations/.
+
+DATA GOVERNANCE:
+- If the payload contains "governances", incorporate governance requirements into migrations:
+  - Retention policy: add soft-delete columns (deleted_at TIMESTAMPTZ) or archive table patterns as specified
+  - PII encryption: add comments on columns that require encryption at rest; use appropriate column types
+  - Migration tool: if specified in governances, follow its naming convention for migration files
+  - Backup strategy: include index optimizations that support incremental backup patterns`,
 
 	// Service layers — each task is one focused layer of the application.
 	dag.TaskKindServiceRepository: `You are an expert Go backend engineer. Generate ONLY the repository (data-access) layer for the service.
@@ -139,6 +153,15 @@ PGXPOOL v5 API RULES (CRITICAL):
   Available pool config fields: MaxConns, MinConns, MaxConnLifetime, MaxConnIdleTime, HealthCheckPeriod.
   To limit the connection time, pass a context with timeout when calling pgxpool.NewWithConfig.
 
+CUSTOM DATA ACCESS OPERATIONS:
+- If service.repositories is populated in the payload, implement the EXACT operations declared
+  in each RepositoryDef's operations array. Each DataAccessOp specifies: op_type (read/write/delete),
+  filter_by (domain attribute names for query params), sort_by, result_shape (Single item/List/Count/
+  Boolean/Void), and pagination style. Generate methods matching these specifications verbatim.
+- If service.repositories also specifies selected_fields, only expose those domain attributes
+  through the repository — do not include fields not listed.
+- If service.repositories is empty or absent, generate standard CRUD operations for each domain entity.
+
 For ArchModularMonolith: group by module instead of by layer —
 use internal/modules/{module-name}/repository/ and internal/modules/{module-name}/repository/postgres/` +
 		crossTaskConsistencyRules,
@@ -159,6 +182,20 @@ UUID HANDLING (CRITICAL):
 - JWT claims require string values: claims["sub"] = user.ID.String()
 - Any helper function accepting userID string must receive user.ID.String(), not user.ID
 - issueTokens(ctx, user.ID) is WRONG if issueTokens expects string — use issueTokens(ctx, user.ID.String())
+
+EVENT PUBLISHING/SUBSCRIBING:
+- If the payload contains "events", generate publish/subscribe integration for each event
+  where this service is the publisher_service or consumer_service.
+- Publisher: define an EventPublisher interface in the service constructor and call it in the
+  relevant service method when the event should be fired.
+- Consumer: generate handler functions that process incoming events and delegate to service methods.
+- Use the event's DTO field to determine the payload type for publish/consume operations.
+
+INTER-SERVICE COMMUNICATION:
+- If the payload contains "comm_links", generate client interfaces for calling other services.
+- Apply resilience patterns (circuit breaker, retry, timeout) as specified in each CommLink's
+  resilience_patterns field.
+- Use the CommLink's protocol and sync_async mode to determine the communication style.
 
 For ArchModularMonolith: group by module — use internal/modules/{module-name}/service/` +
 		crossTaskConsistencyRules,

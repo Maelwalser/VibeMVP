@@ -78,7 +78,6 @@ type APIVersioning struct {
 	PerProtocolStrategies map[string]string `json:"per_protocol_strategies,omitempty"`
 	CurrentVersion        string            `json:"current_version,omitempty"`
 	DeprecationPolicy     string            `json:"deprecation_policy,omitempty"`
-	PaginationStrategy    string            `json:"pagination_strategy,omitempty"`
 }
 
 // ExternalAPIInteraction describes a single call/operation to an external API.

@@ -7,6 +7,10 @@ import "github.com/vibe-menu/internal/manifest"
 // This keeps agent prompts tight and prevents cross-contamination between pillars.
 // omitempty tags ensure nil/zero fields are omitted from JSON to reduce token usage.
 type TaskPayload struct {
+	// Description is the project-level description from Section 0 of the manifest.
+	// Gives agents high-level context about the purpose of the software they're building.
+	Description string `json:"description,omitempty"`
+
 	// ModulePath is the Go module path for this service (e.g. "core-api").
 	// Derived deterministically from the service name and shared across all
 	// sub-tasks so every layer uses identical import paths.
@@ -15,10 +19,11 @@ type TaskPayload struct {
 	EnvConfig   manifest.EnvConfig   `json:"env_config,omitempty"`
 
 	// Data pillar
-	Domains      []manifest.DomainDef      `json:"domains,omitempty"`
-	Databases    []manifest.DBSourceDef    `json:"databases,omitempty"`
-	Cachings     []manifest.CachingConfig  `json:"cachings,omitempty"`
-	FileStorages []manifest.FileStorageDef `json:"file_storages,omitempty"`
+	Domains      []manifest.DomainDef            `json:"domains,omitempty"`
+	Databases    []manifest.DBSourceDef          `json:"databases,omitempty"`
+	Cachings     []manifest.CachingConfig        `json:"cachings,omitempty"`
+	FileStorages []manifest.FileStorageDef       `json:"file_storages,omitempty"`
+	Governances  []manifest.DataGovernanceConfig `json:"governances,omitempty"`
 
 	// Backend pillar — per-service tasks set Service; others see AllServices.
 	Service     *manifest.ServiceDef       `json:"service,omitempty"`
@@ -27,12 +32,18 @@ type TaskPayload struct {
 	Messaging   *manifest.MessagingConfig  `json:"messaging,omitempty"`
 	APIGateway  *manifest.APIGatewayConfig `json:"api_gateway,omitempty"`
 	Auth        *manifest.AuthConfig       `json:"auth,omitempty"`
+	WAF         *manifest.WAFConfig        `json:"waf,omitempty"`
 
 	// JobQueues and CronJobs are the background task configurations assigned to
 	// this service. Populated for service-layer and bootstrap tasks so agents
 	// know which job technologies to wire in.
 	JobQueues []manifest.JobQueueDef `json:"job_queues,omitempty"`
 	CronJobs  []manifest.CronJobDef  `json:"cron_jobs,omitempty"`
+
+	// Events are the event catalog entries relevant to this service (where it is
+	// the publisher or consumer). Populated for service chain tasks so agents
+	// can generate publish/subscribe stubs.
+	Events []manifest.EventDef `json:"events,omitempty"`
 
 	// Contracts pillar
 	DTOs         []manifest.DTODef         `json:"dtos,omitempty"`

@@ -220,6 +220,240 @@ func TestBuild_CrossCutDocs_WhenAPIDocsSet(t *testing.T) {
 	assertTaskPresent(t, d, "crosscut.docs")
 }
 
+func TestBuild_CrossCutDocs_WhenPerProtocolFormats(t *testing.T) {
+	m := minimalMonolith()
+	m.CrossCut.Docs = &manifest.DocsConfig{
+		PerProtocolFormats: map[string]string{"REST": "OpenAPI 3.1"},
+	}
+	d := buildDAG(t, m)
+	assertTaskPresent(t, d, "crosscut.docs")
+}
+
+// ── ConfigRef resolution ─────────────────────────────────────────────────────
+
+func TestBuild_ConfigRef_ResolvesLanguageFramework(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			StackConfigs: []manifest.StackConfig{
+				{Name: "go-fiber", Language: "Go", LanguageVersion: "1.26", Framework: "Fiber", FrameworkVersion: "v2"},
+			},
+			Services: []manifest.ServiceDef{
+				{Name: "api", ConfigRef: "go-fiber"},
+			},
+		},
+	}
+	d := buildDAG(t, m)
+
+	task := d.Tasks["svc.api.plan"]
+	if task == nil {
+		t.Fatal("svc.api.plan not found")
+	}
+	if task.Payload.Service.Language != "Go" {
+		t.Errorf("Language = %q, want %q", task.Payload.Service.Language, "Go")
+	}
+	if task.Payload.Service.Framework != "Fiber" {
+		t.Errorf("Framework = %q, want %q", task.Payload.Service.Framework, "Fiber")
+	}
+}
+
+func TestBuild_ConfigRef_InlineOverridesStackConfig(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			StackConfigs: []manifest.StackConfig{
+				{Name: "go-fiber", Language: "Go", Framework: "Fiber"},
+			},
+			Services: []manifest.ServiceDef{
+				{Name: "api", ConfigRef: "go-fiber", Language: "Go", Framework: "Gin"},
+			},
+		},
+	}
+	d := buildDAG(t, m)
+
+	task := d.Tasks["svc.api.plan"]
+	if task.Payload.Service.Framework != "Gin" {
+		t.Errorf("inline Framework should take precedence, got %q", task.Payload.Service.Framework)
+	}
+}
+
+func TestBuild_ConfigRef_UnknownRef_NoOp(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", ConfigRef: "nonexistent"},
+			},
+		},
+	}
+	d := buildDAG(t, m)
+
+	task := d.Tasks["svc.api.plan"]
+	if task.Payload.Service.Language != "" {
+		t.Errorf("Language should remain empty for unknown ConfigRef, got %q", task.Payload.Service.Language)
+	}
+}
+
+// ── Description injection ───────────────────────────────────────────────────
+
+func TestBuild_Description_InjectedIntoKeyTasks(t *testing.T) {
+	m := minimalMonolith()
+	m.Description = "A collaborative blogging platform"
+	m.Frontend.Tech = &manifest.FrontendTechConfig{Framework: "Next.js", Language: "TypeScript"}
+	d := buildDAG(t, m)
+
+	for _, id := range []string{"data.schemas", "svc.monolith.plan", "svc.monolith.service", "frontend"} {
+		task := d.Tasks[id]
+		if task == nil {
+			t.Errorf("task %q not found", id)
+			continue
+		}
+		if task.Payload.Description != "A collaborative blogging platform" {
+			t.Errorf("task %q Description = %q, want project description", id, task.Payload.Description)
+		}
+	}
+}
+
+func TestBuild_Description_OmittedFromInfraTasks(t *testing.T) {
+	m := minimalMonolith()
+	m.Description = "Some project"
+	d := buildDAG(t, m)
+
+	task := d.Tasks["infra.docker"]
+	if task == nil {
+		t.Fatal("infra.docker not found")
+	}
+	if task.Payload.Description != "" {
+		t.Errorf("infra.docker should not have Description, got %q", task.Payload.Description)
+	}
+}
+
+// ── Events injection ─────────────────────────────────────────────────────────
+
+func TestBuild_Events_InjectedIntoServiceTasks(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "users", Language: "Go", Framework: "Fiber"},
+				{Name: "orders", Language: "Go", Framework: "Fiber"},
+			},
+			Events: []manifest.EventDef{
+				{Name: "UserCreated", PublisherService: "users", DTO: "UserCreatedEvent"},
+				{Name: "OrderPlaced", PublisherService: "orders", ConsumerService: "users", DTO: "OrderPlacedEvent"},
+			},
+		},
+	}
+	d := buildDAG(t, m)
+
+	// users service should see both events (publisher of UserCreated, consumer of OrderPlaced)
+	usersLogic := d.Tasks["svc.users.service"]
+	if usersLogic == nil {
+		t.Fatal("svc.users.service not found")
+	}
+	if len(usersLogic.Payload.Events) != 2 {
+		t.Errorf("users service should have 2 events, got %d", len(usersLogic.Payload.Events))
+	}
+
+	// orders service should see only OrderPlaced (publisher)
+	ordersLogic := d.Tasks["svc.orders.service"]
+	if ordersLogic == nil {
+		t.Fatal("svc.orders.service not found")
+	}
+	if len(ordersLogic.Payload.Events) != 1 {
+		t.Errorf("orders service should have 1 event, got %d", len(ordersLogic.Payload.Events))
+	}
+
+	// Events should also be on plan and handler tasks
+	usersPlan := d.Tasks["svc.users.plan"]
+	if usersPlan == nil || len(usersPlan.Payload.Events) != 2 {
+		t.Errorf("users plan should have 2 events")
+	}
+	usersHandler := d.Tasks["svc.users.handler"]
+	if usersHandler == nil || len(usersHandler.Payload.Events) != 2 {
+		t.Errorf("users handler should have 2 events")
+	}
+}
+
+// ── Governances injection ───────────────────────────────────────────────────
+
+func TestBuild_Governances_InjectedIntoDataTasks(t *testing.T) {
+	m := minimalMonolith()
+	m.Data.Governances = []manifest.DataGovernanceConfig{
+		{Name: "GDPR", PIIEncryption: "AES-256", RetentionPolicy: "7 years"},
+	}
+	d := buildDAG(t, m)
+
+	for _, id := range []string{"data.schemas", "data.migrations"} {
+		task := d.Tasks[id]
+		if task == nil {
+			t.Errorf("task %q not found", id)
+			continue
+		}
+		if len(task.Payload.Governances) != 1 {
+			t.Errorf("task %q should have 1 governance config, got %d", id, len(task.Payload.Governances))
+		}
+	}
+}
+
+// ── WAF injection ───────────────────────────────────────────────────────────
+
+func TestBuild_WAF_InjectedIntoHandlerAndGateway(t *testing.T) {
+	m := minimalMonolith()
+	m.Backend.WAF = &manifest.WAFConfig{RateLimitStrategy: "token-bucket"}
+	m.Backend.APIGateway = &manifest.APIGatewayConfig{Technology: "Kong"}
+	d := buildDAG(t, m)
+
+	handler := d.Tasks["svc.monolith.handler"]
+	if handler == nil || handler.Payload.WAF == nil {
+		t.Error("handler should have WAF config")
+	}
+
+	gateway := d.Tasks["backend.gateway"]
+	if gateway == nil || gateway.Payload.WAF == nil {
+		t.Error("gateway should have WAF config")
+	}
+
+	bootstrap := d.Tasks["svc.monolith.bootstrap"]
+	if bootstrap == nil || bootstrap.Payload.WAF == nil {
+		t.Error("bootstrap should have WAF config")
+	}
+}
+
+// ── CommLinks in service logic ──────────────────────────────────────────────
+
+func TestBuild_CommLinks_InjectedIntoServiceLogic(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "users", Language: "Go", Framework: "Fiber"},
+				{Name: "orders", Language: "Go", Framework: "Fiber"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "orders", To: "users", Protocol: "REST", SyncAsync: "sync"},
+			},
+		},
+	}
+	d := buildDAG(t, m)
+
+	ordersLogic := d.Tasks["svc.orders.service"]
+	if ordersLogic == nil {
+		t.Fatal("svc.orders.service not found")
+	}
+	if len(ordersLogic.Payload.CommLinks) != 1 {
+		t.Errorf("orders service logic should have 1 comm link, got %d", len(ordersLogic.Payload.CommLinks))
+	}
+
+	usersLogic := d.Tasks["svc.users.service"]
+	if usersLogic == nil {
+		t.Fatal("svc.users.service not found")
+	}
+	if len(usersLogic.Payload.CommLinks) != 1 {
+		t.Errorf("users service logic should have 1 comm link (is the 'To' side), got %d", len(usersLogic.Payload.CommLinks))
+	}
+}
+
 func TestBuild_ValidDAG_NoErrors(t *testing.T) {
 	// Full-featured manifest should produce a valid DAG with no build errors
 	m := &manifest.Manifest{

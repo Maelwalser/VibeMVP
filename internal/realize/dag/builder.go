@@ -12,6 +12,10 @@ type Builder struct{}
 
 // Build reads m and emits the complete task DAG with all dependencies wired.
 func (b *Builder) Build(m *manifest.Manifest) (*DAG, error) {
+	// Resolve StackConfig references before building tasks so every service
+	// has concrete Language/Framework values even when using ConfigRef.
+	resolveConfigRefs(m.Backend.Services, m.Backend.StackConfigs)
+
 	d := &DAG{Tasks: make(map[string]*Task)}
 
 	b.addDataTasks(m, d)
@@ -81,6 +85,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 	}
 
 	basePayload := TaskPayload{
+		Description:  m.Description,
 		ModulePath:   dataModulePath,
 		ArchPattern:  m.Backend.ArchPattern,
 		EnvConfig:    m.Backend.Env.OrZero(),
@@ -88,6 +93,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 		Databases:    m.Data.Databases,
 		Cachings:     m.Data.Cachings,
 		FileStorages: m.Data.FileStorages,
+		Governances:  m.Data.Governances,
 		AllServices:  m.Backend.Services,
 		OutputDir:    backendBaseDir(svcDirs),
 	}
@@ -255,6 +261,7 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 				EnvConfig:   m.Backend.Env.OrZero(),
 				AllServices: m.Backend.Services,
 				APIGateway:  m.Backend.APIGateway,
+				WAF:         m.Backend.WAF,
 			},
 		})
 	}
@@ -281,6 +288,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 	cronJobs := cronJobsForService(svc.Name, m.Backend.JobQueues)
 	svcFileStorages := fileStoragesForService(svc.Name, m.Data.FileStorages)
 	svcExternalAPIs := externalAPIsForService(svc.Name, m.Contracts.ExternalAPIs)
+	svcEvents := eventsForService(svc.Name, m.Backend.Events)
 	outputDir := svcDirs[slug]
 
 	// Pre-compute resolved cross-references so every layer gets the right context.
@@ -289,6 +297,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		dtosForEndpoints(svcEndpoints, m.Contracts.DTOs),
 		dtosForCommLinks(links, m.Contracts.DTOs),
 		dtosForJobQueues(jobQueues, m.Contracts.DTOs),
+		dtosForEvents(svcEvents, m.Contracts.DTOs),
 	)
 
 	planID := svcPlanID(slug)
@@ -308,6 +317,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — project skeleton (interfaces + go.mod)", svc.Name),
 		Dependencies: dataDeps,
 		Payload: TaskPayload{
+			Description:  m.Description,
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
 			EnvConfig:    m.Backend.Env.OrZero(),
@@ -318,6 +328,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			FileStorages: svcFileStorages,
 			ExternalAPIs: svcExternalAPIs,
 			Auth:         m.Backend.Auth,
+			Events:       svcEvents,
 			Endpoints:    svcEndpoints,
 			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
@@ -382,6 +393,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 		Label:        fmt.Sprintf("%s — service layer", svc.Name),
 		Dependencies: svcLogicDeps,
 		Payload: TaskPayload{
+			Description:  m.Description,
 			ModulePath:   modPath,
 			ArchPattern:  m.Backend.ArchPattern,
 			Service:      &svcCopy,
@@ -389,8 +401,10 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			Cachings:     m.Data.Cachings,
 			FileStorages: svcFileStorages,
 			ExternalAPIs: svcExternalAPIs,
+			CommLinks:    links,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
+			Events:       svcEvents,
 			Endpoints:    svcEndpoints,
 			DTOs:         svcDTOs,
 			ServiceDirs:  svcDirs,
@@ -423,6 +437,8 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			DTOs:         svcDTOs,
 			CommLinks:    links,
 			Auth:         m.Backend.Auth,
+			WAF:          m.Backend.WAF,
+			Events:       svcEvents,
 			FileStorages: svcFileStorages,
 			ExternalAPIs: svcExternalAPIs,
 			JobQueues:    jobQueues,
@@ -455,6 +471,7 @@ func (b *Builder) addServiceTaskChain(m *manifest.Manifest, svc *manifest.Servic
 			FileStorages: svcFileStorages,
 			ExternalAPIs: svcExternalAPIs,
 			Auth:         m.Backend.Auth,
+			WAF:          m.Backend.WAF,
 			JobQueues:    jobQueues,
 			CronJobs:     cronJobs,
 			Endpoints:    svcEndpoints,
@@ -520,6 +537,7 @@ func (b *Builder) addFrontendTask(m *manifest.Manifest, d *DAG) {
 		Label:        fmt.Sprintf("Generate frontend (%s)", m.Frontend.Tech.Framework),
 		Dependencies: deps,
 		Payload: TaskPayload{
+			Description: m.Description,
 			ArchPattern: m.Backend.ArchPattern,
 			DTOs:        m.Contracts.DTOs,
 			Endpoints:   m.Contracts.Endpoints,
@@ -639,7 +657,7 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 		})
 	}
 
-	if m.CrossCut.Docs != nil && m.CrossCut.Docs.APIDocs != "" {
+	if m.CrossCut.Docs != nil && (m.CrossCut.Docs.APIDocs != "" || len(m.CrossCut.Docs.PerProtocolFormats) > 0) {
 		add(d, &Task{
 			ID:           "crosscut.docs",
 			Kind:         TaskKindCrossCutDocs,

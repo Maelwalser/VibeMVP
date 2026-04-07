@@ -114,13 +114,6 @@ type RoleDef struct {
 	Inherits    []string `json:"inherits,omitempty"`
 }
 
-// PolicyRule maps a role to a resource and the set of allowed actions.
-type PolicyRule struct {
-	Role     string   `json:"role"`
-	Resource string   `json:"resource"`
-	Actions  []string `json:"actions"`
-}
-
 // AuthConfig describes authentication and identity settings.
 type AuthConfig struct {
 	Strategy     AuthStrategy    `json:"strategy,omitempty"`
@@ -133,7 +126,6 @@ type AuthConfig struct {
 	RefreshToken string          `json:"refresh_token,omitempty"`
 	Permissions  []PermissionDef `json:"permissions,omitempty"`
 	Roles        []RoleDef       `json:"roles,omitempty"`
-	PolicyRules  []PolicyRule    `json:"policy_rules,omitempty"`
 }
 
 // OrZero returns a dereferenced EnvConfig, or a zero value if nil.
@@ -183,7 +175,6 @@ type JobQueueDef struct {
 // EnvConfig describes backend-level configuration (CORS, sessions, linter).
 // Server deployment settings (compute, cloud, orchestrator) live in InfraPillar.Environments.
 type EnvConfig struct {
-	Stages     string   `json:"stages,omitempty"`
 	HealthDeps []string `json:"health_deps,omitempty"` // global health deps for monolith
 }
 

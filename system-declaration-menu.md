@@ -28,70 +28,48 @@ Free-text project description textarea. Describe the system in natural language 
 
 ### 1.1 Architecture Pattern *(top-level selector)*
 
-| Option              | Sub-tabs Unlocked                                                                     |
-|---------------------|---------------------------------------------------------------------------------------|
-| Monolith            | ENV · SERVICES · JOBS · SECURITY · AUTH                                               |
-| Modular Monolith    | ENV · SERVICES · STACK CONFIG · COMM · JOBS · SECURITY · AUTH                        |
-| Microservices       | ENV · SERVICES · STACK CONFIG · COMM · API GW · JOBS · SECURITY · AUTH               |
-| Event-Driven        | ENV · SERVICES · STACK CONFIG · COMM · MESSAGING · JOBS · SECURITY · AUTH             |
-| Hybrid              | ENV · SERVICES · STACK CONFIG · COMM · MESSAGING · API GW · JOBS · SECURITY · AUTH   |
+| Option              | Sub-tabs Unlocked                                                                   |
+|---------------------|-------------------------------------------------------------------------------------|
+| Monolith            | CONFIG · SERVICES · JOBS · SECURITY · AUTH                                          |
+| Modular Monolith    | CONFIG · SERVICES · COMM · JOBS · SECURITY · AUTH                                   |
+| Microservices       | CONFIG · SERVICES · COMM · API GW · JOBS · SECURITY · AUTH                          |
+| Event-Driven        | CONFIG · SERVICES · COMM · MESSAGING · JOBS · SECURITY · AUTH                       |
+| Hybrid              | CONFIG · SERVICES · COMM · MESSAGING · API GW · JOBS · SECURITY · AUTH              |
 
 > Selecting an architecture pattern sets the **communication defaults** and **deployment topology** but every option shares the same service-unit definition shape below.
 
 ---
 
-### 1.2 Environment Sub Tab
+### 1.2 CONFIG Sub Tab
 
-> For **Monolith** only — defines the single shared language/framework and links the monolith to an infrastructure environment. For multi-service architectures this tab only shows global health dependencies; per-service tech choices live in **Stack Config** and the **Services** form.
+> For **Monolith** — defines the single shared language/framework and links the monolith to an infrastructure environment. For **non-monolith** architectures — manages reusable Stack Config entries (language/framework combinations that services reference).
+
+#### Monolith Mode
 
 | Field          | Options / Input                                                                       |
 |----------------|---------------------------------------------------------------------------------------|
-| Language       | *(Monolith only)* `Go` · `TypeScript/Node` · `Python` · `Java` · `Kotlin` · `C#/.NET` · `Rust` · `Ruby` · `PHP` · `Elixir` · `Other` |
-| Lang Version   | *(Monolith only)* Dynamically filtered by language                                    |
-| Framework      | *(Monolith only)* Dynamically filtered by language — see §1.3 for options             |
-| FW Version     | *(Monolith only)* Dynamically filtered by language + framework                        |
-| Environment    | *(Monolith only)* Select from environments defined in **Infrastructure → Environments** |
+| Language       | `Go` · `TypeScript/Node` · `Python` · `Java` · `Kotlin` · `C#/.NET` · `Rust` · `Ruby` · `PHP` · `Elixir` · `Other` |
+| Lang Version   | Dynamically filtered by language                                                      |
+| Framework      | Dynamically filtered by language — see §1.3 for options                               |
+| FW Version     | Dynamically filtered by language + framework                                          |
+| Environment    | Select from environments defined in **Infrastructure → Environments**                 |
 | Health Deps    | Multi-select from defined databases/services — global health-check dependencies       |
 
----
+#### Non-Monolith Mode (Stack Config List)
 
-### 1.3 Stack Config Sub Tab
-
-> *(Non-monolith architectures only)* Reusable language/framework combinations that services and job queues can reference instead of defining their own stack inline.
-
-#### Adding a Stack Config
+> A repeatable list of reusable language/framework combinations.
 
 | Field           | Input                                                                           |
 |-----------------|---------------------------------------------------------------------------------|
 | Name            | Free text identifier (e.g., `go-fiber`, `node-nestjs`)                          |
 | Language        | `Go` · `TypeScript/Node` · `Python` · `Java` · `Kotlin` · `C#/.NET` · `Rust` · `Ruby` · `PHP` · `Elixir` · `Other` |
 | Lang Version    | Dynamically filtered by language                                                |
-| Framework       | Dynamically filtered by language — see §1.4 for options                         |
+| Framework       | Dynamically filtered by language — see §1.3 for options                         |
 | FW Version      | Dynamically filtered by language + framework                                    |
 
 ---
 
-### 1.4 Service Units Sub Tab
-
-#### Adding / Editing a Service Unit
-
-| Field             | Input                                                                                                         |
-|-------------------|---------------------------------------------------------------------------------------------------------------|
-| Name              | Free text identifier (e.g., `auth-service`, `billing-module`)                                                 |
-| Responsibility    | Free text description of what this unit owns                                                                   |
-| Stack Config      | *(non-monolith)* Select from defined Stack Configs — overrides inline language/framework when set             |
-| Language          | `Go` · `TypeScript/Node` · `Python` · `Java` · `Kotlin` · `C#/.NET` · `Rust` · `Ruby` · `PHP` · `Elixir` · `Other` |
-| Lang Version      | Dynamically filtered by language                                                                              |
-| Framework         | *(dynamically filtered by language — see below)*                                                               |
-| FW Version        | Dynamically filtered by language + framework                                                                  |
-| Technologies      | Multi-select: `WebSocket` · `gRPC` · `REST` · `GraphQL` · `SSE` · `tRPC` · `MQTT` · `Kafka consumer`         |
-| Pattern Tag       | *(Hybrid only)* `Monolith part` · `Modular module` · `Microservice` · `Event processor` · `Serverless function` |
-| Health Deps       | Multi-select from defined databases — databases this service depends on for health checks                     |
-| Error Format      | Dynamically filtered by selected technologies — see table below                                               |
-| Service Discovery | `DNS-based` · `Consul` · `Kubernetes DNS` · `Eureka` · `Static config` · `None`                               |
-| Environment       | Select from environments defined in **Infrastructure → Environments**                                         |
-
-Framework suggestions per language:
+### 1.3 Framework Options per Language
 
 | Language        | Frameworks                                                            |
 |-----------------|-----------------------------------------------------------------------|
@@ -106,6 +84,24 @@ Framework suggestions per language:
 | PHP             | `Laravel` · `Symfony` · `Slim` · `Laminas`                           |
 | Elixir          | `Phoenix` · `Plug` · `Bandit`                                        |
 
+---
+
+### 1.4 Service Units Sub Tab
+
+#### Adding / Editing a Service Unit
+
+| Field             | Input                                                                                                         |
+|-------------------|---------------------------------------------------------------------------------------------------------------|
+| Name              | Free text identifier (e.g., `auth-service`, `billing-module`)                                                 |
+| Responsibility    | Free text description of what this unit owns                                                                   |
+| Stack Config      | *(non-monolith)* Select from defined Stack Configs — overrides inline language/framework when set             |
+| Technologies      | Multi-select: `WebSocket` · `gRPC` · `REST` · `GraphQL` · `SSE` · `tRPC` · `MQTT` · `Kafka consumer`         |
+| Pattern Tag       | *(Hybrid only)* `Monolith part` · `Modular module` · `Microservice` · `Event processor` · `Serverless function` |
+| Health Deps       | *(non-monolith)* Multi-select from defined databases                                                          |
+| Error Format      | Dynamically filtered by selected technologies — see table below                                               |
+| Service Discovery | Dynamically filtered by orchestrator — see table below                                                        |
+| Environment       | *(non-monolith)* Select from environments defined in **Infrastructure → Environments**                        |
+
 Error format options per selected technology:
 
 | Technology  | Error Formats                                              |
@@ -116,9 +112,55 @@ Error format options per selected technology:
 | WebSocket   | `Custom JSON envelope`                                    |
 | SSE         | `Custom JSON envelope`                                    |
 | tRPC        | `tRPC error format`                                       |
-| *(default)* | `RFC 7807 (Problem Details)` · `Custom JSON envelope` · `Platform default` |
+| *(default)* | `Platform default` *(always appended last)*               |
 
 > Options from each active technology are unioned; `Platform default` is always appended last.
+
+Service discovery options per orchestrator:
+
+| Orchestrator         | Service Discovery Options                      |
+|----------------------|------------------------------------------------|
+| K3s / K8s (managed)  | `Kubernetes DNS` · `Consul` · `Static config`  |
+| Docker Compose       | `DNS-based` · `Static config`                  |
+| ECS                  | `DNS-based (Cloud Map)` · `Consul`             |
+| Nomad                | `Consul` · `DNS-based`                         |
+| Cloud Run            | `DNS-based`                                    |
+| None                 | `Static config` · `None`                       |
+
+#### Data Access (Repository) Drilling *(R key)*
+
+Each service can define repositories with CRUD operations.
+
+**Repository Fields:**
+
+| Field       | Options / Input                                                              |
+|-------------|------------------------------------------------------------------------------|
+| Name        | Free text identifier                                                         |
+| Entity Ref  | Select from domains linked to the repository's target database               |
+| Fields      | Multi-select from domain attributes of selected entity                       |
+| Target DB   | Select from defined databases                                                |
+
+**Repository Operations** *(repeatable within each repository)*
+
+| Field       | Options / Input                                                              |
+|-------------|------------------------------------------------------------------------------|
+| Name        | Free text identifier                                                         |
+| Op Type     | Database-technology-aware — see table below                                  |
+| Filter By   | Multi-select from selected repository fields                                 |
+| Sort By     | Select from selected repository fields (or `(none)`)                         |
+| Result Shape| `Single item` · `List` · `Count` · `Boolean` · `Void`                       |
+| Pagination  | `None` · `Offset/Limit` · `Cursor-based` · `Page-based`                     |
+| Query Hint  | Free text (optional optimization hint)                                       |
+| Description | Free text                                                                    |
+
+Operation types per database technology:
+
+| Database Technology          | Op Types                                                                                     |
+|------------------------------|----------------------------------------------------------------------------------------------|
+| PostgreSQL / MySQL / SQLite  | `read-one` · `read-all` · `read-page` · `create` · `update` · `delete` · `count` · `exists` · `aggregate` · `raw-query` |
+| MongoDB                      | `find-one` · `find-many` · `find-page` · `insert-one` · `insert-many` · `update-one` · `update-many` · `delete-one` · `delete-many` · `count` · `aggregate` |
+| DynamoDB                     | `get-item` · `query` · `scan` · `put-item` · `update-item` · `delete-item` · `batch-get` · `batch-write` · `count` |
+| Redis / Other                | `read` · `read-all` · `create` · `update` · `delete` · `count` · `aggregate`                |
 
 ---
 
@@ -128,8 +170,8 @@ Error format options per selected technology:
 
 | Field         | Input                                                                                                    |
 |---------------|----------------------------------------------------------------------------------------------------------|
-| From          | Free text (or select a service unit name)                                                                |
-| To            | Free text (or select a service unit name)                                                                |
+| From          | Select from defined service unit names                                                                   |
+| To            | Select from defined service unit names                                                                   |
 | Direction     | `Unidirectional (→)` · `Bidirectional (↔)` · `Pub/Sub (fan-out)`                                        |
 | Protocol      | `REST (HTTP)` · `gRPC` · `GraphQL` · `WebSocket` · `Message Queue` · `Event Bus` · `Internal (in-process)` |
 | Trigger / Flow | Free text description of **when** this communication happens                                            |
@@ -259,18 +301,26 @@ Job queue technology options per backend language:
 | WAF Ruleset         | `OWASP Core Rule Set` · `Managed rules` · `Custom` · `None`                                     |
 | CAPTCHA             | `hCaptcha` · `reCAPTCHA v2` · `reCAPTCHA v3` · `Cloudflare Turnstile` · `None`                 |
 | Bot Protection      | `Cloudflare Bot Management` · `Imperva` · `DataDome` · `Custom` · `None`                        |
-| Rate Limit Strategy | `Token bucket (Redis)` · `Sliding window` · `Fixed window` · `Leaky bucket` · `API Gateway` · `None` |
-| Rate Limit Backend  | `Redis` · `Memcached` · `In-memory` · `None`                                                    |
+| Rate Limit Strategy | Architecture-aware — see table below                                                            |
+| Rate Limit Backend  | Select from cache database aliases + `In-memory` + `None`                                       |
 | DDoS Protection     | `CDN-level (Cloudflare)` · `Provider-managed` · `None`                                          |
 | Internal mTLS       | `Enabled` · `Disabled` — mutual TLS for internal service-to-service communication               |
 
-> **Rate Limit Backend** and **Rate Limit Strategy** are hidden when strategy is `None` or `API Gateway`.  
-> **Internal mTLS** is hidden when Rate Limit Strategy is `None` or `API Gateway`.
+> **Rate Limit Backend** is hidden when strategy is `None` or `API Gateway`.
+> **Internal mTLS** is hidden when architecture is Monolith.
+
+Rate limit strategy options per architecture:
+
+| Architecture                          | Rate Limit Strategies                                                               |
+|---------------------------------------|-------------------------------------------------------------------------------------|
+| Monolith                              | `Token bucket (in-memory)` · `Token bucket (Redis)` · `Sliding window` · `Fixed window` · `Leaky bucket` · `None` |
+| Microservices / Event-Driven / Hybrid | `Token bucket (Redis)` · `Sliding window` · `Fixed window` · `Leaky bucket` · `API Gateway` · `None` |
 
 WAF provider options by cloud provider:
 
 | Cloud Provider | WAF Options                                                      |
 |----------------|------------------------------------------------------------------|
+| AWS            | `AWS WAF` · `Cloudflare WAF` · `ModSecurity` · `NGINX ModSec` · `None` |
 | GCP            | `Cloud Armor` · `Cloudflare WAF` · `ModSecurity` · `NGINX ModSec` · `None` |
 | Azure          | `Azure WAF` · `Cloudflare WAF` · `ModSecurity` · `NGINX ModSec` · `None`   |
 | *(default)*    | `Cloudflare WAF` · `AWS WAF` · `Cloud Armor` · `Azure WAF` · `ModSecurity` · `NGINX ModSec` · `None` |
@@ -285,15 +335,28 @@ WAF provider options by cloud provider:
 | Identity Provider      | `Self-managed` · `Auth0` · `Clerk` · `Supabase Auth` · `Firebase Auth` · `Keycloak` · `AWS Cognito` · `Other` |
 | Service Unit           | *(Self-managed or Keycloak only)* Select from defined service units — which service handles auth |
 | Authorization Model    | `RBAC` · `ABAC` · `ACL` · `ReBAC` · `Policy-based (OPA/Cedar)` · `Custom`                    |
-| Token Storage (client) | Multi-select (filtered by selected strategies): `HttpOnly cookie` · `Authorization header (Bearer)` · `WebSocket protocol header` · `Other` |
+| Token Storage (client) | Multi-select (filtered by selected strategies): `HttpOnly cookie` · `Authorization header (Bearer)` · `Other` |
 | Session Mgmt           | *(Session-based strategy only)* `Stateless (JWT only)` · `Server-side sessions (Redis)` · `Database sessions` · `None` |
 | Refresh Token          | `None` · `Rotating` · `Non-rotating` · `Sliding window`                                       |
-| MFA Support            | `None` · `TOTP` · `SMS` · `Email` · `Passkeys/WebAuthn`                                       |
+| MFA Support            | Provider-filtered — see table below                                                            |
 
-> **Token Storage** options are derived from the active strategies:  
-> - `JWT (stateless)` → HttpOnly cookie · Bearer header · Other  
-> - `Session-based` → HttpOnly cookie  
+> **Token Storage** is hidden when no token-bearing strategy is selected (i.e. only API Keys, mTLS, or None active).
+> **Session Mgmt** is hidden when Session-based strategy is not selected.
+> **Token Storage** options are derived from the active strategies:
+> - `JWT (stateless)` → HttpOnly cookie · Bearer header · Other
+> - `Session-based` → HttpOnly cookie
 > - `OAuth 2.0 / OIDC` → HttpOnly cookie · Bearer header
+
+MFA options per identity provider:
+
+| Provider           | MFA Options                                              |
+|--------------------|----------------------------------------------------------|
+| Self-managed       | `None` · `TOTP` · `Email`                               |
+| Auth0 / Clerk / Firebase | `None` · `TOTP` · `SMS` · `Email` · `Passkeys/WebAuthn` |
+| Keycloak           | `None` · `TOTP` · `WebAuthn`                             |
+| Supabase Auth      | `None` · `TOTP` · `Phone (Twilio)`                      |
+| AWS Cognito        | `None` · `TOTP` · `SMS` · `Email`                       |
+| *(default)*        | `None` · `TOTP` · `SMS` · `Email` · `Passkeys/WebAuthn` |
 
 **Permissions** *(repeatable — define named permission strings before defining roles)*
 
@@ -333,6 +396,7 @@ WAF provider options by cloud provider:
 | Replication | *(not available for Redis/Memcached/SQLite)* `single-node` · `primary-replica` · `multi-region`                       |
 | Pool Min    | *(not available for Redis/Memcached)* Free text integer — minimum connection pool size                                  |
 | Pool Max    | *(not available for Redis/Memcached)* Free text integer — maximum connection pool size                                  |
+| Environment | Select from environments defined in **Infrastructure → Environments**                                                  |
 | Notes       | Free text                                                                                                              |
 
 ---
@@ -348,20 +412,36 @@ WAF provider options by cloud provider:
 | Name        | e.g., `User`, `Order`, `Product`, `Message`                        |
 | Description | What this domain represents in the business context                |
 | Databases   | Multi-select from databases created in §2.1                        |
-| Attr Names  | Comma-separated attribute names for batch creation                 |
 
 #### Domain Attributes *(repeatable)*
 
 | Field       | Options / Input                                                                                               |
 |-------------|---------------------------------------------------------------------------------------------------------------|
 | Name        | e.g., `id`, `email`, `created_at`                                                                             |
-| Type        | `String` · `Int` · `Float` · `Boolean` · `DateTime` · `UUID` · `Enum(values)` · `JSON/Map` · `Binary` · `Array(type)` · `Ref(Domain)` |
+| Type        | Database-specific — see table below                                                                           |
 | Constraints | Multi-select: `required` · `unique` · `not_null` · `min` · `max` · `min_length` · `max_length` · `email` · `url` · `regex` · `positive` · `future` · `past` · `enum` |
 | Default     | *(optional)* Default value or generation strategy                                                             |
 | Sensitive   | `false` · `true` — marks field for encryption/masking/audit                                                   |
 | Validation  | Multi-select: `email` · `url` · `regex` · `min_length` · `max_length` · `min_value` · `max_value` · `phone` · `uuid` · `date_format` · `enum` · `custom` |
 | Indexed     | `false` · `true`                                                                                              |
 | Unique      | `false` · `true`                                                                                              |
+
+Attribute type options per database type:
+
+| Database     | Type Options                                                                             |
+|--------------|------------------------------------------------------------------------------------------|
+| PostgreSQL   | `varchar` · `text` · `char` · `int` · `bigint` · `smallint` · `serial` · `bigserial` · `boolean` · `float` · `double precision` · `decimal` · `numeric` · `uuid` · `timestamp` · `timestamptz` · `date` · `time` · `interval` · `json` · `jsonb` · `bytea` · `enum` · `array` · `inet` · `tsvector` · `xml` |
+| MySQL        | `varchar` · `text` · `char` · `tinytext` · `mediumtext` · `longtext` · `int` · `bigint` · `smallint` · `tinyint` · `mediumint` · `float` · `double` · `decimal` · `boolean` · `date` · `datetime` · `timestamp` · `time` · `year` · `json` · `binary` · `varbinary` · `blob` · `enum` · `set` |
+| SQLite       | `TEXT` · `INTEGER` · `REAL` · `NUMERIC` · `BLOB` · `NULL`                                |
+| MongoDB      | `String` · `Int32` · `Int64` · `Double` · `Decimal128` · `Boolean` · `Date` · `ObjectId` · `UUID` · `Array` · `Object` · `Binary` · `Null` · `Timestamp` · `Mixed` |
+| DynamoDB     | `String (S)` · `Number (N)` · `Binary (B)` · `StringSet (SS)` · `NumberSet (NS)` · `BinarySet (BS)` · `List (L)` · `Map (M)` · `Boolean (BOOL)` · `Null (NULL)` |
+| Cassandra    | `text` · `varchar` · `ascii` · `int` · `bigint` · `smallint` · `tinyint` · `varint` · `float` · `double` · `decimal` · `boolean` · `date` · `timestamp` · `time` · `uuid` · `timeuuid` · `blob` · `list` · `set` · `map` · `tuple` · `frozen` |
+| Redis / Memcached | `String` · `List` · `Set` · `Sorted Set` · `Hash` · `Stream`                      |
+| ClickHouse   | `UInt8` · `UInt16` · `UInt32` · `UInt64` · `Int8` · `Int16` · `Int32` · `Int64` · `Float32` · `Float64` · `Decimal` · `String` · `FixedString` · `Date` · `DateTime` · `UUID` · `Array` · `Tuple` · `Nullable` · `Enum` · `LowCardinality` |
+| Elasticsearch| `text` · `keyword` · `long` · `integer` · `short` · `byte` · `double` · `float` · `boolean` · `date` · `binary` · `ip` · `object` · `nested` · `geo_point` |
+| *(default)*  | `String` · `Int` · `Float` · `Boolean` · `DateTime` · `UUID` · `JSON` · `Binary` · `Array` · `Enum` · `Ref` |
+
+> When a domain is linked to multiple databases, type options are merged (union of all selected database types).
 
 #### Domain Relationships *(repeatable)*
 
@@ -382,10 +462,18 @@ WAF provider options by cloud provider:
 | Name          | Free text identifier for this caching configuration (e.g., `user-cache`, `session-cache`) |
 | Caching Layer | `Application-level` · `Dedicated cache` · `CDN` · `None`                    |
 | Cache DB      | *(only when Layer = `Dedicated cache`)* Select from databases with `Is Cache = yes` |
-| Strategy      | Multi-select: `Cache-aside` · `Read-through` · `Write-through` · `Write-behind` · `CDN purge` |
+| Strategy      | Multi-select (layer-dependent) — see table below                             |
 | Invalidation  | `TTL-based` · `Event-driven` · `Manual` · `Hybrid`                           |
 | TTL           | `30s` · `1m` · `5m` · `15m` · `1h` · `24h` · `Custom`                       |
-| Entities      | Multi-select from domains (populated dynamically)                            |
+| Entities      | Multi-select from domains + DTOs (prefixed with `dto:`)                      |
+
+Strategy options per caching layer:
+
+| Caching Layer                      | Strategy Options                                                       |
+|------------------------------------|------------------------------------------------------------------------|
+| CDN                                | `Cache-aside` · `Read-through` · `CDN purge`                          |
+| Application-level / Dedicated cache| `Cache-aside` · `Read-through` · `Write-through` · `Write-behind`     |
+| *(default)*                        | All 5 options                                                          |
 
 ---
 
@@ -395,14 +483,27 @@ WAF provider options by cloud provider:
 
 | Field         | Options / Input                                                                           |
 |---------------|-------------------------------------------------------------------------------------------|
-| Technology    | `S3` · `GCS` · `Azure Blob` · `MinIO` · `Cloudflare R2` · `Local disk`                   |
-| Environment   | Select from environments defined in **Infrastructure → Environments**                     |
+| Technology    | Cloud-provider-aware — see table below                                                    |
 | Purpose       | Free text (e.g., "User avatars", "Document uploads", "Backups")                           |
+| Used By Service | Select from defined service units (or `(any / unspecified)`)                            |
+| Environment   | Select from environments defined in **Infrastructure → Environments**                     |
 | Access        | `Public (CDN-fronted)` · `Private (signed URLs)` · `Internal only`                        |
 | Max Size      | `1 MB` · `5 MB` · `10 MB` · `25 MB` · `50 MB` · `100 MB` · `500 MB` · `1 GB` · `Unlimited` |
 | Domains       | Multi-select from domains (which domains store files here)                                |
 | TTL Minutes   | `30` · `60` · `1440` · `10080` · `Custom` (for signed URL expiry)                        |
 | Allowed Types | Multi-select: `image/*` · `application/pdf` · `video/*` · `audio/*` · `text/*` · `application/json` |
+
+Technology options by cloud provider:
+
+| Cloud Provider | Technologies                                      |
+|----------------|---------------------------------------------------|
+| AWS            | `S3` · `MinIO` · `Local disk`                     |
+| GCP            | `GCS` · `MinIO` · `Local disk`                    |
+| Azure          | `Azure Blob` · `MinIO` · `Local disk`             |
+| Cloudflare     | `Cloudflare R2` · `S3` · `Local disk`             |
+| Hetzner        | `MinIO` · `S3` · `Local disk`                     |
+| Self-hosted    | `MinIO` · `Local disk`                             |
+| *(default)*    | `S3` · `GCS` · `Azure Blob` · `MinIO` · `Cloudflare R2` · `Local disk` |
 
 ---
 
@@ -413,16 +514,68 @@ WAF provider options by cloud provider:
 | Field               | Options / Input                                                                               |
 |---------------------|-----------------------------------------------------------------------------------------------|
 | Name                | Free text identifier (e.g., `primary-policy`, `audit-retention`)                             |
-| Applies To          | Multi-select from defined databases                                                           |
-| Migration Tool      | Dynamically filtered by backend language — see table below                                    |
-| Backup Strategy     | `Automated daily` · `Point-in-time recovery` · `Manual snapshots` · `Managed provider` · `None` |
-| Search Tech         | `Elasticsearch` · `Meilisearch` · `Algolia` · `Typesense` · `None`                           |
-| Retention Policy    | `30 days` · `90 days` · `1 year` · `3 years` · `7 years` · `Indefinite` · `Custom`           |
-| Delete Strategy     | `Soft-delete` · `Hard-delete` · `Archival` · `Soft + periodic purge`                          |
+| Databases           | Multi-select from defined databases                                                           |
+| Retention Policy    | Category-dependent — see table below                                                         |
+| Delete Strategy     | Category-dependent — see table below                                                         |
 | PII Encryption      | `Field-level AES-256` · `Full database encryption` · `Application-level` · `None`             |
 | Compliance          | Multi-select: `GDPR` · `HIPAA` · `SOC2 Type II` · `PCI-DSS` · `ISO-27001` · `CCPA` · `PIPEDA` |
 | Data Residency      | `US` · `EU` · `APAC` · `US + EU` · `Global` · `Custom`                                       |
-| Archival Storage    | Cloud-provider-aware — `S3 Glacier` (AWS) · `GCS Archive` (GCP) · `Azure Archive` (Azure) · `On-premise` · `None` |
+| Archival Storage    | Cloud-provider-aware — see table below                                                       |
+| Migration Tool      | Dynamically filtered by backend language — see table below                                   |
+| Backup Strategy     | Category & provider-dependent — see table below                                              |
+| Search Tech         | Database-type-dependent — see table below                                                    |
+
+> **Migration Tool** is disabled (N/A) when selected databases are all cache or all analytics.
+> **Archival Storage** is disabled when selected databases are all cache.
+> **Compliance Auto-upgrade:** Selecting HIPAA, GDPR, or PCI-DSS automatically upgrades PII Encryption from `None` to `Field-level AES-256`.
+
+Database categories determine option filtering: **Cache** (Redis, Memcached, or IsCache=yes), **Relational** (PostgreSQL, MySQL, SQLite), **Document** (MongoDB, DynamoDB), **Analytics** (ClickHouse, Elasticsearch), **Wide-column** (Cassandra).
+
+Retention policy options by category:
+
+| Category                            | Options                                                     |
+|-------------------------------------|-------------------------------------------------------------|
+| Cache                               | `1 hour` · `24 hours` · `7 days` · `30 days` · `Custom`    |
+| Analytics                           | `7 days` · `30 days` · `90 days` · `1 year` · `3 years` · `Indefinite` · `Custom` |
+| Relational / Document / Wide-column | `30 days` · `90 days` · `1 year` · `3 years` · `7 years` · `Indefinite` · `Custom` |
+
+Delete strategy options by category:
+
+| Category  | Options                                                        |
+|-----------|----------------------------------------------------------------|
+| Cache     | `TTL expiry` · `Manual flush` · `LRU eviction`                |
+| Analytics | `Time-based drop` · `Compaction` · `Archival` · `Manual purge`|
+| Other     | `Soft-delete` · `Hard-delete` · `Archival` · `Soft + periodic purge` |
+
+Backup strategy options by category & cloud provider:
+
+| Context         | Options                                                                        |
+|-----------------|--------------------------------------------------------------------------------|
+| Cache           | `RDB snapshot` · `AOF persistence` · `None`                                   |
+| AWS (non-cache) | `AWS Backup` · `RDS automated snapshots` · `Manual snapshots` · `None`        |
+| GCP (non-cache) | `Cloud SQL backups` · `Manual snapshots` · `None`                              |
+| Self-hosted     | `pg_dump/mongodump cron` · `Manual snapshots` · `None`                         |
+| *(default)*     | `Automated daily` · `Point-in-time recovery` · `Manual snapshots` · `Managed provider DR` · `None` |
+
+Archival storage options by cloud provider:
+
+| Cloud Provider | Options                                                    |
+|----------------|------------------------------------------------------------|
+| AWS            | `S3 Glacier` · `S3 Glacier Deep Archive` · `None`         |
+| GCP            | `GCS Archive` · `GCS Coldline` · `None`                   |
+| Azure          | `Azure Archive` · `Azure Cool` · `None`                   |
+| Self-hosted    | `On-premise` · `None`                                      |
+| *(default)*    | `S3 Glacier` · `GCS Archive` · `Azure Archive` · `On-premise` · `None` |
+
+Search technology options by database type:
+
+| Database       | Options                                                              |
+|----------------|----------------------------------------------------------------------|
+| PostgreSQL     | `PostgreSQL FTS` · `Elasticsearch` · `Meilisearch` · `Typesense` · `Algolia` |
+| MySQL          | `Elasticsearch` · `Meilisearch` · `Typesense` · `Algolia`           |
+| MongoDB        | `MongoDB Atlas Search` · `Elasticsearch` · `Meilisearch` · `Algolia`|
+| Elasticsearch  | `Elasticsearch`                                                      |
+| *(default)*    | `Elasticsearch` · `Meilisearch` · `Algolia` · `Typesense` · `None`  |
 
 Migration tool options per backend language:
 
@@ -438,7 +591,7 @@ Migration tool options per backend language:
 | PHP             | `Doctrine Migrations` · `Phinx` · `Laravel Migrations` · `None`                               |
 | Rust            | `SQLx Migrations` · `Diesel Migrations` · `refinery` · `None`                                 |
 | Elixir          | `Ecto Migrations` · `None`                                                                    |
-| *(no language)* | `golang-migrate` · `Atlas` · `Flyway` · `Liquibase` · `Prisma Migrate` · `Alembic` · `None`  |
+| *(no language)* | `Flyway` · `Liquibase` · `Atlas` · `golang-migrate` · `Alembic` · `Prisma Migrate` · `None`  |
 
 ---
 
@@ -453,16 +606,16 @@ Migration tool options per backend language:
 | Name             | e.g., `CreateUserRequest`, `OrderSummaryResponse`, `UserRegisteredEvent`                  |
 | Category         | `Request` · `Response` · `Event Payload` · `Shared/Common`                                |
 | Source Domain(s) | Multi-select from **Data → Domains**                                                      |
-| Protocol         | `REST/JSON` · `Protobuf` · `Avro` · `MessagePack` · `Thrift` · `FlatBuffers` · `Cap'n Proto` |
 | Description      | What this DTO represents and when it's used                                               |
+| Protocol         | `REST/JSON` · `Protobuf` · `Avro` · `MessagePack` · `Thrift` · `FlatBuffers` · `Cap'n Proto` |
 
 Protocol-specific DTO fields:
 
 | Protocol     | Extra Fields                                                                             |
 |--------------|------------------------------------------------------------------------------------------|
-| Protobuf     | Package name · Syntax (`proto2` / `proto3`) · Options (free text)                        |
+| Protobuf     | Package name · Syntax (`proto3` / `proto2`) · Options (free text)                        |
 | Avro         | Namespace · Schema Registry (free text)                                                  |
-| Thrift       | Namespace · Target Language                                                              |
+| Thrift       | Namespace · Target Language (`go`/`java`/`python`/`cpp`/`js`/`php`/`ruby`)              |
 | FlatBuffers  | Namespace                                                                                |
 | Cap'n Proto  | Namespace                                                                                |
 
@@ -471,18 +624,30 @@ Protocol-specific DTO fields:
 | Field          | Options / Input                                                                                                       |
 |----------------|-----------------------------------------------------------------------------------------------------------------------|
 | Name           | e.g., `email`, `order_items`, `total`                                                                                 |
-| Type           | `string` · `int` · `float` · `boolean` · `datetime` · `uuid` · `enum(values)` · `array(type)` · `nested(DTO)` · `map(key,value)` |
-| Required       | `false` · `true`                                                                                                      |
-| Nullable       | `false` · `true`                                                                                                      |
-| Validation     | Multi-select: `required` · `min_length` · `max_length` · `min_value` · `max_value` · `email` · `url` · `regex` · `uuid` · `enum` · `phone` · `pattern` · `custom` |
-| Default        | *(optional)* Default value expression                                                                                 |
-| Notes          | *(optional)* Mapping notes, transformation hints                                                                      |
+| Type           | Protocol-dependent — see table below                                                                                  |
+| Required       | *(REST/JSON, MessagePack, Avro)* `false` · `true`                                                                     |
+| Nullable       | *(REST/JSON, MessagePack, Avro)* `false` · `true`                                                                     |
+| Validation     | *(REST/JSON, MessagePack)* Multi-select: `required` · `min_length` · `max_length` · `min_value` · `max_value` · `email` · `url` · `regex` · `uuid` · `enum` · `phone` · `pattern` · `custom` |
+| Default        | *(all except Protobuf)* Default value expression                                                                      |
+| Notes          | Free text — mapping notes, transformation hints                                                                       |
 | Field Number   | *(Protobuf only)* Integer field number                                                                               |
-| Proto Modifier | *(Protobuf only)* `optional` · `required` · `repeated`                                                               |
+| Proto Modifier | *(Protobuf only)* `optional` · `repeated` · `oneof`                                                                  |
 | JSON Name      | *(Protobuf only)* JSON field name override                                                                            |
 | Field ID       | *(Thrift / Cap'n Proto only)* Integer field ID                                                                       |
-| Thrift Modifier| *(Thrift only)* `optional` · `required`                                                                              |
+| Thrift Modifier| *(Thrift only)* `required` · `optional` · `default`                                                                  |
 | Deprecated     | *(FlatBuffers only)* `false` · `true`                                                                                 |
+
+DTO field type options per protocol:
+
+| Protocol    | Types                                                                                           |
+|-------------|-------------------------------------------------------------------------------------------------|
+| REST/JSON   | `string` · `int` · `float` · `boolean` · `datetime` · `uuid` · `enum(values)` · `array(type)` · `nested(DTO)` · `map(key,value)` |
+| Protobuf    | `string` · `bool` · `bytes` · `int32` · `int64` · `uint32` · `uint64` · `sint32` · `sint64` · `fixed32` · `fixed64` · `sfixed32` · `sfixed64` · `float` · `double` · `enum` · `message` · `repeated` · `map` · `oneof` · `google.Any` · `google.Timestamp` · `google.Duration` |
+| Avro        | `null` · `boolean` · `int` · `long` · `float` · `double` · `bytes` · `string` · `record` · `enum` · `array` · `map` · `union` · `fixed` |
+| MessagePack | `string` · `int` · `float` · `bool` · `binary` · `array` · `map` · `nil` · `timestamp` · `ext` |
+| Thrift      | `bool` · `byte` · `i16` · `i32` · `i64` · `double` · `string` · `binary` · `list` · `set` · `map` · `enum` · `struct` · `void` |
+| FlatBuffers | `bool` · `int8` · `int16` · `int32` · `int64` · `uint8` · `uint16` · `uint32` · `uint64` · `float32` · `float64` · `string` · `[type]` · `struct` · `table` · `enum` · `union` |
+| Cap'n Proto | `Bool` · `Int8` · `Int16` · `Int32` · `Int64` · `UInt8` · `UInt16` · `UInt32` · `UInt64` · `Float32` · `Float64` · `Text` · `Data` · `List` · `Struct` · `Enum` · `Union` · `AnyPointer` |
 
 ---
 
@@ -496,14 +661,14 @@ Protocol-specific DTO fields:
 | Name / Path     | e.g., `POST /api/v1/users`, `getUser`, `UserService.Create`                 |
 | Protocol        | `REST` · `GraphQL` · `gRPC` · `WebSocket message` · `Event` *(filtered by service technologies)* |
 | Auth Required   | `false` · `true`                                                            |
-| Auth Roles      | Multi-select from roles defined in **Backend → Auth**                       |
-| Request DTO     | Select from DTOs tab                                                        |
-| Response DTO    | Select from DTOs tab                                                        |
+| Auth Roles      | *(only when auth_required = true)* Multi-select from roles defined in **Backend → Auth** |
+| Request DTO     | Select from DTOs (protocol-filtered)                                        |
+| Response DTO    | Select from DTOs (protocol-filtered)                                        |
 | HTTP Method     | *(REST only)* `GET` · `POST` · `PUT` · `PATCH` · `DELETE`                   |
 | Operation Type  | *(GraphQL only)* `Query` · `Mutation` · `Subscription`                      |
 | Stream Type     | *(gRPC only)* `Unary` · `Server stream` · `Client stream` · `Bidirectional` |
 | WS Direction    | *(WebSocket only)* `Client→Server` · `Server→Client` · `Bidirectional`      |
-| Pagination      | `Cursor-based` · `Offset/limit` · `Keyset` · `Page number` · `None`         |
+| Pagination      | *(hidden for WebSocket, gRPC, Event)* `Cursor-based` · `Offset/limit` · `Keyset` · `Page number` · `None` |
 | Rate Limit      | `Default (global)` · `Strict` · `Relaxed` · `None`                          |
 | Description     | What this endpoint does                                                     |
 
@@ -511,18 +676,15 @@ Protocol-specific DTO fields:
 
 ### 3.3 API Versioning Sub Tab
 
-> Versioning strategy is now **per protocol** — each active endpoint protocol can have its own versioning approach.
+> Versioning strategy is **per protocol** — only protocols with at least one defined endpoint are shown.
 
 | Field               | Options / Input                                                                |
 |---------------------|--------------------------------------------------------------------------------|
-| REST Strategy       | `URL path (/v1/)` · `Header (Accept-Version)` · `Query param` · `None`         |
-| GraphQL Strategy    | `Schema versioning` · `Field deprecation` · `None`                             |
-| gRPC Strategy       | `Package versioning` · `None`                                                  |
-| WebSocket Strategy  | `URL path (/v1/)` · `Header` · `None`                                          |
-| Event Strategy      | `Topic versioning` · `Schema registry versioning` · `None`                     |
+| REST Strategy       | *(if REST endpoints exist)* `URL path (/v1/)` · `Header (Accept-Version)` · `Query param` · `None` |
+| GraphQL Strategy    | *(if GraphQL endpoints exist)* `Schema evolution` · `None`                     |
+| gRPC Strategy       | *(if gRPC endpoints exist)* `Package versioning` · `None`                      |
 | Current Version     | Free text (e.g., `v1`)                                                         |
 | Deprecation Policy  | `None` · `Sunset header` · `Versioned removal notice` · `Changelog entry` · `Custom` |
-| Pagination Strategy | `Cursor-based` · `Offset/limit` · `Keyset` · `Page number` · `None`            |
 
 ---
 
@@ -533,60 +695,87 @@ Protocol-specific DTO fields:
 | Field            | Options / Input                                                                               |
 |------------------|-----------------------------------------------------------------------------------------------|
 | Provider         | Free text (e.g., `Stripe`, `SendGrid`, `Twilio`)                                              |
+| Called By Service| Select from defined service units (or `(any / unspecified)`)                                  |
 | Responsibility   | Free text — what this integration does                                                        |
 | Protocol         | `REST` · `GraphQL` · `gRPC` · `WebSocket` · `Webhook` · `SOAP`                               |
-| Auth Mechanism   | `API Key` · `OAuth2 Client Credentials` · `OAuth2 PKCE` · `Bearer Token` · `Basic Auth` · `mTLS` · `None` |
-| Failure Strategy | `Circuit Breaker` · `Retry with backoff` · `Fallback value` · `Timeout + fail` · `None`       |
-| Base URL         | *(REST / general HTTP)* Free text                                                             |
-| Rate Limit       | *(REST)* Free text (e.g., `100 req/min`)                                                      |
-| Webhook Path     | *(REST / Webhook)* Free text (your inbound webhook endpoint)                                  |
-| TLS Mode         | *(gRPC)* `Insecure` · `TLS` · `mTLS`                                                         |
-| WS Subprotocol   | *(WebSocket)* Free text                                                                       |
-| Message Format   | *(WebSocket)* Free text                                                                       |
-| HMAC Header      | *(Webhook)* Free text — header containing the HMAC signature                                  |
-| Retry Policy     | *(Webhook)* `Exponential backoff` · `Fixed interval` · `None`                                 |
-| SOAP Version     | *(SOAP)* `1.1` · `1.2`                                                                        |
+| Auth Mechanism   | Protocol-dependent — see table below                                                          |
+| Failure Strategy | Protocol-dependent — see table below                                                          |
+| Base URL         | *(hidden for Webhook)* Free text                                                              |
+| Rate Limit       | *(REST, GraphQL only)* Free text (e.g., `100 req/min`)                                        |
+| Webhook Path     | *(REST, Webhook only)* Free text (your inbound webhook endpoint)                              |
+| TLS Mode         | *(gRPC only)* `TLS` · `mTLS` · `Insecure`                                                    |
+| WS Subprotocol   | *(WebSocket only)* Free text                                                                  |
+| Message Format   | *(WebSocket only)* `JSON` · `MessagePack` · `Binary` · `Text`                                |
+| HMAC Header      | *(Webhook only)* Free text — header containing the HMAC signature (default: `X-Hub-Signature-256`) |
+| Retry Policy     | *(Webhook only)* `Retry 3x` · `Retry 5x` · `Immediate fail` · `None`                        |
+| SOAP Version     | *(SOAP only)* `1.1` · `1.2`                                                                   |
+
+Auth mechanism options by protocol:
+
+| Protocol  | Auth Mechanisms                                                                    |
+|-----------|------------------------------------------------------------------------------------|
+| REST      | `API Key` · `OAuth2 Client Credentials` · `OAuth2 PKCE` · `Bearer Token` · `Basic Auth` · `mTLS` · `None` |
+| GraphQL   | `API Key` · `OAuth2 Client Credentials` · `OAuth2 PKCE` · `Bearer Token` · `Basic Auth` · `mTLS` · `None` |
+| gRPC      | `mTLS` · `API Key` · `Bearer Token` · `None`                                      |
+| WebSocket | `Bearer Token` · `API Key` · `None`                                                |
+| Webhook   | `HMAC signature` · `API Key` · `None`                                              |
+| SOAP      | `API Key` · `OAuth2 Client Credentials` · `Bearer Token` · `Basic Auth` · `mTLS` · `None` |
+
+Failure strategy options by protocol:
+
+| Protocol  | Failure Strategies                                                                 |
+|-----------|------------------------------------------------------------------------------------|
+| REST      | `Circuit Breaker` · `Retry with backoff` · `Fallback value` · `Timeout + fail` · `None` |
+| GraphQL   | `Circuit Breaker` · `Retry with backoff` · `Fallback value` · `Timeout + fail` · `None` |
+| gRPC      | `Circuit Breaker` · `Retry with backoff` · `Timeout + fail` · `None`              |
+| WebSocket | `Reconnect with backoff` · `Fallback value` · `None`                               |
+| Webhook   | `Retry with backoff` · `DLQ` · `None`                                              |
+| SOAP      | `Circuit Breaker` · `Retry with backoff` · `Timeout + fail` · `None`              |
 
 **Interactions** *(repeatable within each External API — one entry per API call/operation)*
 
 | Field          | Input                                                                 |
 |----------------|-----------------------------------------------------------------------|
 | Name           | Free text operation name                                              |
-| Path           | Free text (e.g., `/v1/charges`)                                       |
+| Path           | *(hidden for Webhook)* Free text (e.g., `/v1/charges`)                |
 | Request DTO    | Select from DTOs filtered by protocol                                 |
 | Response DTO   | Select from DTOs filtered by protocol                                 |
 | HTTP Method    | *(REST)* `GET` · `POST` · `PUT` · `PATCH` · `DELETE`                 |
 | GQL Operation  | *(GraphQL)* `Query` · `Mutation` · `Subscription`                    |
-| Stream Type    | *(gRPC)* `Unary` · `Server stream` · `Client stream` · `Bidirectional` |
-| WS Direction   | *(WebSocket)* `Client→Server` · `Server→Client` · `Bidirectional`   |
+| Stream Type    | *(gRPC)* `Unary` · `Server streaming` · `Client streaming` · `Bidirectional` |
+| WS Direction   | *(WebSocket)* `Send` · `Receive` · `Bidirectional`                   |
 
 ---
 
 ## 4 · Frontend Tab
+
+> Sub-tabs: **TECHNOLOGIES** · **THEMING** · **PAGES** · **COMPONENTS** · **NAVIGATION** · **I18N** · **A11Y/SEO** · **ASSETS**
 
 ### 4.1 Technologies Sub Tab
 
 | Field            | Options                                                                                                         |
 |------------------|-----------------------------------------------------------------------------------------------------------------|
 | Language         | `TypeScript` · `JavaScript` · `Dart` · `Kotlin` · `Swift`                                                      |
+| Lang Version     | Dynamically filtered by language                                                                                |
 | Platform         | `Web (SPA)` · `Web (SSR/SSG)` · `Mobile (cross-platform)` · `Mobile (native)` · `Desktop`                      |
 | Framework        | *(filtered by language — see below)*                                                                            |
-| Meta-framework   | *(filtered by framework — see below)*                                                                           |
+| FW Version       | Dynamically filtered by language + language version + framework                                                 |
+| Meta-framework   | *(web only, filtered by framework — see below)*                                                                 |
 | Package Manager  | *(filtered by language)* `npm` · `yarn` · `pnpm` · `bun` *(TypeScript/JavaScript)* · `pub` *(Dart)* · `Gradle` *(Kotlin)* · `SwiftPM` *(Swift)* |
-| Styling          | *(filtered by language)* `Tailwind CSS` · `CSS Modules` · `Styled Components` · `Sass/SCSS` · `Vanilla CSS` · `UnoCSS` *(TypeScript/JavaScript only)* · `None` · `Custom` |
-| Component Lib    | *(filtered by framework — see below)*                                                                           |
+| Styling          | *(web only, filtered by language)* `Tailwind CSS` · `CSS Modules` · `Styled Components` · `Sass/SCSS` · `Vanilla CSS` · `UnoCSS` *(TypeScript/JavaScript only)* · `None` · `Custom` |
+| Component Lib    | *(web only, filtered by framework — see below)*                                                                 |
 | State Mgmt       | *(filtered by framework — see below)*                                                                           |
-| Data Fetching    | *(filtered by framework — see below)*                                                                           |
+| Data Fetching    | *(filtered by framework + backend protocols — see below)*                                                       |
 | Form Handling    | *(filtered by framework — see below)*                                                                           |
 | Validation       | *(filtered by language)* `Zod` · `Yup` · `Valibot` · `Joi` · `Class-validator` *(TypeScript)* · `Zod` · `Yup` · `Valibot` · `Joi` *(JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
-| PWA Support      | *(filtered by platform)* `None` · `Basic (manifest + service worker)` · `Full offline` · `Push notifications` *(Web only)* · `None` *(Mobile/Desktop)* |
-| Real-time        | `WebSocket` · `SSE` · `Polling` · `None`                                                                        |
-| Image Optim.     | *(filtered by platform)* `Next/Image (built-in)` · `Cloudinary` · `Imgix` · `Sharp (self-hosted)` · `CDN transform` · `None` *(Web only)* · `None` *(Mobile/Desktop)* |
+| PWA Support      | *(web only)* `None` · `Basic (manifest + service worker)` · `Full offline` · `Push notifications`              |
+| Real-time        | `WebSocket` · `SSE` · `Polling` · `None` *(auto-detected from backend protocols)*                              |
+| Image Optim.     | *(web only)* `Next/Image (built-in)` · `Cloudinary` · `Imgix` · `Sharp (self-hosted)` · `CDN transform` · `None` |
 | Auth Flow        | `Redirect (OAuth/OIDC)` · `Modal login` · `Magic link` · `Passwordless` · `Social only`                        |
 | Error Boundary   | *(filtered by framework — see below)*                                                                           |
-| Bundle Optim.    | *(filtered by language)* `Code splitting (route-based)` · `Dynamic imports` · `Tree shaking only` · `None` *(TypeScript/JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
-| FE Testing       | *(filtered by language)* `Vitest` · `Jest` · `Testing Library` · `Storybook` · `None` *(TypeScript/JavaScript)* · `None` *(Dart/Kotlin/Swift)* |
-| Linter           | *(filtered by language)* `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None` *(TypeScript/JavaScript)* · `Custom` · `None` *(Dart/Kotlin/Swift)* |
+| Bundle Optim.    | *(web only, filtered by language)* `Code splitting (route-based)` · `Dynamic imports` · `Tree shaking only` · `None` *(TypeScript/JavaScript)* |
+
+> Fields marked *(web only)* are hidden for Mobile and Desktop platforms.
 
 Framework options per language:
 
@@ -605,7 +794,9 @@ Meta-framework options per framework:
 | React     | `Next.js` · `Remix` · `Astro` · `None`  |
 | Vue       | `Nuxt` · `Astro` · `None`               |
 | Svelte    | `SvelteKit` · `Astro` · `None`          |
-| Solid     | `Astro` · `None`                        |
+| Angular   | `Analog` · `None`                        |
+| Solid     | `SolidStart` · `Astro` · `None`         |
+| Qwik      | `Qwik City` · `None`                    |
 | All others | `None`                                  |
 
 Component library options per framework:
@@ -627,14 +818,14 @@ State management options per framework:
 | Angular / Solid / Qwik | `Signals` · `None`                            |
 | All others | `None`                                                      |
 
-Data fetching options per framework:
+Data fetching options per framework (protocol-aware — includes `gRPC-web client` / `Connect client` when gRPC/Connect detected in backend):
 
 | Framework | Data Fetching                                                              |
 |-----------|----------------------------------------------------------------------------|
-| React     | `TanStack Query` · `SWR` · `Apollo Client` · `tRPC client` · `RTK Query` · `Native fetch` |
-| Vue       | `TanStack Query` · `Apollo Client` · `Native fetch`                        |
-| Svelte    | `TanStack Query` · `SWR` · `Native fetch`                                  |
-| Angular   | `Apollo Client` · `Native fetch`                                           |
+| React     | `TanStack Query` · `SWR` · `Apollo Client` · `tRPC client` · `gRPC-web client` · `Connect client` · `RTK Query` · `Native fetch` |
+| Vue       | `TanStack Query` · `Apollo Client` · `gRPC-web client` · `Connect client` · `Native fetch` |
+| Svelte    | `TanStack Query` · `SWR` · `gRPC-web client` · `Native fetch`              |
+| Angular   | `Apollo Client` · `gRPC-web client` · `Connect client` · `Native fetch`    |
 | Solid     | `TanStack Query` · `Native fetch`                                          |
 | All others | `Native fetch`                                                            |
 
@@ -667,9 +858,9 @@ Error boundary options per framework:
 | Spacing       | `Compact (4px base)` · `Default (8px base)` · `Spacious (12px base)`   |
 | Elevation     | `Shadows` · `Borders` · `Both` · `Flat`                                |
 | Motion        | `None` · `Subtle transitions` · `Animated (spring/ease)`               |
-| Vibe          | `Professional` · `Playful` · `Minimal` · `Bold` · `Elegant` · `Technical` · `Creative` · `Friendly` · `Serious` · `Modern` |
-| Font          | Free text (font family name or stack)                                   |
-| Colors        | Free text (hex, hsl, or description)                                    |
+| Vibe          | `Professional` · `Playful` · `Minimal` · `Bold` · `Elegant` · `Technical` · `Creative` · `Friendly` · `Serious` · `Modern` · `Custom` |
+| Font          | Select: `Inter` · `Roboto` · `Open Sans` · `Lato` · `Poppins` · `Nunito` · `Source Sans Pro` · `Raleway` · `Montserrat` · `Playfair Display` · `Merriweather` · `Fira Code` · `JetBrains Mono` · `System default` · `Custom` |
+| Colors        | Multi-select color palette with hex swatches                            |
 | Description   | Free text (prose description of visual feel)                           |
 
 ---
@@ -682,18 +873,70 @@ Error boundary options per framework:
 |----------------|----------------------------------------------------------------------------|
 | Name           | e.g., `Dashboard`, `User Profile`, `Checkout`                              |
 | Route          | e.g., `/dashboard`, `/users/:id`, `/checkout`                              |
+| Purpose        | `Landing/Marketing` · `Dashboard/Overview` · `List/Index` · `Detail/View` · `Create/Form` · `Edit/Form` · `Auth/Login` · `Settings/Profile` · `Error/404` · `Admin` · `Other` |
 | Auth Required  | `false` · `true`                                                           |
 | Layout         | `Default` · `Sidebar` · `Full-width` · `Blank` · `Custom (specify)`        |
 | Description    | Free text — what this page does, its purpose                               |
 | Core Actions   | Free text list of what the user can do on this page                        |
-| Loading        | `Skeleton` · `Spinner` · `Progressive` · `Instant (SSR/SSG)`               |
+| Loading        | `Skeleton` · `Spinner` · `Progressive` · `Instant (SSR/SSG)` *(only when meta-framework supports SSR)* |
 | Error Handling | `Inline` · `Toast` · `Error boundary / fallback page` · `Retry`            |
 | Auth Roles     | Multi-select from roles defined in **Backend → Auth**                       |
 | Linked Pages   | Multi-select from other page routes                                        |
+| Assets         | Multi-select from defined assets                                           |
+| Component Refs | Multi-select from defined components                                       |
 
 ---
 
-### 4.4 Navigation Sub Tab
+### 4.4 Components Sub Tab
+
+> *(repeatable — define reusable UI components)*
+
+#### Adding a Component
+
+| Field        | Input                                                                       |
+|--------------|-----------------------------------------------------------------------------|
+| Name         | Free text identifier                                                        |
+| Type         | `Form` · `Table` · `Card` · `List` · `Chart` · `Modal` · `Button` · `Navigation` · `Custom` |
+| Description  | Free text                                                                   |
+
+**Component Actions** *(repeatable within each component)*
+
+| Field          | Options / Input                                                              |
+|----------------|------------------------------------------------------------------------------|
+| Trigger        | `onClick` · `onSubmit` · `onLoad` · `onMount` · `onChange` · `onHover` · `onScroll` · `onKeyPress` · `Custom` |
+| Action Type    | Component-type-dependent — see table below                                   |
+| Endpoint       | *(for API actions)* Select from defined endpoints                            |
+| HTTP Method    | *(with endpoint)* `GET` · `POST` · `PUT` · `PATCH` · `DELETE`               |
+| Request Body   | *(with endpoint)* `JSON` · `FormData` · `Multipart` · `Raw` · `None`        |
+| Success Action | *(with endpoint)* `None` · `Show Toast` · `Navigate` · `Update State` · `Refresh` |
+| Error Action   | *(with endpoint)* `Show Toast` · `Do Nothing` · `Retry` · `Navigate`        |
+| Form Target    | *(Submit/Reset Form)* Select from Form components                            |
+| Modal Target   | *(Open/Close Modal)* Select from Modal components                            |
+| Target Page    | *(Navigate)* Select from page routes                                         |
+| Toast Message  | *(Show Toast)* Free text                                                     |
+| Toast Type     | *(Show Toast)* `success` · `error` · `info` · `warning`                     |
+| Confirm Dialog | *(Delete)* `Yes` · `No`                                                     |
+| State Key      | *(Update State)* Free text                                                   |
+| State Value    | *(Update State)* Free text                                                   |
+| Custom Handler | *(Custom)* Free text                                                         |
+| Description    | Free text                                                                    |
+
+Action types per component type:
+
+| Component Type | Action Types                                                                           |
+|----------------|----------------------------------------------------------------------------------------|
+| Form           | `Submit Form` · `Fetch Data` · `Reset Form` · `Navigate` · `Show Toast` · `Update State` · `Open Modal` · `Custom` |
+| Table          | `Fetch Data` · `Navigate` · `Delete` · `Refresh` · `Export` · `Show Toast` · `Update State` · `Open Modal` · `Custom` |
+| Card           | `Navigate` · `Fetch Data` · `Open Modal` · `Show Toast` · `Update State` · `Custom`   |
+| List           | `Navigate` · `Fetch Data` · `Delete` · `Refresh` · `Open Modal` · `Show Toast` · `Update State` · `Custom` |
+| Chart          | `Fetch Data` · `Update State` · `Download` · `Custom`                                  |
+| Modal          | `Submit Form` · `Close Modal` · `Navigate` · `Fetch Data` · `Show Toast` · `Update State` · `Custom` |
+| Button         | `Navigate` · `Submit Form` · `Open Modal` · `Close Modal` · `Show Toast` · `Update State` · `Download` · `Upload` · `Custom` |
+| Navigation     | `Navigate` · `Custom`                                                                  |
+
+---
+
+### 4.5 Navigation Sub Tab
 
 | Field       | Options / Input                                                      |
 |-------------|----------------------------------------------------------------------|
@@ -703,43 +946,69 @@ Error boundary options per framework:
 
 ---
 
-### 4.5 I18N Sub Tab
+### 4.6 I18N Sub Tab
 
 | Field               | Options / Input                                                                      |
 |---------------------|--------------------------------------------------------------------------------------|
 | Enabled             | `false` · `true`                                                                     |
 | Default Locale      | Dropdown — `en` · `en-US` · `en-GB` · `en-AU` · `en-CA` · `fr` · `fr-FR` · `fr-CA` · `de` · `de-DE` · `de-AT` · `es` · `es-ES` · `es-MX` · `es-AR` · `pt` · `pt-BR` · `pt-PT` · `it` · `nl` · `nl-NL` · `pl` · `ru` · `ja` · `zh` · `zh-CN` · `zh-TW` · `ko` · `ar` · `hi` · `tr` · `sv` · `da` · `fi` · `nb` · `cs` · `hu` · `ro` · `vi` · `th` · `id` · `ms` · `uk` · `he` |
 | Supported Locales   | Multi-select from the same locale list above                                         |
-| I18N Library        | *(filtered by framework — see table below)*                                              |
+| Translation Strategy| *(filtered by framework — see table below)*                                          |
 | Timezone Handling   | `UTC always` · `User preference` · `Auto-detect` · `Manual`                          |
 
-I18N library options per framework:
+Translation strategy (I18N library) options per framework:
 
-| Framework  | I18N Libraries                                                                |
+| Framework  | Libraries                                                                     |
 |------------|-------------------------------------------------------------------------------|
 | React      | `react-i18next` · `next-intl` · `LinguiJS` · `i18next` · `Custom` · `None`  |
 | Vue        | `vue-i18n` · `i18next` · `Custom` · `None`                                   |
 | Svelte     | `svelte-i18n` · `i18next` · `Custom` · `None`                                |
 | Angular    | `@angular/localize` · `ngx-translate` · `Custom` · `None`                    |
-| Solid / Qwik | `i18next` · `Custom` · `None`                                              |
-| All others | `i18next` · `Custom` · `None`                                                |
+| Solid / Qwik / HTMX | `i18next` · `Custom` · `None`                                     |
+| Flutter    | `flutter_localizations` · `Custom` · `None`                                  |
+| Jetpack Compose | `Android Localization` · `Custom` · `None`                              |
+| KMP        | `Lyricist` · `Custom` · `None`                                               |
+| SwiftUI / UIKit | `Swift Localization` · `Custom` · `None`                                |
 
 ---
 
-### 4.6 A11Y / SEO Sub Tab
+### 4.7 A11Y / SEO Sub Tab
 
 | Field            | Options / Input                                                                             |
 |------------------|---------------------------------------------------------------------------------------------|
 | WCAG Level       | `A` · `AA` · `AAA` · `None`                                                                 |
-| SEO Rendering    | `SSR` · `SSG` · `ISR` · `Prerender` · `None`                                                |
+| SEO Rendering    | Platform & meta-framework-dependent — see table below                                       |
 | Sitemap          | `false` · `true`                                                                            |
-| Meta Tags        | `Manual` · `Framework-native` · `None`                                                      |
+| Meta Tags        | Framework-dependent — see table below                                                       |
 | Analytics        | `PostHog` · `Google Analytics 4` · `Plausible` · `Mixpanel` · `Segment` · `Custom` · `None` |
-| Frontend RUM     | `Sentry` · `Datadog RUM` · `LogRocket` · `New Relic Browser` · `Custom` · `None`            |
+| Telemetry (RUM)  | `Sentry` · `Datadog RUM` · `LogRocket` · `New Relic Browser` · `Custom` · `None`            |
+
+SEO rendering strategy per meta-framework:
+
+| Meta-framework | Options                                    |
+|----------------|--------------------------------------------|
+| Next.js        | `SSR` · `SSG` · `ISR` · `Prerender` · `None` |
+| Nuxt           | `SSR` · `SSG` · `ISR` · `None`             |
+| SvelteKit      | `SSR` · `SSG` · `Prerender` · `None`       |
+| Remix          | `SSR` · `None`                              |
+| Astro          | `SSG` · `SSR` · `None`                     |
+| None           | `Prerender` · `None`                        |
+| Mobile/Desktop | `None` (only option)                        |
+
+Meta-tag injection per framework:
+
+| Framework  | Options                                                         |
+|------------|-----------------------------------------------------------------|
+| React      | `Manual` · `react-helmet` · `Framework-native` · `None`        |
+| Vue        | `Manual` · `@vueuse/head` · `Framework-native` · `None`        |
+| Svelte     | `Manual` · `svelte:head` · `Framework-native` · `None`         |
+| Angular    | `Manual` · `Framework-native` · `None`                          |
+| Solid      | `Manual` · `@solidjs/meta` · `Framework-native` · `None`       |
+| Others     | `Manual` · `Framework-native` · `None`                          |
 
 ---
 
-### 4.7 Assets Sub Tab
+### 4.8 Assets Sub Tab
 
 > *(repeatable — attach design assets, mockups, or inspiration references)*
 
@@ -799,7 +1068,7 @@ Orchestrator options per compute environment:
 | Domain Strategy | `Subdomain per service` · `Path-based routing` · `Single domain` · `Custom`                     |
 | CORS Enforced   | `Reverse proxy (Nginx/Caddy)` · `Application-level` · `CDN/WAF` · `Both`                       |
 | CORS Strategy   | `Permissive` · `Strict allowlist` · `Same-origin`                                               |
-| CORS Origins    | Free text                                                                                       |
+| CORS Origins    | *(only when CORS Strategy = `Strict allowlist`)* Free text                                      |
 | SSL Cert Mgmt   | Provider-aware: `Auto-renew (certbot/ACME)` · `ACM` (AWS) · `GCP-managed` · `Azure-managed` · `Cloudflare proxy` · `Manual` |
 
 Reverse proxy options are narrowed by orchestrator/environment:
@@ -815,15 +1084,15 @@ Reverse proxy options are narrowed by orchestrator/environment:
 
 ### 5.3 Observability Sub Tab
 
-> Alerting and Tracing options are narrowed based on the selected **Metrics** backend.
+> Alerting, Tracing, and Error Tracking options are narrowed based on the selected **Metrics** backend.
 
 | Field          | Options / Input                                                                                          |
 |----------------|----------------------------------------------------------------------------------------------------------|
 | Logging        | Provider-aware: `Loki + Grafana` · `ELK Stack` · `CloudWatch` (AWS) · `Cloud Logging` (GCP) · `Azure Monitor` · `Datadog` · `Stdout/file` |
 | Metrics        | Provider-aware: `Prometheus + Grafana` · `Datadog` · `CloudWatch` (AWS) · `Cloud Monitoring` (GCP) · `Azure Monitor` · `New Relic` · `None` |
 | Tracing        | Filtered by Metrics — see table below                                                                    |
-| Error Tracking | `Sentry` · `Datadog` · `Rollbar` · `Built-in` · `None`                                                   |
-| Health Checks  | `false` · `true` — auto-generate `/health` and `/ready` endpoints per service unit                       |
+| Error Tracking | `Sentry` · `Datadog` · `Rollbar` · `Built-in` · `None` *(reordered based on metrics backend)*           |
+| Health Checks  | `off` · `on` — auto-generate `/health` and `/ready` endpoints per service unit                           |
 | Alerting       | Filtered by Metrics — see table below                                                                    |
 | Log Retention  | `7 days` · `30 days` · `90 days` · `1 year` · `Indefinite`                                               |
 
@@ -928,6 +1197,8 @@ Container runtime options per backend language:
 
 ## 6 · Cross-Cutting Concerns Tab
 
+> Sub-tabs: **TESTING** · **DOCS** · **STANDARDS**
+
 ### 6.1 Testing Strategy Sub Tab
 
 > Options are dynamically filtered by backend languages, backend architecture pattern, communication protocols, and frontend tech.
@@ -946,15 +1217,15 @@ Unit testing options per backend language:
 
 | Language        | Unit Testing Tools                                                         |
 |-----------------|----------------------------------------------------------------------------|
-| Go              | `Go testing` · `Testify` · `Other`                                         |
-| TypeScript/Node | `Jest` · `Vitest` · `Other`                                                |
-| Python          | `pytest` · `unittest` · `Other`                                            |
-| Java            | `JUnit` · `TestNG` · `Other`                                               |
-| Kotlin          | `JUnit` · `Kotest` · `Other`                                               |
-| C#/.NET         | `xUnit` · `NUnit` · `MSTest` · `Other`                                     |
-| Rust            | `cargo test` · `Other`                                                     |
-| Ruby            | `RSpec` · `minitest` · `Other`                                             |
-| PHP             | `PHPUnit` · `Pest` · `Other`                                               |
+| Go              | `Go testing` · `Testify`                                                   |
+| TypeScript/Node | `Jest` · `Vitest`                                                          |
+| Python          | `pytest` · `unittest`                                                      |
+| Java            | `JUnit` · `TestNG`                                                         |
+| Kotlin          | `JUnit` · `Kotest`                                                         |
+| C#/.NET         | `xUnit` · `NUnit` · `MSTest`                                               |
+| Rust            | `cargo test`                                                               |
+| Ruby            | `RSpec` · `minitest`                                                       |
+| PHP             | `PHPUnit` · `Pest`                                                         |
 | *(no language)* | `Jest` · `Vitest` · `pytest` · `Go testing` · `JUnit` · `xUnit` · `Other` |
 
 Integration test options per architecture pattern:
@@ -1003,16 +1274,16 @@ Contract testing options per architecture pattern:
 
 ### 6.2 Documentation Sub Tab
 
-> Documentation format is now **per protocol** — each active endpoint protocol gets its own format selection.
+> Documentation format is **per protocol** — only protocols with at least one defined endpoint are shown.
 
 | Field           | Options / Input                                                        |
 |-----------------|------------------------------------------------------------------------|
-| REST Docs       | `OpenAPI/Swagger` · `None`                                             |
-| GraphQL Docs    | `GraphQL Playground` · `GraphQL SDL` · `None`                          |
-| gRPC Docs       | `gRPC reflection` · `Protobuf docs (buf.build)` · `None`               |
-| WebSocket Docs  | `AsyncAPI` · `None`                                                    |
-| Event Docs      | `AsyncAPI` · `CloudEvents spec` · `None`                               |
-| Auto-generation | `false` · `true` — generate specs from code annotations                |
+| REST Docs       | *(if REST endpoints exist)* `OpenAPI/Swagger` · `None`                 |
+| GraphQL Docs    | *(if GraphQL endpoints exist)* `GraphQL Playground` · `GraphQL SDL` · `None` |
+| gRPC Docs       | *(if gRPC endpoints exist)* `gRPC reflection` · `Protobuf docs (buf.build)` · `None` |
+| WebSocket Docs  | *(if WebSocket endpoints exist)* `AsyncAPI` · `None`                   |
+| Event Docs      | *(if Event endpoints exist)* `AsyncAPI` · `CloudEvents spec` · `None`  |
+| Auto-generation | `off` · `on` — generate specs from code annotations                    |
 | Changelog       | `Conventional Commits` · `Manual` · `None`                             |
 
 ---
@@ -1025,6 +1296,8 @@ Contract testing options per architecture pattern:
 | Feature Flags      | `LaunchDarkly` · `Unleash` · `Flagsmith` · `Custom (env vars)` · `None`          |
 | Backend Linter     | Dynamically filtered by backend language — see table below                       |
 | Frontend Linter    | Dynamically filtered by frontend language — see table below                      |
+| Uptime SLO         | Free text (e.g., `99.9%`)                                                       |
+| Latency P99        | Free text (e.g., `200ms`)                                                        |
 
 Backend linter options per language:
 
@@ -1049,8 +1322,6 @@ Frontend linter options per frontend language:
 |--------------------|----------------------------------------------------------------------|
 | TypeScript / JavaScript | `ESLint + Prettier` · `Biome` · `oxlint` · `Stylelint` · `Custom` · `None` |
 | Dart / Kotlin / Swift | `Custom` · `None`                                                 |
-
-> **Uptime SLO** and **Latency P99** are serialized in the manifest (`CrossCutPillar`) but are not currently editable from this tab — configure them directly in `manifest.json` if needed.
 
 ---
 
@@ -1106,7 +1377,7 @@ Each provider can be independently configured with its own auth method and crede
 | Llama    | `API Key`             | `8B` · `70B` · `405B`        |
 | Custom   | `API Key`             | `Custom`                     |
 
-> Credentials are persisted to the OS keyring / config file and loaded on startup. The Gemini provider supports OAuth 2.0 PKCE flow in addition to API key authentication.
+> Credentials are persisted to `~/.config/vibemenu/providers.json` with 0600 permissions. The Gemini provider supports OAuth 2.0 PKCE flow in addition to API key authentication. ChatGPT also supports OAuth 2.0 PKCE when a client ID is provided via `VIBEMENU_OPENAI_CLIENT_ID` env var.
 
 ---
 

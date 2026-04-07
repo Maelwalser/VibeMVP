@@ -268,6 +268,18 @@ func (fe FrontendEditor) assetNames() []string {
 
 // ── ToManifest ────────────────────────────────────────────────────────────────
 
+// legacyRenderingMode maps a meta-framework value to the closest legacy RenderingMode.
+func legacyRenderingMode(metaFW string) manifest.RenderingMode {
+	switch strings.ToLower(metaFW) {
+	case "next.js", "nuxt", "sveltekit", "remix":
+		return manifest.RenderSSR
+	case "gatsby", "astro":
+		return manifest.RenderSSG
+	default:
+		return manifest.RenderSPA
+	}
+}
+
 func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 	assets := make([]manifest.AssetDef, len(fe.assets))
 	copy(assets, fe.assets)
@@ -300,8 +312,9 @@ func (fe FrontendEditor) ToManifestFrontendPillar() manifest.FrontendPillar {
 			ErrorBoundary:      core.NoneToEmpty(core.FieldGet(fe.techFields, "error_boundary")),
 			BundleOptimization: core.NoneToEmpty(core.FieldGet(fe.techFields, "bundle_opt")),
 		}
-		// Legacy compatibility
-		p.Rendering = manifest.RenderingMode(core.NoneToEmpty(core.FieldGet(fe.techFields, "platform")))
+		// Legacy compatibility — Rendering is SPA/SSR/SSG/ISR, not the platform value.
+		// Map meta-framework choices to approximate rendering modes for old consumers.
+		p.Rendering = legacyRenderingMode(core.NoneToEmpty(core.FieldGet(fe.techFields, "meta_framework")))
 		p.Framework = core.NoneToEmpty(core.FieldGet(fe.techFields, "framework"))
 		p.Styling = core.NoneToEmpty(core.FieldGet(fe.techFields, "styling"))
 	}

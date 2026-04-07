@@ -2,6 +2,43 @@ package dag
 
 import "github.com/vibe-menu/internal/manifest"
 
+// ── config ref resolution ────────────────────────────────────────────────────
+
+// resolveConfigRefs populates empty Language/Framework fields on services that
+// reference a StackConfig via ConfigRef. Mutates services in place. No-op when
+// configs is empty or no service uses ConfigRef.
+func resolveConfigRefs(services []manifest.ServiceDef, configs []manifest.StackConfig) {
+	if len(configs) == 0 {
+		return
+	}
+	idx := make(map[string]manifest.StackConfig, len(configs))
+	for _, c := range configs {
+		idx[c.Name] = c
+	}
+	for i := range services {
+		if services[i].ConfigRef == "" {
+			continue
+		}
+		sc, ok := idx[services[i].ConfigRef]
+		if !ok {
+			continue
+		}
+		// Only fill fields that are empty — inline values take precedence.
+		if services[i].Language == "" {
+			services[i].Language = sc.Language
+		}
+		if services[i].LanguageVersion == "" {
+			services[i].LanguageVersion = sc.LanguageVersion
+		}
+		if services[i].Framework == "" {
+			services[i].Framework = sc.Framework
+		}
+		if services[i].FrameworkVersion == "" {
+			services[i].FrameworkVersion = sc.FrameworkVersion
+		}
+	}
+}
+
 // ── manifest cross-reference resolvers ───────────────────────────────────────
 
 // endpointsForService filters endpoints to those whose ServiceUnit matches name.
@@ -146,6 +183,18 @@ func cronJobsForService(name string, queues []manifest.JobQueueDef) []manifest.C
 	for _, q := range queues {
 		if q.WorkerService == "" || q.WorkerService == name {
 			out = append(out, q.CronJobs...)
+		}
+	}
+	return out
+}
+
+// eventsForService returns the events where the given service is the publisher
+// or consumer. Returns nil when nothing matches so omitempty omits it.
+func eventsForService(name string, events []manifest.EventDef) []manifest.EventDef {
+	var out []manifest.EventDef
+	for _, e := range events {
+		if e.PublisherService == name || e.ConsumerService == name {
+			out = append(out, e)
 		}
 	}
 	return out
