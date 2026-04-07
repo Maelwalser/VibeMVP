@@ -230,3 +230,95 @@ func TestRoundTrip_SampleManifest(t *testing.T) {
 		t.Fatal("loaded manifest is nil")
 	}
 }
+
+// ── Sentinel value stripping ────────────────────────────────────────────────
+
+func TestMarshalJSON_SentinelValuesOmitted(t *testing.T) {
+	m := Manifest{
+		Contracts: ContractsPillar{
+			Versioning: &APIVersioning{
+				PerProtocolStrategies: map[string]string{"REST": "URL path (/v1/)"},
+				CurrentVersion:        "v1",
+				DeprecationPolicy:     "None",
+			},
+			DTOs: []DTODef{{Name: "Req", Category: "Request"}},
+		},
+		Backend: BackendPillar{
+			Services: []ServiceDef{{Name: "api", ErrorFormat: "Platform default"}},
+		},
+	}
+
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	jsonStr := string(data)
+	for _, sentinel := range []string{`"None"`, `"Platform default"`, `"none"`} {
+		if contains(jsonStr, sentinel) {
+			t.Errorf("sentinel value %s should be stripped from JSON output", sentinel)
+		}
+	}
+
+	// Verify non-sentinel values are preserved.
+	contracts := raw["contracts"].(map[string]any)
+	versioning := contracts["versioning"].(map[string]any)
+	if versioning["current_version"] != "v1" {
+		t.Errorf("expected current_version=v1, got %v", versioning["current_version"])
+	}
+	if _, ok := versioning["deprecation_policy"]; ok {
+		t.Error("deprecation_policy should be omitted when value is 'None'")
+	}
+}
+
+func TestMarshalJSON_FalseBoolsOmitted(t *testing.T) {
+	m := Manifest{
+		Data: DataPillar{
+			Databases: []DBSourceDef{{Alias: "db", Type: DBPostgres, IsCache: false}},
+		},
+		Frontend: FrontendPillar{
+			Navigation: &NavigationConfig{NavType: "Top bar", Breadcrumbs: false, AuthAware: true},
+		},
+	}
+
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var raw map[string]any
+	json.Unmarshal(data, &raw)
+
+	// is_cache: false should be omitted
+	db := raw["data"].(map[string]any)["databases"].([]any)[0].(map[string]any)
+	if _, ok := db["is_cache"]; ok {
+		t.Error("is_cache: false should be omitted from JSON")
+	}
+
+	// breadcrumbs: false should be omitted, auth_aware: true should remain
+	nav := raw["frontend"].(map[string]any)["navigation"].(map[string]any)
+	if _, ok := nav["breadcrumbs"]; ok {
+		t.Error("breadcrumbs: false should be omitted from JSON")
+	}
+	if nav["auth_aware"] != true {
+		t.Error("auth_aware: true should be preserved in JSON")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

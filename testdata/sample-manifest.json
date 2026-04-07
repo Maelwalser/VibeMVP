@@ -1,12 +1,11 @@
 {
-  "created_at": "2026-04-07T19:50:42.957800332+02:00",
+  "created_at": "2026-04-07T21:58:45.990463459+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [
       {
         "alias": "primary",
         "type": "PostgreSQL",
-        "is_cache": false,
         "ssl_mode": "require",
         "consistency": "strong",
         "replication": "single-node"
@@ -21,52 +20,44 @@
           {
             "name": "id",
             "type": "UUID",
-            "constraints": "Primary Key, Auto-generated",
-            "sensitive": false
+            "constraints": "Primary Key, Auto-generated"
           },
           {
             "name": "email",
             "type": "String",
             "constraints": "Required, Unique",
-            "sensitive": false,
             "validation": "valid email format"
           },
           {
             "name": "password_hash",
             "type": "String",
-            "constraints": "Required",
-            "sensitive": false
+            "constraints": "Required"
           },
           {
             "name": "is_active",
             "type": "Boolean",
             "constraints": "Required",
-            "default": "true",
-            "sensitive": false
+            "default": "true"
           },
           {
             "name": "refresh_token",
             "type": "String",
-            "constraints": "Nullable",
-            "sensitive": false
+            "constraints": "Nullable"
           },
           {
             "name": "refresh_token_expires_at",
             "type": "DateTime",
-            "constraints": "Nullable",
-            "sensitive": false
+            "constraints": "Nullable"
           },
           {
             "name": "created_at",
             "type": "DateTime",
-            "constraints": "Required, Auto-generated",
-            "sensitive": false
+            "constraints": "Required, Auto-generated"
           },
           {
             "name": "updated_at",
             "type": "DateTime",
-            "constraints": "Required, Auto-updated",
-            "sensitive": false
+            "constraints": "Required, Auto-updated"
           }
         ]
       }
@@ -105,8 +96,6 @@
         "technologies": [
           "REST"
         ],
-        "error_format": "Platform default",
-        "service_discovery": "None",
         "repositories": [
           {
             "name": "repository",
@@ -194,21 +183,18 @@
             "name": "email",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "valid email format"
           },
           {
             "name": "password",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "min 8 chars, at least one number"
           },
           {
             "name": "confirm_password",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "must match password"
           }
         ]
@@ -224,14 +210,12 @@
             "name": "email",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "valid email format"
           },
           {
             "name": "password",
             "type": "string",
-            "required": true,
-            "nullable": false
+            "required": true
           }
         ]
       },
@@ -253,27 +237,23 @@
             "name": "access_token",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Signed JWT; short-lived (15 min)"
           },
           {
             "name": "token_type",
             "type": "string",
             "required": true,
-            "nullable": false,
             "default": "Bearer"
           },
           {
             "name": "expires_in",
             "type": "integer",
             "required": true,
-            "nullable": false,
             "notes": "Seconds until access_token expires"
           },
           {
             "name": "refresh_token",
             "type": "string",
-            "required": false,
             "nullable": true,
             "notes": "Rotated on each use; set as HttpOnly cookie"
           }
@@ -290,26 +270,22 @@
             "name": "id",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "UUID"
           },
           {
             "name": "email",
             "type": "string",
-            "required": true,
-            "nullable": false
+            "required": true
           },
           {
             "name": "is_active",
             "type": "boolean",
-            "required": true,
-            "nullable": false
+            "required": true
           },
           {
             "name": "created_at",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "ISO 8601 timestamp"
           }
         ]
@@ -324,14 +300,12 @@
             "name": "error",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Machine-readable error code"
           },
           {
             "name": "message",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Human-readable description"
           }
         ]
@@ -395,8 +369,7 @@
       "per_protocol_strategies": {
         "REST": "URL path (/v1/)"
       },
-      "current_version": "v1",
-      "deprecation_policy": "None"
+      "current_version": "v1"
     }
   },
   "frontend": {
@@ -522,7 +495,6 @@
     ],
     "navigation": {
       "nav_type": "Top bar",
-      "breadcrumbs": false,
       "auth_aware": true
     },
     "rendering": "Web (SPA)",
@@ -534,7 +506,6 @@
     "output_dir": "generated-code",
     "concurrency": 4,
     "verify": true,
-    "dry_run": false,
     "provider": "Claude",
     "tier_fast": "claude-haiku-4-5-20251001",
     "tier_medium": "claude-sonnet-4-6",

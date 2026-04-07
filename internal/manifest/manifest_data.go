@@ -5,10 +5,10 @@ package manifest
 // DBSourceDef describes a named database or cache source used in the project.
 type DBSourceDef struct {
 	Alias     string       `json:"alias"`
-	Type      DatabaseType `json:"type"`
+	Type      DatabaseType `json:"type,omitempty"`
 	Version   string       `json:"version,omitempty"`
 	Namespace string       `json:"namespace,omitempty"`
-	IsCache   bool         `json:"is_cache"`
+	IsCache   bool         `json:"is_cache,omitempty"`
 
 	// Security / network integrity
 	SSLMode     string `json:"ssl_mode,omitempty"`    // disable | require | verify-ca | verify-full
@@ -32,21 +32,21 @@ type DBSourceDef struct {
 type ForeignKey struct {
 	RefEntity string        `json:"ref_entity"`
 	RefColumn string        `json:"ref_column"`
-	OnDelete  CascadeAction `json:"on_delete"`
-	OnUpdate  CascadeAction `json:"on_update"`
+	OnDelete  CascadeAction `json:"on_delete,omitempty"`
+	OnUpdate  CascadeAction `json:"on_update,omitempty"`
 }
 
 type ColumnDef struct {
 	Name       string      `json:"name"`
-	Type       ColumnType  `json:"type"`
+	Type       ColumnType  `json:"type,omitempty"`
 	Length     string      `json:"length,omitempty"`
-	Nullable   bool        `json:"nullable"`
-	PrimaryKey bool        `json:"primary_key"`
-	Unique     bool        `json:"unique"`
+	Nullable   bool        `json:"nullable,omitempty"`
+	PrimaryKey bool        `json:"primary_key,omitempty"`
+	Unique     bool        `json:"unique,omitempty"`
 	Default    string      `json:"default,omitempty"`
 	Check      string      `json:"check,omitempty"`
 	ForeignKey *ForeignKey `json:"foreign_key,omitempty"`
-	Index      bool        `json:"index"`
+	Index      bool        `json:"index,omitempty"`
 	IndexType  IndexType   `json:"index_type,omitempty"`
 	Notes      string      `json:"notes,omitempty"`
 }
@@ -61,11 +61,11 @@ type EntityDef struct {
 	Database    string `json:"database,omitempty"`
 	Description string `json:"description,omitempty"`
 
-	Cached     bool   `json:"cached"`
+	Cached     bool   `json:"cached,omitempty"`
 	CacheStore string `json:"cache_store,omitempty"`
 	CacheTTL   string `json:"cache_ttl,omitempty"`
 
-	Columns           []ColumnDef        `json:"columns"`
+	Columns           []ColumnDef        `json:"columns,omitempty"`
 	UniqueConstraints []UniqueConstraint `json:"unique_constraints,omitempty"`
 	Notes             string             `json:"notes,omitempty"`
 }
@@ -74,22 +74,22 @@ type EntityDef struct {
 
 type DomainPillar struct {
 	Entities   []EntityDef `json:"entities,omitempty"`
-	RBACMatrix string      `json:"rbac_matrix"`
-	Compliance string      `json:"compliance"`
+	RBACMatrix string      `json:"rbac_matrix,omitempty"`
+	Compliance string      `json:"compliance,omitempty"`
 }
 
 type TopologyPillar struct {
-	ArchPattern   ArchPattern      `json:"arch_pattern"`
-	CommProtocol  CommProtocol     `json:"comm_protocol"`
-	Serialization SerializationFmt `json:"serialization"`
+	ArchPattern   ArchPattern      `json:"arch_pattern,omitempty"`
+	CommProtocol  CommProtocol     `json:"comm_protocol,omitempty"`
+	Serialization SerializationFmt `json:"serialization,omitempty"`
 	DomainNotes   string           `json:"domain_notes,omitempty"`
 }
 
 type GlobalNFRPillar struct {
-	UptimeSLO      string `json:"uptime_slo"`
-	ConcurrentConn string `json:"concurrent_conn"`
-	RTO            string `json:"rto"`
-	RPO            string `json:"rpo"`
+	UptimeSLO      string `json:"uptime_slo,omitempty"`
+	ConcurrentConn string `json:"concurrent_conn,omitempty"`
+	RTO            string `json:"rto,omitempty"`
+	RPO            string `json:"rpo,omitempty"`
 	NFRNotes       string `json:"nfr_notes,omitempty"`
 }
 
@@ -106,10 +106,10 @@ type DomainDef struct {
 
 type DomainAttribute struct {
 	Name        string `json:"name"`
-	Type        string `json:"type"`
+	Type        string `json:"type,omitempty"`
 	Constraints string `json:"constraints,omitempty"`
 	Default     string `json:"default,omitempty"`
-	Sensitive   bool   `json:"sensitive"`
+	Sensitive   bool   `json:"sensitive,omitempty"`
 	Validation  string `json:"validation,omitempty"`
 	Indexed     bool   `json:"indexed,omitempty"`
 	Unique      bool   `json:"unique,omitempty"`

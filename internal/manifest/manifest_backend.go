@@ -67,7 +67,7 @@ type CommLink struct {
 	Direction          string        `json:"direction"`
 	Protocol           string        `json:"protocol"`
 	Trigger            string        `json:"trigger,omitempty"`
-	SyncAsync          SyncAsyncMode `json:"sync_async"`
+	SyncAsync          SyncAsyncMode `json:"sync_async,omitempty"`
 	ResiliencePatterns []string      `json:"resilience_patterns,omitempty"`
 	DTOs               []string      `json:"dtos,omitempty"`          // payload / request DTOs
 	ResponseDTOs       []string      `json:"response_dtos,omitempty"` // response DTOs (bidirectional only)
@@ -75,10 +75,10 @@ type CommLink struct {
 
 // MessagingConfig describes the message broker configuration.
 type MessagingConfig struct {
-	BrokerTech    string `json:"broker_tech"`
-	Deployment    string `json:"deployment"`
-	Serialization string `json:"serialization"`
-	Delivery      string `json:"delivery"`
+	BrokerTech    string `json:"broker_tech,omitempty"`
+	Deployment    string `json:"deployment,omitempty"`
+	Serialization string `json:"serialization,omitempty"`
+	Delivery      string `json:"delivery,omitempty"`
 	Environment   string `json:"environment,omitempty"`
 }
 
@@ -93,8 +93,8 @@ type EventDef struct {
 
 // APIGatewayConfig describes API gateway configuration.
 type APIGatewayConfig struct {
-	Technology  string `json:"technology"`
-	Routing     string `json:"routing"`
+	Technology  string `json:"technology,omitempty"`
+	Routing     string `json:"routing,omitempty"`
 	Features    string `json:"features,omitempty"`
 	Endpoints   string `json:"endpoints,omitempty"`
 	Environment string `json:"environment,omitempty"`
@@ -152,7 +152,7 @@ type WAFConfig struct {
 // CronJobDef describes a scheduled/cron job.
 type CronJobDef struct {
 	Name     string `json:"name"`
-	Schedule string `json:"schedule"`
+	Schedule string `json:"schedule,omitempty"`
 	Handler  string `json:"handler,omitempty"`
 	Timeout  string `json:"timeout,omitempty"`
 }
@@ -162,10 +162,10 @@ type JobQueueDef struct {
 	Name          string       `json:"name"`
 	Description   string       `json:"description,omitempty"`
 	ConfigRef     string       `json:"config_ref,omitempty"` // references a StackConfig.Name (non-monolith)
-	Technology    string       `json:"technology"`
+	Technology    string       `json:"technology,omitempty"`
 	Concurrency   string       `json:"concurrency,omitempty"`
 	MaxRetries    string       `json:"max_retries,omitempty"`
-	RetryPolicy   string       `json:"retry_policy"`
+	RetryPolicy   string       `json:"retry_policy,omitempty"`
 	DLQ           string       `json:"dlq,omitempty"`
 	WorkerService string       `json:"worker_service,omitempty"`
 	PayloadDTO    string       `json:"payload_dto,omitempty"`

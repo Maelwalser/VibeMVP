@@ -78,14 +78,14 @@ type PageComponentDef struct {
 // PageDef describes a frontend page.
 type PageDef struct {
 	Name          string `json:"name"`
-	Route         string `json:"route"`
-	AuthRequired  string `json:"auth_required"`
-	Layout        string `json:"layout"`
+	Route         string `json:"route,omitempty"`
+	AuthRequired  string `json:"auth_required,omitempty"`
+	Layout        string `json:"layout,omitempty"`
 	Purpose       string `json:"purpose,omitempty"`
 	Description   string `json:"description,omitempty"`
 	CoreActions   string `json:"core_actions,omitempty"`
-	Loading       string `json:"loading"`
-	ErrorHandling string `json:"error_handling"`
+	Loading       string `json:"loading,omitempty"`
+	ErrorHandling string `json:"error_handling,omitempty"`
 	AuthRoles     string `json:"auth_roles,omitempty"`
 	LinkedPages   string `json:"linked_pages,omitempty"`   // comma-separated routes of related pages
 	Assets        string `json:"assets,omitempty"`         // comma-separated asset names used on this page
@@ -95,8 +95,8 @@ type PageDef struct {
 // NavigationConfig describes frontend navigation settings.
 type NavigationConfig struct {
 	NavType     string `json:"nav_type,omitempty"`
-	Breadcrumbs bool   `json:"breadcrumbs"`
-	AuthAware   bool   `json:"auth_aware"`
+	Breadcrumbs bool   `json:"breadcrumbs,omitempty"`
+	AuthAware   bool   `json:"auth_aware,omitempty"`
 }
 
 // I18nConfig describes internationalization and localization settings.
