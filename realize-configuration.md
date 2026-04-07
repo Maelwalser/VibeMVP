@@ -41,11 +41,15 @@ realize [flags]
 | `-output` | string | `output` | Directory where generated code is written |
 | `-skills` | string | `.vibemenu/skills` | Directory containing skill markdown files |
 | `-retries` | int | `3` | Max verification retry attempts per task |
-| `-parallel` | int | `0` (= num CPUs, min 1) | Max tasks running concurrently |
+| `-parallel` | int | `0` (= 1 at runtime) | Max tasks running concurrently |
 | `-dry-run` | bool | `false` | Print task plan without calling any agent |
 | `-verbose` | bool | `false` | Print token usage and thinking logs |
+| `-provider` | string | `""` | Default LLM provider: `Claude`, `Gemini`, `ChatGPT`, `Mistral`, `Llama` |
+| `-api-key` | string | `""` | API key for the default provider (falls back to env var) |
 
-> **Note:** When `-parallel` is set to `0` or any value ≤ 0, it resolves to `1` at runtime — it does **not** default to the number of CPUs despite the flag description suggesting it.
+> **Note:** When `-parallel` is set to `0` or any value ≤ 0, it resolves to `1` at runtime.
+
+> **Bundled skills:** If the `-skills` directory does not exist, bundled skills are automatically extracted from the embedded filesystem to that path at startup.
 
 ---
 
@@ -59,16 +63,14 @@ Stored under the `"realize"` key in `manifest.json`. Configured via the **Realiz
 {
   "realize": {
     "app_name": "my-app",
-    "output_dir": "output",
-    "model": "claude-sonnet-4-6",
+    "output_dir": ".",
     "concurrency": 4,
     "verify": true,
     "dry_run": false,
-    "section_models": {
-      "backend": "Claude · Sonnet",
-      "data": "default",
-      "frontend": "Gemini · Flash"
-    }
+    "provider": "Claude",
+    "tier_fast": "claude-haiku-4-5-20251001",
+    "tier_medium": "claude-sonnet-4-6",
+    "tier_slow": "claude-opus-4-6"
   }
 }
 ```
@@ -77,11 +79,15 @@ Stored under the `"realize"` key in `manifest.json`. Configured via the **Realiz
 |-------|------|-------------|
 | `app_name` | string | Application name used in generated code identifiers |
 | `output_dir` | string | Root directory for all generated files |
-| `model` | string | Global default model ID (fallback when no tier/section override applies) |
 | `concurrency` | int | Max parallel tasks; mirrors `-parallel` CLI flag |
 | `verify` | bool | Run language verifiers after each agent call |
 | `dry_run` | bool | Print task plan without executing; mirrors `-dry-run` CLI flag |
-| `section_models` | map[string]string | Per-pillar model override; see [Section 9](#9-section-model-overrides) |
+| `provider` | string | Provider label for model selection (empty = use default Claude) |
+| `tier_fast` | string | Model ID for low-complexity tasks |
+| `tier_medium` | string | Model ID for medium-complexity tasks |
+| `tier_slow` | string | Model ID for high-complexity / escalation tasks |
+| `model` | string | *(legacy)* Global default model ID — not editable from UI |
+| `section_models` | map[string]string | *(legacy)* Per-pillar model override — not editable from UI |
 
 ---
 
@@ -98,14 +104,14 @@ Stored under `"configured_providers"` in `manifest.json`. Configured via the **P
       "provider": "Claude",
       "model": "Sonnet",
       "version": "",
-      "auth": "",
+      "auth": "API Key",
       "credential": "sk-ant-..."
     },
     "ChatGPT": {
       "provider": "ChatGPT",
       "model": "4o",
       "version": "4o-2024",
-      "auth": "",
+      "auth": "API Key",
       "credential": "sk-..."
     }
   }
@@ -114,13 +120,23 @@ Stored under `"configured_providers"` in `manifest.json`. Configured via the **P
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `provider` | string | Provider name: `"Claude"`, `"ChatGPT"`, `"Gemini"`, `"Mistral"`, `"Llama"` |
+| `provider` | string | Provider name: `"Claude"`, `"ChatGPT"`, `"Gemini"`, `"Mistral"`, `"Llama"`, `"Custom"` |
 | `model` | string | Tier name within that provider (e.g. `"Sonnet"`, `"4o"`, `"Flash"`) |
 | `version` | string | Optional specific version string (e.g. `"o3-mini"`, `"1.5"`); empty = use fallback |
-| `auth` | string | Reserved; unused |
+| `auth` | string | `"API Key"` or `"OAuth"` |
 | `credential` | string | API key or OAuth token for this provider |
 
-The `configured_providers` map is keyed by the **provider label** (e.g. `"Claude"`). The per-section routing map is keyed by **section ID** (`"backend"`, `"data"`, etc.) and is built at runtime by `buildProviderAssignments()`.
+Provider credentials are also persisted locally to `~/.config/vibemenu/providers.json` with 0600 file permissions.
+
+**Provider environment variables** (fallback when no credential configured):
+
+| Provider | Env Var |
+|----------|---------|
+| Claude | `ANTHROPIC_API_KEY` |
+| ChatGPT | `OPENAI_API_KEY` |
+| Gemini | `GEMINI_API_KEY` |
+| Mistral | `MISTRAL_API_KEY` |
+| Llama | `GROQ_API_KEY` |
 
 ---
 
@@ -133,9 +149,25 @@ The `configured_providers` map is keyed by the **provider label** (e.g. `"Claude
 | `DefaultModel` | `"claude-opus-4-6"` | Fallback model when no tier or section override applies |
 | `DefaultMaxTokens` | `64000` | Max output tokens per agent call (applies to all providers) |
 | `MaxSkillBytes` | `2000` | Skill markdown files are truncated to this many bytes before injection |
-| `MaxFileChars` | `1500` | Max characters included from a single dependency output file |
-| `MaxTotalChars` | `8000` | Total character budget across all dependency outputs per prompt |
+| `MaxFileChars` | `4000` | Max characters included from a single dependency output file |
+| `MaxTotalChars` | `12000` | Total character budget across all dependency outputs per prompt (fallback) |
 | `RateLimitBackoffBase` | `60` | Base seconds for rate-limit backoff: wait = `(attempt+1) × 60s` |
+
+### Per-Task Character Budgets
+
+Tasks that aggregate more upstream layers get a larger shared-memory window:
+
+| Task Kind | Budget | Rationale |
+|-----------|--------|-----------|
+| `backend.service.bootstrap` | `30000` | Sees repo + service + handler simultaneously |
+| `backend.service.handler` | `20000` | Sees repo + service + auth |
+| `backend.auth` | `20000` | Needs all service interfaces |
+| `backend.gateway` | `20000` | Needs full service surface |
+| `contracts` | `20000` | Aggregates all service + data output |
+| `frontend` | `20000` | Needs contracts + data types |
+| `backend.service.logic` | `15000` | Sees repo + data schemas |
+| `backend.service.repository` | `10000` | Sees data schemas only |
+| *(all others)* | `12000` | Default `MaxTotalChars` |
 
 ---
 
@@ -204,6 +236,13 @@ Each service produces **6 tasks** chained in dependency order:
 | `crosscut.testing` | `crosscut.testing` | `m.CrossCut.Testing.Unit != ""` or `m.CrossCut.Testing.E2E != ""` |
 | `crosscut.docs` | `crosscut.docs` | `m.CrossCut.Docs.APIDocs != ""` |
 
+### Post-Pipeline Tasks
+
+| Task Kind | Task ID | Description |
+|-----------|---------|-------------|
+| `backend.reconciliation` | `backend.reconciliation` | Cross-task compilation fix phase (runs after all service chains) |
+| `integration.repair` | `integration.repair` | Post-pipeline integration repair (synthetic kind) |
+
 ---
 
 ## 6. Task Output Directories
@@ -228,26 +267,28 @@ The `service_dirs` map is also injected into the `infra.docker` payload so Docke
 
 ### Default Tier Per Task Kind
 
-| Task Kind | Default Model | Rationale |
-|-----------|--------------|-----------|
-| `data.schemas` | `claude-sonnet-4-6` | Entity design requires reasoning |
-| `data.migrations` | `claude-haiku-4-5-20251001` | Pure SQL DDL, no reasoning needed |
-| `backend.service.plan` | `claude-sonnet-4-6` | Architectural reasoning about interfaces |
+| Task Kind | Default Tier | Rationale |
+|-----------|-------------|-----------|
+| `data.schemas` | Medium (Sonnet) | Entity design requires reasoning |
+| `data.migrations` | Fast (Haiku) | Pure SQL DDL, no reasoning needed |
+| `backend.service.plan` | Medium (Sonnet) | Architectural reasoning about interfaces |
 | `backend.service.deps` | *(no LLM)* | Package manager only |
-| `backend.service.repository` | `claude-haiku-4-5-20251001` | Repetitive CRUD boilerplate |
-| `backend.service.logic` | `claude-sonnet-4-6` | Business rules require reasoning |
-| `backend.service.handler` | `claude-sonnet-4-6` | Routing + auth integration |
-| `backend.service.bootstrap` | `claude-haiku-4-5-20251001` | Wiring boilerplate |
-| `backend.auth` | `claude-sonnet-4-6` | Security-critical |
-| `backend.messaging` | `claude-sonnet-4-6` | Distributed systems reasoning |
-| `backend.gateway` | `claude-sonnet-4-6` | Platform integration |
-| `contracts` | `claude-haiku-4-5-20251001` | Well-understood DTO/OpenAPI format |
-| `frontend` | `claude-sonnet-4-6` | Multi-file framework reasoning |
-| `infra.docker` | `claude-haiku-4-5-20251001` | Deterministic Dockerfile patterns |
-| `infra.terraform` | `claude-sonnet-4-6` | IaC multi-resource reasoning |
-| `infra.cicd` | `claude-haiku-4-5-20251001` | Standard CI pipeline structure |
-| `crosscut.testing` | `claude-sonnet-4-6` | TDD reasoning across layers |
-| `crosscut.docs` | `claude-haiku-4-5-20251001` | Template-driven docs generation |
+| `backend.service.repository` | Fast (Haiku) | Repetitive CRUD boilerplate |
+| `backend.service.logic` | Medium (Sonnet) | Business rules require reasoning |
+| `backend.service.handler` | Medium (Sonnet) | Routing + auth integration |
+| `backend.service.bootstrap` | Fast (Haiku) | Wiring boilerplate |
+| `backend.auth` | Medium (Sonnet) | Security-critical |
+| `backend.messaging` | Medium (Sonnet) | Distributed systems reasoning |
+| `backend.gateway` | Medium (Sonnet) | Platform integration |
+| `contracts` | Fast (Haiku) | Well-understood DTO/OpenAPI format |
+| `frontend` | Medium (Sonnet) | Multi-file framework reasoning |
+| `infra.docker` | Fast (Haiku) | Deterministic Dockerfile patterns |
+| `infra.terraform` | Medium (Sonnet) | IaC multi-resource reasoning |
+| `infra.cicd` | Fast (Haiku) | Standard CI pipeline structure |
+| `crosscut.testing` | Medium (Sonnet) | TDD reasoning across layers |
+| `crosscut.docs` | Medium (Sonnet) | Documentation reasoning |
+| `backend.reconciliation` | Slow (Opus) | Cross-task compilation fix |
+| `integration.repair` | Slow (Opus) | Cross-file integration repair |
 
 ### Escalation Path on Retry Failure
 
@@ -272,6 +313,8 @@ Unknown model IDs are returned unchanged across all retry attempts.
 | Haiku | `claude-haiku-4-5-20251001` | Default for boilerplate tasks |
 | Sonnet | `claude-sonnet-4-6` | Default for most tasks |
 | Opus | `claude-opus-4-6` | Escalation target; also `DefaultModel` constant |
+
+Provider default: `claude-opus-4-6`
 
 ### ChatGPT (OpenAI)
 
@@ -359,9 +402,7 @@ Provider default: `llama-3.3-70b-versatile`. API base: `https://api.groq.com/ope
 
 ### Loading
 
-Skills are markdown files (`*.md`) loaded from the directory specified by `-skills` (default: `.vibemenu/skills`). If the directory does not exist, an empty registry is returned silently.
-
-Each file is truncated to `MaxSkillBytes` (2000 bytes) before being injected into prompts.
+Skills are markdown files (`*.md`) loaded from the directory specified by `-skills` (default: `.vibemenu/skills`). If the directory does not exist, bundled skills are extracted from the embedded filesystem at startup. Each file is truncated to `MaxSkillBytes` (2000 bytes) before being injected into prompts.
 
 ### Technology Alias Map
 
@@ -375,20 +416,20 @@ Maps manifest technology names to skill file base names (without `.md` extension
 | `Go` | `golang-patterns` |
 | `Fiber` | `go-fiber` |
 | `Gin` | `go-gin` |
-| `Echo` | `go-echo` |
-| `Chi` | `go-chi` |
+| `Echo` | `go-echo-chi` |
+| `Chi` | `go-echo-chi` |
 | **TypeScript / Node** | |
 | `TypeScript` | `coding-standards` |
 | `JavaScript` | `coding-standards` |
-| `Express` | `typescript-express` |
-| `Fastify` | `typescript-fastify` |
-| `NestJS` | `typescript-nestjs` |
-| `Hono` | `typescript-hono` |
+| `Express` | `node-express` |
+| `Fastify` | `node-fastify` |
+| `NestJS` | `node-nestjs` |
+| `Hono` | `node-hono-elysia` |
 | **Python** | |
 | `Python` | `python-patterns` |
 | `FastAPI` | `python-fastapi` |
 | `Django` | `python-django` |
-| `Flask` | `python-flask` |
+| `Flask` | `python-flask-litestar` |
 | **Java / Spring** | |
 | `Java` | `java-coding-standards` |
 | `Spring Boot` | `java-spring-boot` |
@@ -399,14 +440,10 @@ Maps manifest technology names to skill file base names (without `.md` extension
 | `Android` | `android-clean-architecture` |
 | `Kotlin Multiplatform` | `compose-multiplatform` |
 | **Swift / iOS** | |
-| `Swift` | `swiftui` |
-| `SwiftUI` | `swiftui` |
-| `iOS` | `swiftui` |
+| `Swift` / `SwiftUI` / `iOS` | `swiftui` |
 | **Native / Systems** | |
 | `Perl` | `perl-patterns` |
-| `C++` | `cpp-coding-standards` |
-| `C` | `cpp-coding-standards` |
-| **Rust** | |
+| `C++` / `C` | `cpp-coding-standards` |
 | `Axum` | `rust-axum` |
 | `Actix-web` | `rust-actix` |
 | **Frontend frameworks** | |
@@ -420,21 +457,35 @@ Maps manifest technology names to skill file base names (without `.md` extension
 | `Flutter` | `flutter` |
 | `React Native` | `react-native` |
 | **Databases** | |
-| `PostgreSQL` | `postgres-patterns` |
-| `Postgres` | `postgres-patterns` |
-| `MySQL` | `mysql` |
-| `MongoDB` | `mongodb` |
-| `Redis` | `redis` |
-| `DynamoDB` | `dynamodb` |
-| `SQLite` | `sqlite` |
+| `PostgreSQL` / `Postgres` | `postgres-patterns` |
+| `MySQL` | `db-mysql-mariadb` |
+| `MongoDB` | `db-mongodb-couchdb` |
+| `Redis` | `db-redis-memcached` |
+| `DynamoDB` | `db-dynamodb` |
+| `SQLite` | `db-sqlite` |
+| `Valkey` | `db-valkey` |
 | **Message Brokers** | |
-| `Kafka` | `kafka` |
-| `RabbitMQ` | `rabbitmq` |
-| `NATS` | `nats` |
-| `AWS SQS/SNS` | `aws-sqs-sns` |
+| `Kafka` | `broker-kafka` |
+| `RabbitMQ` | `broker-rabbitmq` |
+| `NATS` | `broker-nats` |
+| `AWS SQS/SNS` | `broker-cloud` |
+| **Job Queues** | |
+| `Bull` / `BullMQ` | `jobs-bullmq` |
+| `Temporal` | `jobs-temporal` |
+| `Sidekiq` / `Celery` | `jobs-sidekiq-celery` |
+| **Auth Strategies** | |
+| `JWT` | `auth-jwt-stateless` |
+| `Session-based` | `auth-session-based` |
+| `OIDC` / `SAML` | `auth-oauth2-oidc` |
+| `API Key` | `auth-apikey` |
+| `mTLS` | `auth-mtls` |
+| **File Storage** | |
+| `S3` / `GCS` | `storage-s3-gcs` |
+| `MinIO` | `storage-minio` |
+| `Azure Blob` | `storage-azure-blob` |
+| `R2` | `storage-r2` |
 | **Styling** | |
-| `Tailwind CSS` | `tailwind` |
-| `Tailwind` | `tailwind` |
+| `Tailwind CSS` / `Tailwind` | `tailwind` |
 | **Infrastructure** | |
 | `Docker` | `docker-patterns` |
 | `Terraform` | `terraform` |
@@ -447,9 +498,12 @@ Maps manifest technology names to skill file base names (without `.md` extension
 | `Clerk` | `clerk` |
 | `Cognito` | `aws-cognito` |
 | **Go DB drivers** | |
-| `pgx` | `go-pgx-repository` |
-| `pgxv5` | `go-pgx-repository` |
-| `pgxmock` | `go-pgx-repository` |
+| `pgx` / `pgxv5` / `pgxmock` | `go-pgx-repository` |
+| **Testing** | |
+| `Jest` / `Vitest` / `pytest` / `JUnit` | `test-unit` |
+| `Playwright` / `Cypress` | `test-playwright-cypress` |
+| `k6` / `Locust` | `test-load` |
+| `Pact` | `test-contract` |
 
 ### Universal Skills Per Task Kind
 
@@ -458,17 +512,17 @@ Always injected regardless of which technologies appear in the manifest:
 | Task Kind | Universal Skills |
 |-----------|-----------------|
 | `backend.service.plan` | `backend-patterns`, `go-pgx-repository` |
-| `backend.service.repository` | `backend-patterns`, `coding-standards`, `go-pgx-repository` |
-| `backend.service.logic` | `backend-patterns`, `coding-standards` |
-| `backend.service.handler` | `backend-patterns`, `security-review`, `api-design`, `coding-standards` |
-| `backend.service.bootstrap` | `backend-patterns`, `coding-standards` |
+| `backend.service.repository` | `backend-patterns`, `coding-standards`, `go-pgx-repository`, `go-caching-impl` |
+| `backend.service.logic` | `backend-patterns`, `coding-standards`, `go-background-workers` |
+| `backend.service.handler` | `backend-patterns`, `security-review`, `api-design`, `coding-standards`, `pagination-impl`, `api-versioning-impl` |
+| `backend.service.bootstrap` | `backend-patterns`, `coding-standards`, `file-storage-patterns` |
 | `backend.auth` | `security-review`, `coding-standards`, `security-scan` |
-| `data.schemas` | `database-migrations` |
-| `data.migrations` | `database-migrations`, `postgres-patterns` |
+| `data.schemas` | `database-migrations`, `multi-tenancy` |
+| `data.migrations` | `database-migrations`, `postgres-patterns`, `multi-tenancy` |
 | `backend.messaging` | `backend-patterns`, `coding-standards` |
-| `backend.gateway` | `backend-patterns`, `security-review`, `api-design` |
-| `contracts` | `api-design`, `coding-standards` |
-| `frontend` | `frontend-patterns`, `coding-standards` |
+| `backend.gateway` | `backend-patterns`, `security-review`, `api-design`, `grpc-gateway` |
+| `contracts` | `api-design`, `coding-standards`, `domain-dtos` |
+| `frontend` | `frontend-patterns`, `coding-standards`, `frontend-bundle-optimization`, `frontend-error-boundaries`, `frontend-realtime-client` |
 | `infra.docker` | `docker-patterns`, `deployment-patterns` |
 | `infra.terraform` | `deployment-patterns` |
 | `infra.cicd` | `deployment-patterns`, `verification-loop` |
@@ -484,8 +538,8 @@ Always injected regardless of which technologies appear in the manifest:
 Each task kind is given a specific role that scopes the agent's output. Key constraints per task:
 
 ### `backend.service.plan`
-**Role:** Go software architect  
-**Output:** `go.mod`, `internal/repository/interfaces.go`, `internal/domain/errors.go`  
+**Role:** Go software architect
+**Output:** `go.mod`, `internal/repository/interfaces.go`, `internal/domain/errors.go`
 **CRITICAL:**
 - No implementation code — interfaces only
 - Only direct (first-party) dependencies in `go.mod`; `go mod tidy` resolves transitive deps
@@ -494,60 +548,60 @@ Each task kind is given a specific role that scopes the agent's output. Key cons
 - For PostgreSQL: define `PgxPool` interface (Exec, Query, QueryRow, SendBatch, Begin) in `interfaces.go`
 
 ### `data.schemas`
-**Role:** Expert Go developer  
-**Output:** `internal/domain/*.go` (one file per entity)  
+**Role:** Expert Go developer
+**Output:** `internal/domain/*.go` (one file per entity)
 **CRITICAL:** No DB logic, no HTTP — pure struct types, input/update structs, domain errors only
 
 ### `data.migrations`
-**Role:** Expert database engineer  
+**Role:** Expert database engineer
 **Output:** `db/migrations/*.sql` (up/down pairs)
 
 ### `backend.service.repository`
-**Role:** Expert Go backend engineer  
-**Output:** `internal/repository/interfaces.go`, `internal/repository/postgres/<entity>_repository.go`, `internal/repository/postgres/db.go`, `*_test.go` files  
+**Role:** Expert Go backend engineer
+**Output:** `internal/repository/interfaces.go`, `internal/repository/postgres/<entity>_repository.go`, `internal/repository/postgres/db.go`, `*_test.go` files
 **CRITICAL:** Implement only the interfaces from the plan task; use the `PgxPool` interface, never `*pgxpool.Pool` directly
 
 ### `backend.service.logic`
-**Role:** Expert Go backend engineer  
-**Output:** `internal/service/*.go`, `*_test.go`  
+**Role:** Expert Go backend engineer
+**Output:** `internal/service/*.go`, `*_test.go`
 **CRITICAL:** Accept repo interfaces via constructor DI; no HTTP code
 
 ### `backend.service.handler`
-**Role:** Expert Go backend engineer  
-**Output:** `internal/handler/*.go`, `internal/router/router.go`, `internal/middleware/auth.go`, `*_test.go`  
+**Role:** Expert Go backend engineer
+**Output:** `internal/handler/*.go`, `internal/router/router.go`, `internal/middleware/auth.go`, `*_test.go`
 **CRITICAL:** Auth middleware injection, route registration
 
 ### `backend.service.bootstrap`
-**Role:** Expert Go backend engineer  
-**Output:** `main.go`, `.env.example`  
+**Role:** Expert Go backend engineer
+**Output:** `main.go`, `.env.example`
 **CRITICAL:** Do NOT generate `go.mod` / `go.sum` — the locked dependency tree from the deps phase must not be overwritten
 
 ### `backend.auth`
-**Role:** Expert security engineer  
+**Role:** Expert security engineer
 Authentication/authorization middleware, JWT handling, identity integration
 
 ### `backend.messaging`
-**Role:** Expert distributed systems engineer  
+**Role:** Expert distributed systems engineer
 Message broker configuration, event producer/consumer boilerplate, event schemas
 
 ### `backend.gateway`
-**Role:** Expert platform engineer  
+**Role:** Expert platform engineer
 API gateway routing rules, rate limiting, middleware configuration
 
 ### `contracts`
-**Role:** Expert API designer  
+**Role:** Expert API designer
 DTO types, request/response models, OpenAPI specification
 
 ### `frontend`
-**Role:** Expert frontend engineer  
+**Role:** Expert frontend engineer
 **CRITICAL:**
 - Use `next.config.mjs` (NOT `next.config.ts`)
 - Tailwind CSS v4: use `@tailwindcss/postcss` plugin in `postcss.config.mjs`, NOT the old `tailwindcss` plugin
 - Pin all package versions from the Infrastructure & Dependency Reference
 
 ### `infra.docker`
-**Role:** Expert DevOps engineer  
-**Output:** `Dockerfile`(s), `docker-compose.yml`, `.air.toml`, `Makefile`, `nginx.conf`, `.dockerignore`, setup scripts  
+**Role:** Expert DevOps engineer
+**Output:** `Dockerfile`(s), `docker-compose.yml`, `.air.toml`, `Makefile`, `nginx.conf`, `.dockerignore`, setup scripts
 **CRITICAL:**
 - Use `service_dirs` from the payload for build contexts — do not invent paths
 - Go Dockerfile layer order: `FROM golang:<version>-alpine` → `RUN go install <air>@<version>` → `COPY go.mod go.sum ./` → `RUN go mod download` → `COPY . .` → `CMD ["air", ...]`
@@ -556,20 +610,28 @@ DTO types, request/response models, OpenAPI specification
 - Do NOT generate any Go or TypeScript source files
 
 ### `infra.terraform`
-**Role:** Expert infrastructure engineer  
+**Role:** Expert infrastructure engineer
 IaC configuration (Terraform/Pulumi) for all cloud resources
 
 ### `infra.cicd`
-**Role:** Expert DevOps engineer  
+**Role:** Expert DevOps engineer
 CI/CD pipeline configuration (build, test, deploy stages)
 
 ### `crosscut.testing`
-**Role:** Expert test engineer  
+**Role:** Expert test engineer
 Test scaffolding: unit tests (table-driven), integration tests, E2E setup; target 80%+ coverage on business logic using RED-GREEN-REFACTOR TDD cycle
 
 ### `crosscut.docs`
-**Role:** Expert technical writer  
+**Role:** Expert technical writer
 API documentation, OpenAPI specs, changelog files
+
+### `backend.reconciliation`
+**Role:** Code reviewer / Go compiler expert
+Cross-task compilation fix phase — resolves compile errors that arise from type/interface mismatches between independently generated service layers
+
+### `integration.repair`
+**Role:** Go compiler expert
+Post-pipeline integration repair — fixes cross-file compilation errors across the entire generated codebase
 
 ---
 
@@ -596,25 +658,64 @@ Versions are fallbacks; `ResolveGoModuleVersions()` fetches the latest from `pro
 
 | Key | Module Path | Fallback Version | Test Deps |
 |-----|-------------|------------------|-----------|
+| **Web frameworks** | | | |
 | `Fiber` | `github.com/gofiber/fiber/v2` | `v2.52.5` | `github.com/stretchr/testify v1.9.0` |
 | `Gin` | `github.com/gin-gonic/gin` | `v1.10.0` | |
 | `Echo` | `github.com/labstack/echo/v4` | `v4.12.0` | |
 | `Chi` | `github.com/go-chi/chi/v5` | `v5.1.0` | |
+| **Database drivers** | | | |
 | `pgx` | `github.com/jackc/pgx/v5` | `v5.7.2` | `github.com/pashagolub/pgxmock/v4 v4.4.0` |
 | `PostgreSQL` | `github.com/jackc/pgx/v5` | `v5.7.2` | |
 | `MySQL` | `github.com/go-sql-driver/mysql` | `v1.8.1` | |
 | `SQLite` | `modernc.org/sqlite` | `v1.34.4` | |
 | `MongoDB` | `go.mongodb.org/mongo-driver` | `v1.17.1` | |
+| `Redis` | `github.com/redis/go-redis/v9` | `v9.7.3` | |
+| `sqlx` | `github.com/jmoiron/sqlx` | `v1.4.0` | |
+| `CockroachDB` | `github.com/jackc/pgx/v5` | `v5.7.2` | |
+| **ORM** | | | |
+| `GORM` | `gorm.io/gorm` | `v1.25.12` | |
+| `gorm-postgres` | `gorm.io/driver/postgres` | `v1.5.11` | |
+| `gorm-mysql` | `gorm.io/driver/mysql` | `v1.5.7` | |
+| `gorm-sqlite` | `gorm.io/driver/sqlite` | `v1.5.7` | |
+| `ent` | `entgo.io/ent` | `v0.14.1` | |
+| **Messaging** | | | |
+| `NATS` | `github.com/nats-io/nats.go` | `v1.37.0` | |
+| `Kafka` | `github.com/segmentio/kafka-go` | `v0.4.47` | |
+| `RabbitMQ` | `github.com/rabbitmq/amqp091-go` | `v1.10.0` | |
+| **RPC / API** | | | |
+| `gRPC` | `google.golang.org/grpc` | `v1.70.0` | |
+| `protobuf` | `google.golang.org/protobuf` | `v1.36.5` | |
+| `ConnectRPC` | `connectrpc.com/connect` | `v1.18.1` | |
+| **Auth** | | | |
 | `JWT` | `github.com/golang-jwt/jwt/v5` | `v5.2.1` | |
 | `bcrypt` | `golang.org/x/crypto` | `v0.31.0` | |
+| **Testing** | | | |
 | `testify` | `github.com/stretchr/testify` | `v1.9.0` | |
 | `pgxmock` | `github.com/pashagolub/pgxmock/v4` | `v4.4.0` | |
+| `gomock` | `go.uber.org/mock` | `v0.5.0` | |
+| `httptest` | `net/http/httptest` | *(stdlib)* | |
+| **Validation** | | | |
 | `validator` | `github.com/go-playground/validator/v10` | `v10.22.1` | |
+| **Logging** | | | |
 | `zap` | `go.uber.org/zap` | `v1.27.0` | |
 | `zerolog` | `github.com/rs/zerolog` | `v1.33.0` | |
+| `slog` | `log/slog` | *(stdlib)* | |
+| **Observability** | | | |
+| `prometheus` | `github.com/prometheus/client_golang` | `v1.21.1` | |
+| `otel` | `go.opentelemetry.io/otel` | `v1.34.0` | |
+| `otel-http` | `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp` | `v1.34.0` | |
+| **UUID** | | | |
 | `uuid` | `github.com/google/uuid` | `v1.6.0` | |
-| `NATS` | `github.com/nats-io/nats.go` | `v1.37.0` | |
+| **Config** | | | |
 | `envconfig` | `github.com/kelseyhightower/envconfig` | `v1.4.0` | |
+| `viper` | `github.com/spf13/viper` | `v1.19.0` | |
+| `godotenv` | `github.com/joho/godotenv` | `v1.5.1` | |
+| **Scheduling** | | | |
+| `cron` | `github.com/robfig/cron/v3` | `v3.0.1` | |
+| **HTTP routing** | | | |
+| `gorilla/mux` | `github.com/gorilla/mux` | `v1.8.1` | |
+| **Serialisation** | | | |
+| `sonic` | `github.com/bytedance/sonic` | `v1.13.2` | |
 
 Every service's `go.mod` automatically includes `testify` and `uuid` regardless of the framework.
 
@@ -648,6 +749,7 @@ Versions are fallbacks; `resolveAllNpmVersions()` fetches the latest from `regis
 | `@types/react-dom` | `19.1.0` |
 | `@types/node` | `22.10.0` |
 | `tailwindcss` | `3.4.17` |
+| `@tailwindcss/postcss` | `4.0.17` |
 | `postcss` | `8.5.1` |
 | `autoprefixer` | `10.4.20` |
 | `eslint` | `9.17.0` |
@@ -661,6 +763,20 @@ Versions are fallbacks; `resolveAllNpmVersions()` fetches the latest from `regis
 | `lucide-react` | `0.468.0` |
 | `clsx` | `2.1.1` |
 | `tailwind-merge` | `2.5.5` |
+| `vue` | `3.5.13` |
+| `nuxt` | `3.16.1` |
+| `@angular/core` | `19.2.5` |
+| `express` | `4.21.2` |
+| `fastify` | `5.3.2` |
+| `@nestjs/core` | `11.1.0` |
+| `hono` | `4.7.5` |
+| `@trpc/server` | `11.1.0` |
+| `prisma` | `6.5.0` |
+| `drizzle-orm` | `0.41.0` |
+| `typeorm` | `0.3.21` |
+| `next-auth` | `4.24.11` |
+
+> **Tailwind CSS v4 note:** For Tailwind v4, use `@tailwindcss/postcss` plugin in `postcss.config.mjs` instead of the old `tailwindcss` plugin. Both v3 and v4 packages are tracked.
 
 ### Python — Dependency Resolution
 
@@ -837,10 +953,10 @@ The `TaskPayload` struct is serialised to JSON and injected into each agent's us
 The orchestrator tracks completed tasks in:
 
 ```
-<output_dir>/.realize/state.json
+<output_dir>/.realize-progress.json
 ```
 
-On each successful task completion, the task ID is persisted. On a subsequent run of `cmd/realize` against the same output directory, tasks already present in `state.json` are skipped with an `"already completed"` log message. This enables safe resume after partial failures or interruptions without re-running successful tasks.
+On each successful task completion, the task ID is persisted. On a subsequent run of `cmd/realize` against the same output directory, tasks already present in `.realize-progress.json` are skipped with an `"already completed"` log message. This enables safe resume after partial failures or interruptions without re-running successful tasks.
 
 ---
 
