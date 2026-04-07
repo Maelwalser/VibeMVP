@@ -480,8 +480,22 @@ func (m Model) execCommand(cmd string) (tea.Model, tea.Cmd) {
 	case "tabp", "bp":
 		m.activeSection = (m.activeSection - 1 + len(m.sections)) % len(m.sections)
 		m.activeField = 0
+	case "validate", "v":
+		mf := m.BuildManifest()
+		errs := manifest.Validate(mf)
+		if len(errs) == 0 {
+			m.cmd.status = "Validation passed — no cross-pillar issues found"
+			m.cmd.isErr = false
+		} else {
+			msgs := make([]string, 0, len(errs))
+			for _, e := range errs {
+				msgs = append(msgs, fmt.Sprintf("%s: %s", e.Path, e.Message))
+			}
+			m.cmd.status = fmt.Sprintf("%d issue(s): %s", len(errs), strings.Join(msgs, " | "))
+			m.cmd.isErr = true
+		}
 	case "help", "h":
-		m.cmd.status = "Tab:section  j/k:nav  i:insert  Space:cycle  :w save  :q quit"
+		m.cmd.status = "Tab:section  j/k:nav  i:insert  Space:cycle  :w save  :q quit  :v validate"
 		m.cmd.isErr = false
 	default:
 		if len(cmd) == 1 && cmd[0] >= '1' && cmd[0] <= '9' {
@@ -505,6 +519,16 @@ func (m Model) execSave() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	mf := m.BuildManifest()
+	if errs := manifest.Validate(mf); len(errs) > 0 {
+		first := errs[0]
+		if len(errs) == 1 {
+			m.cmd.status = fmt.Sprintf("E: %s \u2014 %s", first.Path, first.Message)
+		} else {
+			m.cmd.status = fmt.Sprintf("E: %s \u2014 %s (%d issues total)", first.Path, first.Message, len(errs))
+		}
+		m.cmd.isErr = true
+		return m, nil
+	}
 	if err := m.onSave(mf); err != nil {
 		m.cmd.status = fmt.Sprintf("Error: %v", err)
 		m.cmd.isErr = true
@@ -542,9 +566,6 @@ func (m Model) BuildManifest() *manifest.Manifest {
 		Infra:       m.infraEditor.ToManifestInfraPillar(),
 		CrossCut:    m.crossCutEditor.ToManifestCrossCutPillar(),
 		Realize:     m.realizeEditor.ToManifestRealizeOptions(),
-		// Legacy flat fields for backward compatibility
-		Databases: dataPillar.Databases,
-		Entities:  dataPillar.Entities,
 	}
 }
 

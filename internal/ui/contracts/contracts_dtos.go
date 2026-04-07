@@ -66,6 +66,7 @@ func (ce ContractsEditor) updateDTOList(key tea.KeyMsg) (ContractsEditor, tea.Cm
 			if ce.dtoIdx > 0 && ce.dtoIdx >= len(ce.dtos) {
 				ce.dtoIdx = len(ce.dtos) - 1
 			}
+			ce.ClearStaleDTORefs()
 		}
 	case "enter":
 		if n > 0 {

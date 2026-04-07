@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-04-07T22:35:16.364542313+02:00",
+  "created_at": "2026-04-07T23:21:40.006778963+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [
@@ -147,6 +147,7 @@
         }
       ]
     },
+    "monolith_environment": "dev",
     "language": "Go",
     "language_version": "1.24",
     "framework": "Fiber",
@@ -370,7 +371,7 @@
       "form_handling": "React Hook Form",
       "validation": "Zod",
       "image_optimization": "Next/Image (built-in)",
-      "auth_flow_type": "Redirect (OAuth/OIDC)",
+      "auth_flow_type": "None (no auth configured)",
       "error_boundary": "React Error Boundary",
       "bundle_optimization": "Code splitting (route-based)"
     },
@@ -533,13 +534,5 @@
     "tier_fast": "claude-haiku-4-5-20251001",
     "tier_medium": "claude-sonnet-4-6",
     "tier_slow": "claude-opus-4-6"
-  },
-  "databases": [
-    {
-      "alias": "primary",
-      "type": "PostgreSQL",
-      "ssl_mode": "require",
-      "replication": "single-node"
-    }
-  ]
+  }
 }

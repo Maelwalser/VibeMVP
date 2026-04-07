@@ -58,6 +58,7 @@ func (be BackendEditor) updateServiceList(key tea.KeyMsg) (BackendEditor, tea.Cm
 			if ed.itemIdx > 0 && ed.itemIdx >= len(ed.items) {
 				ed.itemIdx = len(ed.items) - 1
 			}
+			be.ClearStaleServiceRefs()
 		}
 	case "enter":
 		if n > 0 {

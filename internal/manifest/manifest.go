@@ -179,29 +179,6 @@ type ProviderAssignments map[string]ProviderAssignment
 
 // ── Legacy pillars (preserved for existing code compatibility) ────────────────
 
-type TestingPillar struct {
-	UnitCoverage    string       `json:"unit_coverage,omitempty"`
-	IntegCoverage   string       `json:"integ_coverage,omitempty"`
-	E2EFramework    E2EFramework `json:"e2e_framework,omitempty"`
-	E2ECoverage     string       `json:"e2e_coverage,omitempty"`
-	TestingStrategy string       `json:"testing_strategy,omitempty"`
-}
-
-type CICDPillar struct {
-	CIPlatform    CIPlatform     `json:"ci_platform,omitempty"`
-	PipelineGates string         `json:"pipeline_gates,omitempty"`
-	EnvStrategy   string         `json:"env_strategy,omitempty"`
-	SecretsMgmt   SecretsBackend `json:"secrets_mgmt,omitempty"`
-}
-
-type TelemetryPillar struct {
-	LogSolution LogSolution `json:"log_solution,omitempty"`
-	LogFormat   string      `json:"log_format,omitempty"`
-	Metrics     string      `json:"metrics,omitempty"`
-	Tracing     string      `json:"tracing,omitempty"`
-	Alerting    string      `json:"alerting,omitempty"`
-}
-
 // ── Root manifest ─────────────────────────────────────────────────────────────
 
 // Manifest is the root document holding all configuration.
@@ -217,13 +194,6 @@ type Manifest struct {
 	Infra     InfraPillar     `json:"infrastructure"`
 	CrossCut  CrossCutPillar  `json:"cross_cutting"`
 	Realize   RealizeOptions  `json:"realize,omitempty"`
-
-	// Legacy fields kept for backward compatibility during transition.
-	Databases []DBSourceDef   `json:"databases,omitempty"`
-	Entities  []EntityDef     `json:"entities,omitempty"`
-	Testing   TestingPillar   `json:"testing,omitempty"`
-	CICD      CICDPillar      `json:"cicd,omitempty"`
-	Telemetry TelemetryPillar `json:"telemetry,omitempty"`
 }
 
 // Load reads and parses a Manifest from a JSON file at path.
@@ -256,30 +226,11 @@ func (m Manifest) MarshalJSON() ([]byte, error) {
 		Infrastructure *InfraPillar     `json:"infrastructure,omitempty"`
 		CrossCutting   *CrossCutPillar  `json:"cross_cutting,omitempty"`
 		Realize        *RealizeOptions  `json:"realize,omitempty"`
-		// Legacy fields retained for backward compatibility.
-		Databases []DBSourceDef    `json:"databases,omitempty"`
-		Entities  []EntityDef      `json:"entities,omitempty"`
-		Testing   *TestingPillar   `json:"testing,omitempty"`
-		CICD      *CICDPillar      `json:"cicd,omitempty"`
-		Telemetry *TelemetryPillar `json:"telemetry,omitempty"`
 	}
 
 	s := shadow{
 		CreatedAt:   m.CreatedAt,
 		Description: m.Description,
-		Databases:   m.Databases,
-		Entities:    m.Entities,
-	}
-
-	// Only include legacy struct pillars if they have data.
-	if m.Testing != (TestingPillar{}) {
-		s.Testing = &m.Testing
-	}
-	if m.CICD != (CICDPillar{}) {
-		s.CICD = &m.CICD
-	}
-	if m.Telemetry != (TelemetryPillar{}) {
-		s.Telemetry = &m.Telemetry
 	}
 
 	if !m.Backend.isEmpty() {

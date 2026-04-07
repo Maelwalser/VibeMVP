@@ -175,9 +175,9 @@ func authFlowOptionsFor(strategies []string) []string {
 		}
 	}
 
-	// No strategy configured — return all options.
+	// No strategy configured — auth is disabled in the backend.
 	if !hasJWT && !hasSession && !hasOAuth && !hasAPIKey && len(strategies) == 0 {
-		return []string{"Redirect (OAuth/OIDC)", "Modal login", "Magic link", "Passwordless", "Social only"}
+		return []string{"None (no auth configured)"}
 	}
 
 	var opts []string

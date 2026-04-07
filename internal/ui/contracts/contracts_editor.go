@@ -97,9 +97,11 @@ func (ce *ContractsEditor) SetDomains(domains []string) {
 	ce.availableDomains = domains
 }
 
-// SetServices updates the list of available service names for cross-referencing.
+// SetServices updates the list of available service names for cross-referencing
+// and clears stale service references on committed endpoints.
 func (ce *ContractsEditor) SetServices(services []string) {
 	ce.availableServices = services
+	ce.ClearStaleServiceRefs(services)
 }
 
 // SetServiceDefs updates full service definitions for technology-based protocol filtering.

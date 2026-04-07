@@ -40,6 +40,7 @@ func (be *BackendEditor) SetDBSourceTypes(types map[string]string) {
 // not on every keypress, to avoid corrupting SelIdx during dropdown navigation.
 func (be *BackendEditor) SetCacheAliases(aliases []string) {
 	be.cacheAliases = aliases
+	be.clearStaleCacheRef()
 }
 
 // SetDBSourceAliases stores all DB source aliases from the Data pillar and
@@ -448,6 +449,8 @@ func (be *BackendEditor) SetEnvironmentNames(names []string) {
 	be.applyEnvNamesToServiceFields(be.MessagingFields)
 	// Refresh environment dropdown in the API gateway config.
 	be.applyEnvNamesToServiceFields(be.APIGWFields)
+	// Clear stale environment refs in committed domain data.
+	be.clearStaleEnvRefs()
 }
 
 // SetEnvironmentDefs injects full environment definitions so the API Gateway
@@ -537,4 +540,67 @@ func (be *BackendEditor) applyEnvNamesToServiceFields(fields []core.Field) {
 		}
 		break
 	}
+}
+
+// ── stale reference clearing ─────────────────────────────────────────────────
+
+// clearStaleEnvRefs clears environment references in committed Services,
+// Messaging, and API Gateway when the referenced environment no longer exists.
+func (be *BackendEditor) clearStaleEnvRefs() {
+	envSet := make(map[string]bool, len(be.environmentNames))
+	for _, n := range be.environmentNames {
+		envSet[n] = true
+	}
+	for i := range be.Services {
+		if be.Services[i].Environment != "" && !envSet[be.Services[i].Environment] {
+			be.Services[i].Environment = ""
+		}
+	}
+}
+
+// ClearStaleServiceRefs removes references to deleted services from CommLinks,
+// Events, and JobQueues. Called after a service is deleted.
+func (be *BackendEditor) ClearStaleServiceRefs() {
+	svcSet := make(map[string]bool, len(be.Services))
+	for _, s := range be.Services {
+		if s.Name != "" {
+			svcSet[s.Name] = true
+		}
+	}
+	for i := range be.CommLinks {
+		if be.CommLinks[i].From != "" && !svcSet[be.CommLinks[i].From] {
+			be.CommLinks[i].From = ""
+		}
+		if be.CommLinks[i].To != "" && !svcSet[be.CommLinks[i].To] {
+			be.CommLinks[i].To = ""
+		}
+	}
+	for i := range be.Events {
+		if be.Events[i].PublisherService != "" && !svcSet[be.Events[i].PublisherService] {
+			be.Events[i].PublisherService = ""
+		}
+		if be.Events[i].ConsumerService != "" && !svcSet[be.Events[i].ConsumerService] {
+			be.Events[i].ConsumerService = ""
+		}
+	}
+	for i := range be.jobQueues {
+		if be.jobQueues[i].WorkerService != "" && !svcSet[be.jobQueues[i].WorkerService] {
+			be.jobQueues[i].WorkerService = ""
+		}
+	}
+}
+
+// clearStaleCacheRef clears the rate_limit_backend security field when the
+// referenced cache alias no longer exists.
+func (be *BackendEditor) clearStaleCacheRef() {
+	cur := core.FieldGet(be.securityFields, "rate_limit_backend")
+	if cur == "" {
+		return
+	}
+	for _, alias := range be.cacheAliases {
+		if alias == cur {
+			return
+		}
+	}
+	be.securityFields = core.SetFieldValue(be.securityFields, "rate_limit_backend", "")
 }

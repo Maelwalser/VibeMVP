@@ -29,8 +29,8 @@ func main() {
 		manifestPath := appModel.MainModel().FilePath()
 		fmt.Printf("\nManifest saved to %s\n", manifestPath)
 		fmt.Printf("Backend   : %s  [%s]\n", mf.Backend.ArchPattern, mf.Backend.ComputeEnv)
-		fmt.Printf("Entities  : %d defined\n", len(mf.Entities))
-		fmt.Printf("Databases : %d defined\n", len(mf.Databases))
+		fmt.Printf("Entities  : %d defined\n", len(mf.Data.Entities))
+		fmt.Printf("Databases : %d defined\n", len(mf.Data.Databases))
 		fmt.Printf("Services  : %d defined\n", len(mf.Backend.Services))
 	}
 	if m.RealizeTriggered() {

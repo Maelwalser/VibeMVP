@@ -67,44 +67,6 @@ const (
 	RenderISR RenderingMode = "ISR"
 )
 
-type E2EFramework string
-
-const (
-	E2EPlaywright E2EFramework = "Playwright"
-	E2ECypress    E2EFramework = "Cypress"
-	E2ENone       E2EFramework = "none"
-)
-
-type CIPlatform string
-
-const (
-	CIGitHubActions CIPlatform = "GitHub Actions"
-	CIGitLabCI      CIPlatform = "GitLab CI"
-	CICircleCI      CIPlatform = "CircleCI"
-	CIJenkins       CIPlatform = "Jenkins"
-	CINone          CIPlatform = "none"
-)
-
-type SecretsBackend string
-
-const (
-	SecretsVault    SecretsBackend = "HashiCorp Vault"
-	SecretsAWS      SecretsBackend = "AWS Secrets Manager"
-	SecretsGCP      SecretsBackend = "GCP Secret Manager"
-	SecretsEnvFiles SecretsBackend = "env files"
-	SecretsNone     SecretsBackend = "none"
-)
-
-type LogSolution string
-
-const (
-	LogELK        LogSolution = "ELK Stack"
-	LogDatadog    LogSolution = "Datadog"
-	LogSplunk     LogSolution = "Splunk"
-	LogCloudWatch LogSolution = "CloudWatch"
-	LogOther      LogSolution = "other"
-)
-
 type ColumnType string
 
 const (

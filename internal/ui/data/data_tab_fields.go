@@ -178,6 +178,16 @@ func (dt *DataTabEditor) SetServiceNames(names []string) {
 		return
 	}
 	dt.serviceNames = names
+	// Clear stale used_by_service refs on committed file storages.
+	svcSet := make(map[string]bool, len(names))
+	for _, n := range names {
+		svcSet[n] = true
+	}
+	for i := range dt.fileStorages {
+		if dt.fileStorages[i].UsedByService != "" && !svcSet[dt.fileStorages[i].UsedByService] {
+			dt.fileStorages[i].UsedByService = ""
+		}
+	}
 }
 
 // archivalStorageByProvider maps infra cloud_provider → valid archival storage options.
