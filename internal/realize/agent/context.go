@@ -34,4 +34,9 @@ type Context struct {
 	// constructors with the correct argument count and return signature, even
 	// when the corresponding file excerpt was truncated by the memory budget.
 	AllConstructors []memory.ConstructorSig
+	// AllServiceMethods is a snapshot of every exported method signature on
+	// service/repository structs. Like AllConstructors, these are extracted from
+	// untruncated content at commit time, ensuring handler tasks generate
+	// compatible method calls even when file excerpts are budget-limited.
+	AllServiceMethods []memory.ServiceMethodSig
 }

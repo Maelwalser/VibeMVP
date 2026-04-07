@@ -15,10 +15,21 @@ import (
 	"github.com/vibe-menu/internal/realize/verify"
 )
 
+// RepairSummary reports what the integration repair phase did, making the
+// outcome visible to operators instead of silently swallowing errors.
+type RepairSummary struct {
+	AttemptCount  int
+	PatchedFiles  int
+	AgentErrors   int
+	WriteErrors   int
+	SkippedErrors []string // human-readable descriptions of skipped errors
+}
+
 // repairIntegrationErrors attempts to fix cross-task compilation errors that
 // survived deterministic fixes by invoking an LLM on each failing module.
 // Up to 2 rounds of LLM repair + deterministic cleanup + recheck are run.
-// The final IntegrationResult (passing or failing) is returned.
+// The final IntegrationResult (passing or failing) is returned along with a
+// RepairSummary for operator visibility.
 func repairIntegrationErrors(
 	ctx context.Context,
 	outputDir string,
@@ -26,25 +37,46 @@ func repairIntegrationErrors(
 	provider manifest.ProviderAssignment,
 	tierOverrides map[ModelTier]string,
 	verbose bool,
-) verify.IntegrationResult {
+	logFn func(string),
+) (verify.IntegrationResult, RepairSummary) {
+	logf := func(format string, args ...interface{}) {
+		msg := fmt.Sprintf(format, args...)
+		if logFn != nil {
+			logFn(msg)
+		} else {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+	}
+
 	a := buildRepairAgent(provider, tierOverrides, verbose)
+	var summary RepairSummary
 
 	const maxRepairAttempts = 2
 	for attempt := 0; attempt < maxRepairAttempts; attempt++ {
+		summary.AttemptCount++
 		for _, ierr := range intResult.Errors {
 			dir := filepath.Join(outputDir, ierr.Dir)
 
 			sourceFiles, err := collectModuleFiles(dir, ierr.Language)
-			if err != nil || len(sourceFiles) == 0 {
+			if err != nil {
+				logf("realize: repair: could not read files from %s: %v", ierr.Dir, err)
+				summary.SkippedErrors = append(summary.SkippedErrors,
+					fmt.Sprintf("module %s: read error: %v", ierr.Dir, err))
+				continue
+			}
+			if len(sourceFiles) == 0 {
+				summary.SkippedErrors = append(summary.SkippedErrors,
+					fmt.Sprintf("module %s: no %s files found", ierr.Dir, ierr.Language))
 				continue
 			}
 
 			ac := buildRepairContext(attempt, sourceFiles, ierr.Dir, ierr.Output)
-			result, err := a.Run(ctx, ac)
-			if err != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "realize: integration repair agent error: %v\n", err)
-				}
+			result, agentErr := a.Run(ctx, ac)
+			if agentErr != nil {
+				summary.AgentErrors++
+				logf("realize: repair: agent error for %s (attempt %d): %v", ierr.Dir, attempt, agentErr)
+				summary.SkippedErrors = append(summary.SkippedErrors,
+					fmt.Sprintf("module %s: agent error: %v", ierr.Dir, agentErr))
 				continue
 			}
 
@@ -52,9 +84,16 @@ func repairIntegrationErrors(
 			for _, f := range result.Files {
 				fullPath := filepath.Join(dir, filepath.FromSlash(f.Path))
 				if mkErr := os.MkdirAll(filepath.Dir(fullPath), 0o755); mkErr != nil {
+					summary.WriteErrors++
+					logf("realize: repair: mkdir %s: %v", filepath.Dir(fullPath), mkErr)
 					continue
 				}
-				_ = os.WriteFile(fullPath, []byte(f.Content), 0o644)
+				if writeErr := os.WriteFile(fullPath, []byte(f.Content), 0o644); writeErr != nil {
+					summary.WriteErrors++
+					logf("realize: repair: write %s: %v", f.Path, writeErr)
+					continue
+				}
+				summary.PatchedFiles++
 			}
 		}
 
@@ -63,10 +102,10 @@ func repairIntegrationErrors(
 
 		intResult = verify.RunIntegrationBuild(ctx, outputDir)
 		if intResult.Passed {
-			return intResult
+			return intResult, summary
 		}
 	}
-	return intResult
+	return intResult, summary
 }
 
 // buildRepairAgent returns a TierSlow agent for integration repair, respecting
@@ -121,6 +160,8 @@ func collectModuleFiles(dir, language string) ([]dag.GeneratedFile, error) {
 		ext = ".go"
 	case "typescript":
 		ext = ".ts"
+	case "python":
+		ext = ".py"
 	default:
 		return nil, nil
 	}
@@ -132,7 +173,8 @@ func collectModuleFiles(dir, language string) ([]dag.GeneratedFile, error) {
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if name == "vendor" || name == "node_modules" || strings.HasPrefix(name, ".") {
+			if name == "vendor" || name == "node_modules" || strings.HasPrefix(name, ".") ||
+				name == "__pycache__" || name == "venv" || name == ".venv" {
 				return filepath.SkipDir
 			}
 			return nil

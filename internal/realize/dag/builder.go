@@ -16,6 +16,10 @@ func (b *Builder) Build(m *manifest.Manifest) (*DAG, error) {
 	// has concrete Language/Framework values even when using ConfigRef.
 	resolveConfigRefs(m.Backend.Services, m.Backend.StackConfigs)
 
+	if err := validateManifestRefs(m); err != nil {
+		return nil, err
+	}
+
 	d := &DAG{Tasks: make(map[string]*Task)}
 
 	b.addDataTasks(m, d)
@@ -156,17 +160,18 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 			Label:        "Generate authentication middleware",
 			Dependencies: dataDeps,
 			Payload: TaskPayload{
-				ModulePath:  authModPath,
-				ArchPattern: m.Backend.ArchPattern,
-				EnvConfig:   m.Backend.Env.OrZero(),
-				Service:     &authSvcCopy,
-				Domains:     m.Data.Domains,
-				Databases:   m.Data.Databases,
-				AllServices: m.Backend.Services,
-				Auth:        m.Backend.Auth,
-				Endpoints:   m.Contracts.Endpoints,
-				DTOs:        m.Contracts.DTOs,
-				OutputDir:   backendBaseDir(svcDirs),
+				ModulePath:   authModPath,
+				ArchPattern:  m.Backend.ArchPattern,
+				EnvConfig:    m.Backend.Env.OrZero(),
+				Service:      &authSvcCopy,
+				Domains:      m.Data.Domains,
+				Databases:    m.Data.Databases,
+				FileStorages: m.Data.FileStorages,
+				AllServices:  m.Backend.Services,
+				Auth:         m.Backend.Auth,
+				Endpoints:    m.Contracts.Endpoints,
+				DTOs:         m.Contracts.DTOs,
+				OutputDir:    backendBaseDir(svcDirs),
 			},
 		})
 	}
@@ -510,6 +515,7 @@ func (b *Builder) addContractsTask(m *manifest.Manifest, d *DAG) {
 			Versioning:   m.Contracts.Versioning.OrZero(),
 			ExternalAPIs: m.Contracts.ExternalAPIs,
 			Auth:         m.Backend.Auth,
+			JobQueues:    m.Backend.JobQueues,
 			OutputDir:    contractsOutputDir(m, svcDirs),
 			ServiceDirs:  svcDirs,
 		},
@@ -581,6 +587,7 @@ func (b *Builder) addInfraTasks(m *manifest.Manifest, d *DAG) {
 			AllServices: m.Backend.Services,
 			Domains:     m.Data.Domains,
 			Databases:   m.Data.Databases,
+			Governances: m.Data.Governances,
 			Infra:       &infra,
 			Frontend:    frontendOrNil(m),
 			ServiceDirs: svcDirs,
@@ -648,6 +655,9 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 				Domains:     m.Data.Domains,
 				DTOs:        m.Contracts.DTOs,
 				Endpoints:   m.Contracts.Endpoints,
+				CommLinks:   m.Backend.CommLinks,
+				Events:      m.Backend.Events,
+				JobQueues:   m.Backend.JobQueues,
 				Frontend:    frontendOrNil(m),
 				Infra:       infraOrNil(m),
 				CrossCut:    &cc,

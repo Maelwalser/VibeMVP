@@ -175,6 +175,28 @@ func UserMessage(ac *Context) (string, error) {
 		b.WriteString("```\n")
 	}
 
+	// Inject service method signatures from shared memory. These are extracted at
+	// commit time from full, untruncated file content, ensuring handlers call service
+	// methods with the exact parameter and return types even when excerpts are truncated.
+	if len(ac.AllServiceMethods) > 0 && ac.AttemptNumber == 0 {
+		b.WriteString("\n## Service Method Signatures\n\n")
+		b.WriteString("Call these methods with the **exact** parameter and return types shown.\n")
+		b.WriteString("The `// from:` comment tells you where to import from (same rules as constructors above).\n\n")
+		b.WriteString("```\n")
+		prevFile := ""
+		for _, m := range ac.AllServiceMethods {
+			if m.File != prevFile {
+				if prevFile != "" {
+					b.WriteString("\n")
+				}
+				b.WriteString("// from: " + m.File + "\n")
+				prevFile = m.File
+			}
+			b.WriteString(m.Signature + "\n")
+		}
+		b.WriteString("```\n")
+	}
+
 	if ac.PreviousErrors != "" {
 		b.WriteString("\n## Previous Attempt Failed — Verification Errors\n\n")
 		b.WriteString("The previous code generation attempt failed the following verification checks. ")

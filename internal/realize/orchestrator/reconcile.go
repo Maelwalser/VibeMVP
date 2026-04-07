@@ -64,36 +64,37 @@ func runReconciliationTask(
 		return st.MarkCompleted(task.ID)
 	}
 
-	// Collect only Go failures — the reconciliation task owns Go compilation only.
-	var goErrors []verify.IntegrationError
+	// Collect all compilation errors — reconciliation handles Go, TypeScript, and Python.
+	var langErrors []verify.IntegrationError
 	for _, e := range intResult.Errors {
-		if e.Language == "go" {
-			goErrors = append(goErrors, e)
+		switch e.Language {
+		case "go", "typescript", "python":
+			langErrors = append(langErrors, e)
 		}
 	}
-	if len(goErrors) == 0 {
-		logf("reconciliation: no Go compilation errors — skipping LLM repair")
+	if len(langErrors) == 0 {
+		logf("reconciliation: no compilation errors — skipping LLM repair")
 		return st.MarkCompleted(task.ID)
 	}
 
-	logf("reconciliation: %d Go module(s) have compilation errors — invoking LLM repair", len(goErrors))
+	logf("reconciliation: %d module(s) have compilation errors — invoking LLM repair", len(langErrors))
 
 	// Step 3: per-module LLM repair.
 	// Each failing module is repaired in its own agent call so prompts stay within
 	// the context window even for large codebases.
 	a := buildRepairAgent(provider, tierOverrides, verbose)
 
-	for _, ierr := range goErrors {
+	for _, ierr := range langErrors {
 		// ierr.Dir is relative to scanRoot (set by RunIntegrationBuild).
 		moduleDir := filepath.Join(scanRoot, filepath.FromSlash(ierr.Dir))
 
-		sourceFiles, err := collectModuleFiles(moduleDir, "go")
+		sourceFiles, err := collectModuleFiles(moduleDir, ierr.Language)
 		if err != nil || len(sourceFiles) == 0 {
-			logf("reconciliation: could not read files from %s (%v) — skipping", ierr.Dir, err)
+			logf("reconciliation: could not read %s files from %s (%v) — skipping", ierr.Language, ierr.Dir, err)
 			continue
 		}
 
-		logf("reconciliation: repairing module %s (%d files)", ierr.Dir, len(sourceFiles))
+		logf("reconciliation: repairing %s module %s (%d files)", ierr.Language, ierr.Dir, len(sourceFiles))
 		if verbose {
 			logf("reconciliation: build errors in %s:\n%s", ierr.Dir, ierr.Output)
 		}
@@ -130,6 +131,17 @@ func runReconciliationTask(
 	// This catches formatting drift introduced by the repair agent.
 	if fixes := verify.FixImportPaths(outputDir); fixes != "" {
 		logf("reconciliation post-fix: %s", fixes)
+	}
+
+	// Step 4: post-patch verification — re-run integration build to check if patches
+	// actually resolved the errors. Does NOT loop (avoids infinite LLM spend); remaining
+	// errors are caught by repairIntegrationErrors() in orchestrator.Run().
+	logf("reconciliation: re-running integration build to verify patches")
+	postResult := verify.RunIntegrationBuild(ctx, scanRoot)
+	if postResult.Passed {
+		logf("reconciliation: all patches verified — build passes ✓")
+	} else {
+		logf("reconciliation: %d error(s) remain after patch — will be caught by integration repair", len(postResult.Errors))
 	}
 
 	return st.MarkCompleted(task.ID)

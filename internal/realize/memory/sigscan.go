@@ -81,14 +81,54 @@ func ExtractConstructorSigs(filePath, content string) []string {
 	}
 }
 
+// assembleGoFuncSig handles multi-line function declarations by accumulating
+// subsequent lines when the initial "func ..." line doesn't contain the opening "{".
+// Returns the full assembled signature (without the body) and the number of
+// additional lines consumed. This ensures signatures like:
+//
+//	func NewService(
+//	    repo Repository,
+//	    logger Logger,
+//	) (*Service, error) {
+//
+// are captured as a single signature string.
+func assembleGoFuncSig(lines []string, startIdx int) (sig string, extraLines int) {
+	trimmed := strings.TrimSpace(lines[startIdx])
+	if strings.Contains(trimmed, "{") {
+		// Single-line: strip the opening brace.
+		sig = strings.TrimSuffix(strings.TrimSuffix(trimmed, " {"), "{")
+		return strings.TrimSpace(sig), 0
+	}
+	// Multi-line: accumulate until we find "{" or a blank line (bail out).
+	var b strings.Builder
+	b.WriteString(trimmed)
+	for j := startIdx + 1; j < len(lines); j++ {
+		extra := strings.TrimSpace(lines[j])
+		if extra == "" {
+			break // blank line — stop accumulating
+		}
+		b.WriteString(" " + extra)
+		extraLines = j - startIdx
+		if strings.Contains(extra, "{") {
+			assembled := b.String()
+			assembled = strings.TrimSuffix(strings.TrimSuffix(assembled, " {"), "{")
+			return strings.TrimSpace(assembled), extraLines
+		}
+	}
+	// No opening brace found — return what we have (may be a forward declaration).
+	return strings.TrimSpace(b.String()), extraLines
+}
+
 // extractGoCtorSigs extracts exported constructor/factory signatures from Go source.
 // It handles both package-level funcs (func NewFoo) and method-based constructors
 // (func (r *Repo) NewSomething), and recognises a wider set of prefixes than the
-// older prompt-side extractor.
+// older prompt-side extractor. Multi-line declarations are assembled into a single
+// signature string.
 func extractGoCtorSigs(content string) []string {
+	lines := strings.Split(content, "\n")
 	var sigs []string
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
 		if !strings.HasPrefix(trimmed, "func ") {
 			continue
 		}
@@ -96,8 +136,9 @@ func extractGoCtorSigs(content string) []string {
 		if !isGoCtorName(name) {
 			continue
 		}
-		sig := strings.TrimSuffix(strings.TrimSuffix(trimmed, " {"), "{")
-		sigs = append(sigs, strings.TrimSpace(sig))
+		sig, extra := assembleGoFuncSig(lines, i)
+		sigs = append(sigs, sig)
+		i += extra
 	}
 	return sigs
 }
@@ -236,6 +277,101 @@ func extractPyCtorSigs(content string) []string {
 			strings.HasPrefix(trimmed, "async def build_")
 		if isFactory && strings.Contains(trimmed, "(") {
 			sigs = append(sigs, strings.TrimSuffix(trimmed, ":"))
+		}
+	}
+	return sigs
+}
+
+// ExtractServiceMethodSigs returns exported method signatures on service/repository
+// structs from Go source. Unlike ExtractConstructorSigs (which captures New*/Make*/etc.),
+// this captures all exported methods with receivers — e.g.:
+//
+//	func (s *UserService) GetByEmail(ctx context.Context, email string) (*User, error)
+//
+// These are never truncated by the memory budget, ensuring handler tasks can generate
+// compatible method calls even when file excerpts are budget-limited.
+func ExtractServiceMethodSigs(filePath, content string) []string {
+	lower := strings.ToLower(filePath)
+	switch {
+	case strings.HasSuffix(lower, ".go") && !strings.HasSuffix(lower, "_test.go"):
+		return extractGoServiceMethodSigs(content)
+	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
+		return extractTSServiceMethodSigs(content)
+	default:
+		return nil
+	}
+}
+
+// extractGoServiceMethodSigs extracts exported method signatures that have a receiver.
+// Constructor signatures (New*/Make*/etc.) are excluded — they are handled separately
+// by ExtractConstructorSigs. Multi-line declarations are assembled into a single string.
+func extractGoServiceMethodSigs(content string) []string {
+	lines := strings.Split(content, "\n")
+	var sigs []string
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(trimmed, "func (") {
+			continue
+		}
+		name := goFuncName(trimmed)
+		// Only exported methods (capitalised), exclude constructors.
+		if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
+			continue
+		}
+		if isGoCtorName(name) {
+			continue
+		}
+		sig, extra := assembleGoFuncSig(lines, i)
+		sigs = append(sigs, sig)
+		i += extra
+	}
+	return sigs
+}
+
+// extractTSServiceMethodSigs extracts public method signatures from exported TypeScript classes.
+func extractTSServiceMethodSigs(content string) []string {
+	lines := strings.Split(content, "\n")
+	var sigs []string
+	inClass := false
+	depth := 0
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+
+		if (strings.HasPrefix(trimmed, "export class ") ||
+			strings.HasPrefix(trimmed, "export default class ")) &&
+			strings.Contains(trimmed, "{") {
+			inClass = true
+			depth = 1
+			continue
+		}
+		if inClass {
+			depth += strings.Count(lines[i], "{") - strings.Count(lines[i], "}")
+			if depth <= 0 {
+				inClass = false
+				depth = 0
+				continue
+			}
+			// Skip constructor (handled by ExtractConstructorSigs), private, protected.
+			if strings.HasPrefix(trimmed, "constructor(") ||
+				strings.HasPrefix(trimmed, "private ") ||
+				strings.HasPrefix(trimmed, "protected ") ||
+				strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			// Match public method signatures: "async methodName(" or "methodName("
+			isMethod := false
+			if strings.HasPrefix(trimmed, "async ") && strings.Contains(trimmed, "(") {
+				isMethod = true
+			} else if len(trimmed) > 0 && trimmed[0] >= 'a' && trimmed[0] <= 'z' && strings.Contains(trimmed, "(") {
+				isMethod = true
+			} else if strings.HasPrefix(trimmed, "public ") && strings.Contains(trimmed, "(") {
+				isMethod = true
+			}
+			if isMethod {
+				sig := strings.TrimSuffix(strings.TrimSuffix(trimmed, " {"), "{")
+				sigs = append(sigs, strings.TrimSpace(sig))
+			}
 		}
 	}
 	return sigs

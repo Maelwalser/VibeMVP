@@ -1,12 +1,11 @@
 {
-  "created_at": "2026-04-07T19:50:42.957800332+02:00",
+  "created_at": "2026-04-07T22:05:32.900356844+02:00",
   "description": "A minimal auth service with register and login flows. Users sign up with email and password, receive a JWT access token on success, and can access protected resources. The frontend is a Next.js app with React Hook Form + Zod validation calling the Go/Fiber backend over REST.",
   "data": {
     "databases": [
       {
         "alias": "primary",
         "type": "PostgreSQL",
-        "is_cache": false,
         "ssl_mode": "require",
         "consistency": "strong",
         "replication": "single-node"
@@ -21,52 +20,44 @@
           {
             "name": "id",
             "type": "UUID",
-            "constraints": "Primary Key, Auto-generated",
-            "sensitive": false
+            "constraints": "Primary Key, Auto-generated"
           },
           {
             "name": "email",
             "type": "String",
             "constraints": "Required, Unique",
-            "sensitive": false,
             "validation": "valid email format"
           },
           {
             "name": "password_hash",
             "type": "String",
-            "constraints": "Required",
-            "sensitive": false
+            "constraints": "Required"
           },
           {
             "name": "is_active",
             "type": "Boolean",
             "constraints": "Required",
-            "default": "true",
-            "sensitive": false
+            "default": "true"
           },
           {
             "name": "refresh_token",
             "type": "String",
-            "constraints": "Nullable",
-            "sensitive": false
+            "constraints": "Nullable"
           },
           {
             "name": "refresh_token_expires_at",
             "type": "DateTime",
-            "constraints": "Nullable",
-            "sensitive": false
+            "constraints": "Nullable"
           },
           {
             "name": "created_at",
             "type": "DateTime",
-            "constraints": "Required, Auto-generated",
-            "sensitive": false
+            "constraints": "Required, Auto-generated"
           },
           {
             "name": "updated_at",
             "type": "DateTime",
-            "constraints": "Required, Auto-updated",
-            "sensitive": false
+            "constraints": "Required, Auto-updated"
           }
         ]
       }
@@ -74,83 +65,62 @@
   },
   "backend": {
     "arch_pattern": "monolith",
-    "stack_configs": [
-      {
-        "name": "stack",
-        "language": "Go",
-        "language_version": "1.24",
-        "framework": "Fiber",
-        "framework_version": "v3.0"
-      },
-      {
-        "name": "stack1",
-        "language": "Go",
-        "language_version": "1.24",
-        "framework": "Fiber",
-        "framework_version": "v3.0"
-      },
-      {
-        "name": "stack2",
-        "language": "Go",
-        "language_version": "1.24",
-        "framework": "Fiber",
-        "framework_version": "v3.0"
-      }
-    ],
     "services": [
       {
         "name": "auth-api",
         "responsibility": "Handles user registration, login, token refresh, and logout",
-        "pattern_tag": "Monolith part",
+        "language": "Go",
+        "language_version": "1.24",
+        "framework": "Fiber",
+        "framework_version": "v3.0",
         "technologies": [
           "REST"
         ],
-        "error_format": "Platform default",
-        "service_discovery": "None",
+        "health_deps": [
+          "primary"
+        ],
         "repositories": [
           {
-            "name": "repository",
+            "name": "UserRepository",
             "entity_ref": "User",
             "target_db": "primary",
-            "selected_fields": [
-              "id",
-              "email",
-              "password_hash",
-              "is_active",
-              "refresh_token",
-              "refresh_token_expires_at",
-              "created_at",
-              "updated_at"
-            ],
             "operations": [
               {
-                "name": "op",
-                "op_type": "read-one",
+                "name": "FindByEmail",
+                "op_type": "query",
+                "filter_by": ["email"],
                 "result_shape": "Single item"
+              },
+              {
+                "name": "FindByID",
+                "op_type": "query",
+                "filter_by": ["id"],
+                "result_shape": "Single item"
+              },
+              {
+                "name": "Create",
+                "op_type": "insert",
+                "result_shape": "Single item"
+              },
+              {
+                "name": "UpdateRefreshToken",
+                "op_type": "update",
+                "filter_by": ["id"],
+                "description": "Update refresh_token and refresh_token_expires_at for a user"
+              },
+              {
+                "name": "ClearRefreshToken",
+                "op_type": "update",
+                "filter_by": ["id"],
+                "description": "Nullify refresh_token and refresh_token_expires_at on logout"
               }
             ]
           }
         ]
       }
     ],
-    "comm_links": [
-      {
-        "from": "auth-api",
-        "to": "service",
-        "direction": "Unidirectional (→)",
-        "protocol": "REST (HTTP)",
-        "sync_async": "Synchronous"
-      },
-      {
-        "from": "service1",
-        "to": "service2",
-        "direction": "Unidirectional (→)",
-        "protocol": "REST (HTTP)",
-        "sync_async": "Synchronous"
-      }
-    ],
     "auth": {
-      "strategy": "JWT (stateless)",
+      "strategy": "JWT",
       "provider": "self-managed",
       "service_unit": "auth-api",
       "authz_model": "RBAC",
@@ -175,11 +145,7 @@
           ]
         }
       ]
-    },
-    "language": "Go",
-    "language_version": "1.24",
-    "framework": "Fiber",
-    "framework_version": "v3.0"
+    }
   },
   "contracts": {
     "dtos": [
@@ -194,21 +160,18 @@
             "name": "email",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "valid email format"
           },
           {
             "name": "password",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "min 8 chars, at least one number"
           },
           {
             "name": "confirm_password",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "must match password"
           }
         ]
@@ -224,14 +187,12 @@
             "name": "email",
             "type": "string",
             "required": true,
-            "nullable": false,
             "validation": "valid email format"
           },
           {
             "name": "password",
             "type": "string",
-            "required": true,
-            "nullable": false
+            "required": true
           }
         ]
       },
@@ -253,27 +214,23 @@
             "name": "access_token",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Signed JWT; short-lived (15 min)"
           },
           {
             "name": "token_type",
             "type": "string",
             "required": true,
-            "nullable": false,
             "default": "Bearer"
           },
           {
             "name": "expires_in",
             "type": "integer",
             "required": true,
-            "nullable": false,
             "notes": "Seconds until access_token expires"
           },
           {
             "name": "refresh_token",
             "type": "string",
-            "required": false,
             "nullable": true,
             "notes": "Rotated on each use; set as HttpOnly cookie"
           }
@@ -290,26 +247,22 @@
             "name": "id",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "UUID"
           },
           {
             "name": "email",
             "type": "string",
-            "required": true,
-            "nullable": false
+            "required": true
           },
           {
             "name": "is_active",
             "type": "boolean",
-            "required": true,
-            "nullable": false
+            "required": true
           },
           {
             "name": "created_at",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "ISO 8601 timestamp"
           }
         ]
@@ -324,14 +277,12 @@
             "name": "error",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Machine-readable error code"
           },
           {
             "name": "message",
             "type": "string",
             "required": true,
-            "nullable": false,
             "notes": "Human-readable description"
           }
         ]
@@ -395,8 +346,7 @@
       "per_protocol_strategies": {
         "REST": "URL path (/v1/)"
       },
-      "current_version": "v1",
-      "deprecation_policy": "None"
+      "current_version": "v1"
     }
   },
   "frontend": {
@@ -415,7 +365,6 @@
       "form_handling": "React Hook Form",
       "validation": "Zod",
       "image_optimization": "Next/Image (built-in)",
-      "auth_flow_type": "Redirect (OAuth/OIDC)",
       "error_boundary": "React Error Boundary",
       "bundle_optimization": "Code splitting (route-based)"
     },
@@ -516,25 +465,51 @@
         "core_actions": "Display user profile from /me; logout button",
         "loading": "Skeleton while fetching profile",
         "error_handling": "Redirect to /login on 401",
-        "auth_roles": "user",
         "linked_pages": "/login"
       }
     ],
     "navigation": {
       "nav_type": "Top bar",
-      "breadcrumbs": false,
       "auth_aware": true
+    }
+  },
+  "infrastructure": {
+    "environments": [
+      {
+        "name": "dev",
+        "compute_env": "containerized",
+        "orchestrator": "Docker Compose"
+      }
+    ],
+    "cicd": {
+      "platform": "GitHub Actions",
+      "container_runtime": "Docker",
+      "deploy_strategy": "Rolling update"
     },
-    "rendering": "Web (SPA)",
-    "framework": "React",
-    "styling": "Tailwind CSS"
+    "observability": {
+      "logging": "Structured JSON (stdlib slog)",
+      "health_checks": true
+    }
+  },
+  "cross_cutting": {
+    "testing": {
+      "unit": "Go testing + testify",
+      "integration": "testcontainers-go (PostgreSQL)",
+      "e2e": "Playwright",
+      "frontend_testing": "Vitest + React Testing Library"
+    },
+    "docs": {
+      "per_protocol_formats": {
+        "REST": "OpenAPI/Swagger"
+      },
+      "auto_generate": true
+    }
   },
   "realize": {
-    "app_name": "app",
+    "app_name": "auth-app",
     "output_dir": "generated-code",
     "concurrency": 4,
     "verify": true,
-    "dry_run": false,
     "provider": "Claude",
     "tier_fast": "claude-haiku-4-5-20251001",
     "tier_medium": "claude-sonnet-4-6",

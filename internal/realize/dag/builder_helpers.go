@@ -1,6 +1,99 @@
 package dag
 
-import "github.com/vibe-menu/internal/manifest"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/vibe-menu/internal/manifest"
+)
+
+// ── manifest cross-reference validation ─────────────────────────────────────
+
+// validateManifestRefs checks that service names referenced throughout the
+// manifest (CommLinks, Endpoints, JobQueues, Events, ExternalAPIs,
+// FileStorages, Auth) all resolve to a known service in the backend pillar.
+// All violations are collected and returned as a single combined error.
+// Returns nil when no violations are found.
+func validateManifestRefs(m *manifest.Manifest) error {
+	// Build the canonical set of known service names.
+	serviceNames := make(map[string]bool, len(m.Backend.Services))
+	for _, svc := range m.Backend.Services {
+		serviceNames[svc.Name] = true
+	}
+	// Monolith/modular-monolith architectures synthesise a "monolith" service
+	// name inside the builder — callers may reference it directly.
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		serviceNames["monolith"] = true
+	}
+
+	var errs []string
+
+	unknown := func(field, label, name string) {
+		errs = append(errs, fmt.Sprintf("%s %q references unknown service %q", field, label, name))
+	}
+
+	// CommLinks
+	for _, cl := range m.Backend.CommLinks {
+		label := cl.From + "→" + cl.To
+		if cl.From != "" && !serviceNames[cl.From] {
+			unknown("comm_link", label, cl.From)
+		}
+		if cl.To != "" && !serviceNames[cl.To] {
+			unknown("comm_link", label, cl.To)
+		}
+	}
+
+	// Endpoints
+	for _, ep := range m.Contracts.Endpoints {
+		if ep.ServiceUnit != "" && !serviceNames[ep.ServiceUnit] {
+			unknown("endpoint", ep.NamePath, ep.ServiceUnit)
+		}
+	}
+
+	// JobQueues
+	for _, jq := range m.Backend.JobQueues {
+		if jq.WorkerService != "" && !serviceNames[jq.WorkerService] {
+			unknown("job_queue", jq.Name, jq.WorkerService)
+		}
+	}
+
+	// Events
+	for _, ev := range m.Backend.Events {
+		if ev.PublisherService != "" && !serviceNames[ev.PublisherService] {
+			unknown("event", ev.Name, ev.PublisherService)
+		}
+		if ev.ConsumerService != "" && !serviceNames[ev.ConsumerService] {
+			unknown("event", ev.Name, ev.ConsumerService)
+		}
+	}
+
+	// ExternalAPIs
+	for _, api := range m.Contracts.ExternalAPIs {
+		if api.CalledByService != "" && !serviceNames[api.CalledByService] {
+			unknown("external_api", api.Provider, api.CalledByService)
+		}
+	}
+
+	// FileStorages
+	for _, fs := range m.Data.FileStorages {
+		if fs.UsedByService != "" && !serviceNames[fs.UsedByService] {
+			unknown("file_storage", fs.Technology, fs.UsedByService)
+		}
+	}
+
+	// Auth
+	if m.Backend.Auth != nil && m.Backend.Auth.ServiceUnit != "" {
+		if !serviceNames[m.Backend.Auth.ServiceUnit] {
+			unknown("auth", string(m.Backend.Auth.Strategy), m.Backend.Auth.ServiceUnit)
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("manifest validation: %s", strings.Join(errs, "; "))
+}
 
 // ── config ref resolution ────────────────────────────────────────────────────
 

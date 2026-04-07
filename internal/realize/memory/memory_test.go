@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -25,6 +26,27 @@ func TestIsHighValue(t *testing.T) {
 		{"Dockerfile", false},
 		{"deploy/main.tf", false},
 		{".github/ci.yml", false},
+		// Python patterns
+		{"app/models.py", true},
+		{"app/schemas.py", true},
+		{"app/types.py", true},
+		{"app/interfaces.py", true},
+		{"app/entities.py", true},
+		{"app/utils.py", false},
+		// Java patterns
+		{"src/main/java/UserEntity.java", true},
+		{"src/main/java/UserRepository.java", true},
+		{"src/main/java/UserModel.java", true},
+		{"src/main/java/UserController.java", false},
+		// Config/dependency files
+		{"go.mod", true},
+		{"package.json", true},
+		{"pyproject.toml", true},
+		{"requirements.txt", true},
+		{"tsconfig.json", false},
+		// Interface directories
+		{"internal/interfaces/user.go", true},
+		{"pkg/interfaces/repo.ts", true},
 	}
 
 	for _, tc := range tests {
@@ -172,6 +194,119 @@ func TestSharedMemory_NoDepsReturnsEmpty(t *testing.T) {
 	task := &dag.Task{ID: "root", Dependencies: nil}
 	if deps := mem.DepsOf(task); len(deps) != 0 {
 		t.Errorf("expected empty deps for root task, got %d", len(deps))
+	}
+}
+
+// TestSharedMemory_PriorityWeightedBudget verifies that DepsOf allocates more
+// budget to high-priority dependencies (auth, service logic) than low-priority
+// ones (data schemas), preventing verbose but low-priority outputs from crowding
+// out critical signatures.
+func TestSharedMemory_PriorityWeightedBudget(t *testing.T) {
+	mem := New()
+
+	// Create two upstream tasks with multiple files that collectively exceed the
+	// total DepsOf budget for a handler task (20000 chars). Each individual file
+	// must stay under MaxFileChars (4000) so buildExcerpts doesn't truncate first.
+	// Use Go type declarations so extractSignatures preserves content.
+	makeFiles := func(pkg string, count int) []dag.GeneratedFile {
+		files := make([]dag.GeneratedFile, count)
+		for i := 0; i < count; i++ {
+			files[i] = dag.GeneratedFile{
+				Path:    fmt.Sprintf("internal/%s/type_%d.go", pkg, i),
+				Content: fmt.Sprintf("package %s\n\ntype T%d struct {\n%s}\n", pkg, i, strings.Repeat("\tF string\n", 200)),
+			}
+		}
+		return files
+	}
+
+	// Each task: 5 files * ~2800 chars = ~14000 chars total per task.
+	// Combined: ~28000 chars, well above the 20000 handler budget.
+	mem.Record(
+		&dag.Task{ID: "data.schemas", Kind: dag.TaskKindDataSchemas},
+		makeFiles("domain", 5),
+		"",
+	)
+	mem.Record(
+		&dag.Task{ID: "backend.auth", Kind: dag.TaskKindAuth},
+		makeFiles("auth", 5),
+		"",
+	)
+
+	// Consumer task depends on both, data listed first (would exhaust budget under flat approach).
+	consumer := &dag.Task{
+		ID:           "svc.monolith.handler",
+		Kind:         dag.TaskKindServiceHandler,
+		Dependencies: []string{"data.schemas", "backend.auth"},
+	}
+
+	deps := mem.DepsOf(consumer)
+	if len(deps) != 2 {
+		t.Fatalf("expected 2 deps, got %d", len(deps))
+	}
+
+	// Find auth dep and data dep.
+	var authChars, dataChars int
+	for _, d := range deps {
+		for _, f := range d.Files {
+			if d.TaskID == "backend.auth" {
+				authChars += len(f.Content)
+			} else {
+				dataChars += len(f.Content)
+			}
+		}
+	}
+
+	// Auth (priority 0.9) should get more budget than data schemas (priority 0.3).
+	if authChars <= dataChars {
+		t.Errorf("auth (%d chars) should get more budget than data schemas (%d chars) due to higher priority",
+			authChars, dataChars)
+	}
+}
+
+// TestSharedMemory_TypeConflicts verifies that RegisterTypes detects when the same
+// type name is declared in different packages.
+func TestSharedMemory_TypeConflicts(t *testing.T) {
+	mem := New()
+
+	// Register User from domain package.
+	mem.RegisterTypes(map[string]TypeEntry{
+		"User": {Package: "internal/domain", File: "internal/domain/user.go", Definition: "type User struct{}"},
+	})
+	// Register User from a different package — should trigger conflict.
+	mem.RegisterTypes(map[string]TypeEntry{
+		"User": {Package: "internal/dto", File: "internal/dto/user.go", Definition: "type User struct{}"},
+	})
+	// Register Order from domain — no conflict.
+	mem.RegisterTypes(map[string]TypeEntry{
+		"Order": {Package: "internal/domain", File: "internal/domain/order.go", Definition: "type Order struct{}"},
+	})
+
+	conflicts := mem.TypeConflicts()
+	if len(conflicts) != 1 {
+		t.Fatalf("expected 1 conflict, got %d", len(conflicts))
+	}
+	if conflicts[0].TypeName != "User" {
+		t.Errorf("expected conflict on User, got %q", conflicts[0].TypeName)
+	}
+	if conflicts[0].First.Package != "internal/domain" || conflicts[0].Second.Package != "internal/dto" {
+		t.Errorf("unexpected conflict packages: %q vs %q", conflicts[0].First.Package, conflicts[0].Second.Package)
+	}
+}
+
+// TestSharedMemory_TypeConflicts_SamePackageNoConflict verifies that re-registering
+// a type from the same package does not create a conflict.
+func TestSharedMemory_TypeConflicts_SamePackageNoConflict(t *testing.T) {
+	mem := New()
+
+	mem.RegisterTypes(map[string]TypeEntry{
+		"User": {Package: "internal/domain", File: "internal/domain/user.go"},
+	})
+	mem.RegisterTypes(map[string]TypeEntry{
+		"User": {Package: "internal/domain", File: "internal/domain/user.go"},
+	})
+
+	if len(mem.TypeConflicts()) != 0 {
+		t.Error("same-package re-registration should not create a conflict")
 	}
 }
 

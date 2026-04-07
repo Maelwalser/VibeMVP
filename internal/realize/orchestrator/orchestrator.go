@@ -224,6 +224,17 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		}
 	}
 
+	// Diagnostic: warn about type names declared in multiple packages.
+	// This doesn't block the pipeline but gives operators early visibility into
+	// potential cross-service type conflicts that could cause compilation errors.
+	if conflicts := mem.TypeConflicts(); len(conflicts) > 0 {
+		o.log("realize: ⚠ %d type name(s) declared in multiple packages:", len(conflicts))
+		for _, c := range conflicts {
+			o.log("realize:   - %s: first in %s (%s), also in %s (%s)",
+				c.TypeName, c.First.Package, c.First.File, c.Second.Package, c.Second.File)
+		}
+	}
+
 	// Pre-flight import path fix: resolve "svcdir/internal/pkg" → correct module
 	// path before the compiler even runs. This is a pure filesystem operation (no
 	// compiler invocation) so it is fast and safe to run unconditionally.
@@ -253,7 +264,15 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	} else {
 		// Deterministic fixes did not resolve all errors. Attempt LLM-driven repair.
 		o.log("realize: attempting LLM repair of remaining integration errors...")
-		intResult = repairIntegrationErrors(ctx, o.cfg.OutputDir, intResult, defaultProvider, tierOverrides, o.cfg.Verbose)
+		intResult, repairSummary := repairIntegrationErrors(ctx, o.cfg.OutputDir, intResult, defaultProvider, tierOverrides, o.cfg.Verbose, o.cfg.LogFunc)
+		o.log("realize: repair summary: %d attempt(s), %d file(s) patched, %d agent error(s), %d write error(s)",
+			repairSummary.AttemptCount, repairSummary.PatchedFiles, repairSummary.AgentErrors, repairSummary.WriteErrors)
+		if len(repairSummary.SkippedErrors) > 0 {
+			o.log("realize: repair skipped %d error(s):", len(repairSummary.SkippedErrors))
+			for _, s := range repairSummary.SkippedErrors {
+				o.log("realize:   - %s", s)
+			}
+		}
 		if intResult.Passed {
 			o.log("realize: integration build passed ✓ after LLM repair")
 		} else {

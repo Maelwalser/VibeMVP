@@ -7,7 +7,11 @@ const DefaultModel = "claude-opus-4-6"
 const DefaultMaxTokens = int64(64000)
 
 // MaxSkillBytes is the maximum number of characters stored per skill document.
-const MaxSkillBytes = 2000
+// Increased from 2000 to 6000 so critical API patterns, security rules, and
+// library-specific usage docs are not truncated. With 2-4 skills per task,
+// total skill injection stays within 12-24K chars — well within the context window,
+// and system prompt caching amortizes the cost across retries.
+const MaxSkillBytes = 6000
 
 // MaxFileChars is the maximum characters included from a single dependency file.
 const MaxFileChars = 4000

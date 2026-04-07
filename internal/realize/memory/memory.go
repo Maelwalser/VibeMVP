@@ -53,15 +53,36 @@ type TypeEntry struct {
 	Definition string
 }
 
+// ServiceMethodSig records one exported method signature on a service/repository
+// struct, extracted from committed files at their original, untruncated content.
+// Unlike ConstructorSig (which covers New*/Make*/etc.), this covers all exported
+// methods with receivers — the exact signatures handler tasks need to generate
+// compatible calls.
+type ServiceMethodSig struct {
+	File      string
+	Package   string
+	Signature string
+}
+
+// TypeConflict records a type name declared in two different packages.
+// Diagnostic-only: used by the orchestrator to log warnings after all tasks complete.
+type TypeConflict struct {
+	TypeName string
+	First    TypeEntry
+	Second   TypeEntry
+}
+
 // SharedMemory is a thread-safe store of completed task outputs.
 // It is written to by TaskRunner after a successful commit and read by
 // downstream agents before they are invoked.
 type SharedMemory struct {
-	mu           sync.RWMutex
-	outputs      map[string]*TaskOutput
-	rawPaths     map[string][]string  // task ID → committed file paths (untruncated)
-	typeRegistry map[string]TypeEntry // exported type name → first-seen location
-	constructors []ConstructorSig     // all constructor sigs extracted at commit time
+	mu             sync.RWMutex
+	outputs        map[string]*TaskOutput
+	rawPaths       map[string][]string  // task ID → committed file paths (untruncated)
+	typeRegistry   map[string]TypeEntry // exported type name → first-seen location
+	typeConflicts  []TypeConflict       // types declared in multiple packages
+	constructors   []ConstructorSig     // all constructor sigs extracted at commit time
+	serviceMethods []ServiceMethodSig   // all exported method sigs extracted at commit time
 }
 
 // New returns an empty SharedMemory.
@@ -135,8 +156,16 @@ func (m *SharedMemory) RegisterTypes(types map[string]TypeEntry) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for name, entry := range types {
-		if _, exists := m.typeRegistry[name]; !exists {
+		existing, exists := m.typeRegistry[name]
+		if !exists {
 			m.typeRegistry[name] = entry
+		} else if existing.Package != entry.Package {
+			// Same type name declared in different packages — potential conflict.
+			m.typeConflicts = append(m.typeConflicts, TypeConflict{
+				TypeName: name,
+				First:    existing,
+				Second:   entry,
+			})
 		}
 	}
 }
@@ -162,6 +191,51 @@ func (m *SharedMemory) RegisterConstructors(file string, sigs []string) {
 			Signature: sig,
 		})
 	}
+}
+
+// RegisterServiceMethods appends exported method signatures (non-constructor) from
+// a committed file to the shared registry. Called at commit time on untruncated
+// content so downstream handler/bootstrap tasks see accurate method signatures even
+// when file excerpts are truncated by the memory budget.
+// Safe for concurrent use.
+func (m *SharedMemory) RegisterServiceMethods(file string, sigs []string) {
+	if len(sigs) == 0 {
+		return
+	}
+	pkg := filepath.Dir(file)
+	if pkg == "." {
+		pkg = ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, sig := range sigs {
+		m.serviceMethods = append(m.serviceMethods, ServiceMethodSig{
+			File:      file,
+			Package:   pkg,
+			Signature: sig,
+		})
+	}
+}
+
+// AllServiceMethods returns a snapshot of every exported method signature registered so far.
+// Safe for concurrent use.
+func (m *SharedMemory) AllServiceMethods() []ServiceMethodSig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ServiceMethodSig, len(m.serviceMethods))
+	copy(result, m.serviceMethods)
+	return result
+}
+
+// TypeConflicts returns all type names that were declared in multiple packages.
+// Diagnostic-only: call after all tasks complete to log warnings.
+// Safe for concurrent use.
+func (m *SharedMemory) TypeConflicts() []TypeConflict {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]TypeConflict, len(m.typeConflicts))
+	copy(result, m.typeConflicts)
+	return result
 }
 
 // AllConstructors returns a snapshot of every constructor signature registered so far.
@@ -206,39 +280,103 @@ func (m *SharedMemory) CommittedPaths(depIDs []string) []string {
 	return result
 }
 
+// depPriority returns a weight (0.0–1.0) indicating how important a dependency's
+// context is for downstream agents. Higher-weight dependencies get a larger share
+// of the character budget, preventing verbose but lower-priority outputs from
+// crowding out critical type signatures and method contracts.
+func depPriority(kind dag.TaskKind) float64 {
+	switch kind {
+	case dag.TaskKindAuth:
+		return 0.9 // TokenManager signatures critical for handlers
+	case dag.TaskKindServiceLogic:
+		return 0.8 // method signatures needed by handler
+	case dag.TaskKindServiceHandler:
+		return 0.7 // route contracts needed by bootstrap
+	case dag.TaskKindServiceRepository:
+		return 0.5 // interfaces are compact after extraction
+	case dag.TaskKindServicePlan:
+		return 0.4 // interfaces already seen via repo
+	case dag.TaskKindDataSchemas, dag.TaskKindDataMigrations:
+		return 0.3 // domain structs, already compact from sig extraction
+	case dag.TaskKindDependencyResolution:
+		return 0.1 // go.mod only, very small
+	default:
+		return 0.5
+	}
+}
+
 // DepsOf returns the recorded outputs for each direct dependency of task.
 // Dependencies with no recorded output (e.g. skipped on resume) are omitted.
-// The returned slice is ordered by dependency ID for determinism.
+// Budget is allocated proportionally by dependency priority weight so that
+// high-value dependencies (auth signatures, service methods) are not crowded
+// out by verbose lower-priority outputs.
 // Safe for concurrent use.
 func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	budget := config.MaxTotalCharsFor(string(task.Kind))
+	totalBudget := config.MaxTotalCharsFor(string(task.Kind))
 
-	var results []*TaskOutput
-	total := 0
+	// Phase 1: collect present dependencies and compute proportional budgets.
+	type depSlot struct {
+		out    *TaskOutput
+		weight float64
+		budget int
+		used   int
+	}
+	var slots []depSlot
+	totalWeight := 0.0
 
 	for _, depID := range task.Dependencies {
 		out, ok := m.outputs[depID]
 		if !ok {
 			continue
 		}
-		if total >= budget {
-			break
+		w := depPriority(out.Kind)
+		slots = append(slots, depSlot{out: out, weight: w})
+		totalWeight += w
+	}
+	if len(slots) == 0 {
+		return nil
+	}
+
+	// Allocate budget proportionally by weight.
+	if totalWeight == 0 {
+		totalWeight = 1.0 // avoid division by zero
+	}
+	allocated := 0
+	for i := range slots {
+		slots[i].budget = int(float64(totalBudget) * (slots[i].weight / totalWeight))
+		allocated += slots[i].budget
+	}
+	// Distribute rounding remainder to the highest-weight slot.
+	if remainder := totalBudget - allocated; remainder > 0 && len(slots) > 0 {
+		bestIdx := 0
+		for i := 1; i < len(slots); i++ {
+			if slots[i].weight > slots[bestIdx].weight {
+				bestIdx = i
+			}
 		}
-		// Shallow-copy the output, trimming files once the budget is reached.
+		slots[bestIdx].budget += remainder
+	}
+
+	// Phase 2: fill each dependency up to its allocated budget.
+	results := make([]*TaskOutput, 0, len(slots))
+	totalUnused := 0
+
+	for i := range slots {
+		s := &slots[i]
 		trimmed := &TaskOutput{
-			TaskID: out.TaskID,
-			Label:  out.Label,
-			Kind:   out.Kind,
+			TaskID: s.out.TaskID,
+			Label:  s.out.Label,
+			Kind:   s.out.Kind,
 		}
-		for _, f := range out.Files {
-			if total >= budget {
+		for _, f := range s.out.Files {
+			if s.used >= s.budget {
 				break
 			}
 			content := f.Content
-			remaining := budget - total
+			remaining := s.budget - s.used
 			if len(content) > remaining {
 				content = content[:remaining] + "\n// [truncated by shared memory budget]"
 			}
@@ -247,10 +385,69 @@ func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 				Content:   content,
 				Truncated: f.Truncated || len(content) < len(f.Content),
 			})
-			total += len(content)
+			s.used += len(content)
 		}
+		totalUnused += s.budget - s.used
 		if len(trimmed.Files) > 0 {
 			results = append(results, trimmed)
+		}
+	}
+
+	// Phase 3: redistribute unused budget to slots that were truncated.
+	// This handles cases where small deps (e.g. go.mod) use only a fraction
+	// of their allocation — the surplus flows to deps that need more room.
+	if totalUnused > 0 {
+		for i := range slots {
+			s := &slots[i]
+			if s.used < s.budget || totalUnused <= 0 {
+				continue // not truncated or no surplus left
+			}
+			// Find the corresponding result entry.
+			for ri := range results {
+				if results[ri].TaskID != s.out.TaskID {
+					continue
+				}
+				// Try to extend the last truncated file or add more files.
+				extraBudget := totalUnused
+				for fi := range s.out.Files {
+					if extraBudget <= 0 {
+						break
+					}
+					f := s.out.Files[fi]
+					// Check if this file was already fully included.
+					if fi < len(results[ri].Files) && !results[ri].Files[fi].Truncated {
+						continue
+					}
+					if fi < len(results[ri].Files) {
+						// Extend truncated file.
+						content := f.Content
+						if len(content) > s.used+extraBudget {
+							content = content[:s.used+extraBudget] + "\n// [truncated by shared memory budget]"
+						}
+						added := len(content) - len(results[ri].Files[fi].Content)
+						if added > 0 {
+							results[ri].Files[fi].Content = content
+							results[ri].Files[fi].Truncated = len(content) < len(f.Content)
+							extraBudget -= added
+							totalUnused -= added
+						}
+					} else {
+						// Add new file from surplus.
+						content := f.Content
+						if len(content) > extraBudget {
+							content = content[:extraBudget] + "\n// [truncated by shared memory budget]"
+						}
+						results[ri].Files = append(results[ri].Files, FileExcerpt{
+							Path:      f.Path,
+							Content:   content,
+							Truncated: len(content) < len(f.Content),
+						})
+						extraBudget -= len(content)
+						totalUnused -= len(content)
+					}
+				}
+				break
+			}
 		}
 	}
 
@@ -319,6 +516,10 @@ func isHighValue(path string) bool {
 		"types.go", "models.go", "schema.go",
 		"entities.go", "domain.go", "dto.go",
 		"types.ts", "models.ts", "schema.ts", "types.tsx",
+		// Python
+		"models.py", "schemas.py", "types.py", "interfaces.py", "entities.py",
+		// Java
+		"entity.java", "repository.java", "model.java",
 	}
 	for _, s := range suffixes {
 		if strings.HasSuffix(lower, s) {
@@ -328,6 +529,10 @@ func isHighValue(path string) bool {
 	keywords := []string{
 		".proto", "openapi", "swagger", "_types", "_models",
 		"_schema", "_interfaces", "_entities",
+		// Config/dependency files that downstream agents need for correct versions
+		"go.mod", "package.json", "pyproject.toml", "requirements.txt",
+		// Interface directories
+		"/interfaces/",
 	}
 	for _, kw := range keywords {
 		if strings.Contains(lower, kw) {

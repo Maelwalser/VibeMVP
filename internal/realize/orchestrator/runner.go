@@ -189,6 +189,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			DepsContext:          effectiveDepsContext,
 			ExistingTypeRegistry: r.memory.TypeRegistry(),
 			AllConstructors:      r.memory.AllConstructors(),
+			AllServiceMethods:    r.memory.AllServiceMethods(),
 		}
 
 		result, err := a.Run(ctx, ac)
@@ -319,6 +320,7 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	// any excerpt truncation — so downstream prompts see accurate signatures.
 	r.registerExportedTypes(files)
 	r.registerConstructors(files)
+	r.registerServiceMethods(files)
 	if err := r.state.MarkCompleted(r.task.ID); err != nil {
 		r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 	}
@@ -350,6 +352,17 @@ func (r *TaskRunner) registerConstructors(files []dag.GeneratedFile) {
 	for _, f := range files {
 		if sigs := memory.ExtractConstructorSigs(f.Path, f.Content); len(sigs) > 0 {
 			r.memory.RegisterConstructors(f.Path, sigs)
+		}
+	}
+}
+
+// registerServiceMethods extracts exported method signatures (non-constructor) from
+// each committed file and stores them in shared memory. This ensures handler/bootstrap
+// tasks see accurate method signatures even when file excerpts are truncated.
+func (r *TaskRunner) registerServiceMethods(files []dag.GeneratedFile) {
+	for _, f := range files {
+		if sigs := memory.ExtractServiceMethodSigs(f.Path, f.Content); len(sigs) > 0 {
+			r.memory.RegisterServiceMethods(f.Path, sigs)
 		}
 	}
 }

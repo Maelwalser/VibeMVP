@@ -479,3 +479,377 @@ func TestBuild_ValidDAG_NoErrors(t *testing.T) {
 		t.Errorf("Build() returned error for valid full manifest: %v", err)
 	}
 }
+
+// ── validateManifestRefs tests ───────────────────────────────────────────────
+
+func TestValidateManifestRefs_ValidManifest_NoError(t *testing.T) {
+	// minimalMonolith has no cross-references to validate; should pass cleanly.
+	m := minimalMonolith()
+	err := validateManifestRefs(m)
+	if err != nil {
+		t.Errorf("validateManifestRefs() unexpected error for minimal monolith: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_CommLink_UnknownFrom(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "ghost-svc", To: "orders", Protocol: "REST"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown CommLink.From, got nil")
+	}
+	if !containsSubstring(err.Error(), "ghost-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_CommLink_UnknownTo(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "orders", To: "nowhere", Protocol: "REST"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown CommLink.To, got nil")
+	}
+	if !containsSubstring(err.Error(), "nowhere") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Endpoint_UnknownServiceUnit(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+		},
+		Contracts: manifest.ContractsPillar{
+			Endpoints: []manifest.EndpointDef{
+				{NamePath: "/users", ServiceUnit: "bad-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown endpoint ServiceUnit, got nil")
+	}
+	if !containsSubstring(err.Error(), "bad-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_JobQueue_UnknownWorkerService(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+			JobQueues: []manifest.JobQueueDef{
+				{Name: "email-queue", Technology: "Redis", WorkerService: "phantom-worker"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown JobQueue.WorkerService, got nil")
+	}
+	if !containsSubstring(err.Error(), "phantom-worker") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Event_UnknownPublisherService(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+			},
+			Events: []manifest.EventDef{
+				{Name: "UserSignedUp", PublisherService: "missing-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown Event.PublisherService, got nil")
+	}
+	if !containsSubstring(err.Error(), "missing-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Event_UnknownConsumerService(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+			},
+			Events: []manifest.EventDef{
+				{Name: "OrderPlaced", PublisherService: "orders", ConsumerService: "vanished-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown Event.ConsumerService, got nil")
+	}
+	if !containsSubstring(err.Error(), "vanished-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_ExternalAPI_UnknownCalledByService(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+		},
+		Contracts: manifest.ContractsPillar{
+			ExternalAPIs: []manifest.ExternalAPIDef{
+				{Provider: "Stripe", CalledByService: "nonexistent-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown ExternalAPI.CalledByService, got nil")
+	}
+	if !containsSubstring(err.Error(), "nonexistent-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_FileStorage_UnknownUsedByService(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+		},
+		Data: manifest.DataPillar{
+			FileStorages: []manifest.FileStorageDef{
+				{Technology: "S3", UsedByService: "mystery-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown FileStorage.UsedByService, got nil")
+	}
+	if !containsSubstring(err.Error(), "mystery-svc") {
+		t.Errorf("error should mention the unknown service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_EmptyServiceRefFields_NoError(t *testing.T) {
+	// Empty optional service reference fields should not trigger validation errors.
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+			JobQueues: []manifest.JobQueueDef{
+				{Name: "background-queue", Technology: "Redis", WorkerService: ""},
+			},
+			Events: []manifest.EventDef{
+				{Name: "SystemEvent", PublisherService: "", ConsumerService: ""},
+			},
+		},
+		Contracts: manifest.ContractsPillar{
+			Endpoints: []manifest.EndpointDef{
+				{NamePath: "/health", ServiceUnit: ""},
+			},
+			ExternalAPIs: []manifest.ExternalAPIDef{
+				{Provider: "GitHub", CalledByService: ""},
+			},
+		},
+		Data: manifest.DataPillar{
+			FileStorages: []manifest.FileStorageDef{
+				{Technology: "GCS", UsedByService: ""},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err != nil {
+		t.Errorf("validateManifestRefs() unexpected error for empty service refs: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_MultipleErrors_AllCollected(t *testing.T) {
+	// Two bad references should both appear in the single returned error.
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "bad-from", To: "orders", Protocol: "REST"},
+			},
+		},
+		Contracts: manifest.ContractsPillar{
+			Endpoints: []manifest.EndpointDef{
+				{NamePath: "/payments", ServiceUnit: "bad-svc"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for multiple bad refs, got nil")
+	}
+	if !containsSubstring(err.Error(), "bad-from") {
+		t.Errorf("error should mention 'bad-from', got: %v", err)
+	}
+	if !containsSubstring(err.Error(), "bad-svc") {
+		t.Errorf("error should mention 'bad-svc', got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Microservices_ValidRefs_NoError(t *testing.T) {
+	// All references point to actual service names in a microservices setup.
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "users", Language: "Go", Framework: "Gin"},
+				{Name: "orders", Language: "Go", Framework: "Gin"},
+				{Name: "workers", Language: "Go", Framework: "Gin"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "orders", To: "users", Protocol: "REST"},
+			},
+			JobQueues: []manifest.JobQueueDef{
+				{Name: "email-queue", Technology: "Redis", WorkerService: "workers"},
+			},
+			Events: []manifest.EventDef{
+				{Name: "OrderPlaced", PublisherService: "orders", ConsumerService: "workers"},
+			},
+		},
+		Contracts: manifest.ContractsPillar{
+			Endpoints: []manifest.EndpointDef{
+				{NamePath: "/users", ServiceUnit: "users"},
+				{NamePath: "/orders", ServiceUnit: "orders"},
+			},
+			ExternalAPIs: []manifest.ExternalAPIDef{
+				{Provider: "Stripe", CalledByService: "orders"},
+			},
+		},
+		Data: manifest.DataPillar{
+			FileStorages: []manifest.FileStorageDef{
+				{Technology: "S3", UsedByService: "workers"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err != nil {
+		t.Errorf("validateManifestRefs() unexpected error for valid microservices manifest: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_MonolithArch_SyntheticServiceName(t *testing.T) {
+	// For monolith/modular-monolith, the builder synthesizes a "monolith" service
+	// name. Refs to "monolith" should be valid even when no service is named "monolith"
+	// in the manifest Services list (they'll use the actual single service, renamed).
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMonolith,
+			Services: []manifest.ServiceDef{
+				{Name: "app", Language: "Go", Framework: "Fiber"},
+			},
+			CommLinks: []manifest.CommLink{
+				// "monolith" is the synthetic name — should be valid.
+				{From: "monolith", To: "monolith", Protocol: "REST"},
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err != nil {
+		t.Errorf("validateManifestRefs() unexpected error for monolith synthetic name ref: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Auth_UnknownServiceUnit(t *testing.T) {
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+			Auth: &manifest.AuthConfig{
+				Strategy:    "JWT",
+				ServiceUnit: "auth-ghost-svc",
+			},
+		},
+	}
+	err := validateManifestRefs(m)
+	if err == nil {
+		t.Fatal("validateManifestRefs() expected error for unknown Auth.ServiceUnit, got nil")
+	}
+	if !containsSubstring(err.Error(), "auth-ghost-svc") {
+		t.Errorf("error should mention the unknown auth service name, got: %v", err)
+	}
+}
+
+func TestValidateManifestRefs_Build_ReturnsError_WhenRefsInvalid(t *testing.T) {
+	// Build() itself should surface the validation error without producing a DAG.
+	m := &manifest.Manifest{
+		Backend: manifest.BackendPillar{
+			ArchPattern: manifest.ArchMicroservices,
+			Services: []manifest.ServiceDef{
+				{Name: "api", Language: "Go", Framework: "Gin"},
+			},
+			CommLinks: []manifest.CommLink{
+				{From: "api", To: "does-not-exist", Protocol: "REST"},
+			},
+		},
+	}
+	dag, err := (&Builder{}).Build(m)
+	if err == nil {
+		t.Fatal("Build() expected error for invalid manifest refs, got nil")
+	}
+	if dag != nil {
+		t.Error("Build() should return nil DAG when validation fails")
+	}
+	if !containsSubstring(err.Error(), "manifest validation") {
+		t.Errorf("error should contain 'manifest validation' prefix, got: %v", err)
+	}
+}
+
+// containsSubstring is a nil-safe helper used by validateManifestRefs tests.
+func containsSubstring(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || stringContains(s, sub))
+}
+
+func stringContains(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
