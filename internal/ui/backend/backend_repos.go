@@ -492,4 +492,3 @@ func (be BackendEditor) enterRepoFormInsert() (BackendEditor, tea.Cmd) {
 	be.formInput.CursorEnd()
 	return be, be.formInput.Focus()
 }
-

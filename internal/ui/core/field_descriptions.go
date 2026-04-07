@@ -276,7 +276,6 @@ var fieldDescriptions = map[string]map[string]string{
 		"Global":  "No geographic restriction. Data distributed globally for latency optimization.",
 		"Custom":  "Custom residency requirements. Generates placeholders for you to specify region constraints.",
 	},
-
 }
 
 // sectionPanels holds overview text for each main section tab shown when no

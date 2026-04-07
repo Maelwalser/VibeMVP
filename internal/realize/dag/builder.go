@@ -658,4 +658,3 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 		})
 	}
 }
-

@@ -222,22 +222,6 @@ var feErrorBoundaryByFramework = map[string][]string{
 	"UIKit":                       {"Framework default", "Custom"},
 }
 
-var feTestingByLanguage = map[string][]string{
-	"TypeScript": {"Vitest", "Jest", "Testing Library", "Storybook", "None"},
-	"JavaScript": {"Vitest", "Jest", "Testing Library", "Storybook", "None"},
-	"Dart":       {"None"},
-	"Kotlin":     {"None"},
-	"Swift":      {"None"},
-}
-
-var feLinterByLanguage = map[string][]string{
-	"TypeScript": {"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
-	"JavaScript": {"ESLint + Prettier", "Biome", "oxlint", "Stylelint", "Custom", "None"},
-	"Dart":       {"Custom", "None"},
-	"Kotlin":     {"Custom", "None"},
-	"Swift":      {"Custom", "None"},
-}
-
 var fePwaSupportByPlatform = map[string][]string{
 	"Web (SPA)":               {"None", "Basic (manifest + service worker)", "Full offline", "Push notifications"},
 	"Web (SSR/SSG)":           {"None", "Basic (manifest + service worker)", "Full offline", "Push notifications"},

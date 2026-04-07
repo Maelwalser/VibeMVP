@@ -169,8 +169,12 @@ func isColFormFieldDisabled(form []core.Field, idx int) bool {
 	return false
 }
 
-func nextColFormIdx(form []core.Field, cur int) int { return core.NextFormIdx(form, cur, isColFormFieldDisabled) }
-func prevColFormIdx(form []core.Field, cur int) int { return core.PrevFormIdx(form, cur, isColFormFieldDisabled) }
+func nextColFormIdx(form []core.Field, cur int) int {
+	return core.NextFormIdx(form, cur, isColFormFieldDisabled)
+}
+func prevColFormIdx(form []core.Field, cur int) int {
+	return core.PrevFormIdx(form, cur, isColFormFieldDisabled)
+}
 
 // ── Entity settings form helpers ──────────────────────────────────────────────
 
@@ -273,5 +277,9 @@ func isEntFormFieldDisabled(form []core.Field, idx int) bool {
 	return false
 }
 
-func nextEntFormIdx(form []core.Field, cur int) int { return core.NextFormIdx(form, cur, isEntFormFieldDisabled) }
-func prevEntFormIdx(form []core.Field, cur int) int { return core.PrevFormIdx(form, cur, isEntFormFieldDisabled) }
+func nextEntFormIdx(form []core.Field, cur int) int {
+	return core.NextFormIdx(form, cur, isEntFormFieldDisabled)
+}
+func prevEntFormIdx(form []core.Field, cur int) int {
+	return core.PrevFormIdx(form, cur, isEntFormFieldDisabled)
+}

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/vibe-menu/internal/ui/core"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/vibe-menu/internal/ui/core"
 )
 
 func (be BackendEditor) HintLine() string {

@@ -19,8 +19,8 @@ import (
 	"github.com/vibe-menu/internal/ui/frontend"
 	"github.com/vibe-menu/internal/ui/infra"
 	"github.com/vibe-menu/internal/ui/provider"
-	"github.com/vibe-menu/internal/ui/realize_cfg"
 	"github.com/vibe-menu/internal/ui/realization"
+	"github.com/vibe-menu/internal/ui/realize_cfg"
 )
 
 // SaveFunc is called when the user issues :w.

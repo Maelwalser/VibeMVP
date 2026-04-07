@@ -523,4 +523,3 @@ func refreshMultiSelectOptions(f core.Field, opts []string, placeholder string) 
 	f.SelectedIdxs = newSelected
 	return f
 }
-

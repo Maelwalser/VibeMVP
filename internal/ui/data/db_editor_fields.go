@@ -82,8 +82,12 @@ func isDBFormFieldDisabled(form []core.Field, idx int) bool {
 	return false
 }
 
-func nextDBFormIdx(form []core.Field, cur int) int { return core.NextFormIdx(form, cur, isDBFormFieldDisabled) }
-func prevDBFormIdx(form []core.Field, cur int) int { return core.PrevFormIdx(form, cur, isDBFormFieldDisabled) }
+func nextDBFormIdx(form []core.Field, cur int) int {
+	return core.NextFormIdx(form, cur, isDBFormFieldDisabled)
+}
+func prevDBFormIdx(form []core.Field, cur int) int {
+	return core.PrevFormIdx(form, cur, isDBFormFieldDisabled)
+}
 
 func dbFormFromSourceWithEnvs(src manifest.DBSourceDef, envNames []string) []core.Field {
 	f := dbFormFromSource(src)

@@ -28,20 +28,6 @@ var backendLanguages = []string{
 	"C#/.NET", "Rust", "Ruby", "PHP", "Elixir", "Other",
 }
 
-var backendLintersByLang = map[string][]string{
-	"Go":              {"golangci-lint", "staticcheck", "go vet", "None"},
-	"TypeScript/Node": {"ESLint", "Biome", "TSLint (legacy)", "None"},
-	"Python":          {"Ruff", "Flake8", "Pylint", "mypy", "None"},
-	"Java":            {"Checkstyle", "SpotBugs", "PMD", "SonarLint", "None"},
-	"Kotlin":          {"ktlint", "detekt", "SonarLint", "None"},
-	"C#/.NET":         {"Roslyn Analyzers", "StyleCop", "SonarLint", "None"},
-	"Rust":            {"Clippy", "cargo-audit", "None"},
-	"Ruby":            {"RuboCop", "StandardRB", "None"},
-	"PHP":             {"PHP-CS-Fixer", "PHPStan", "Psalm", "None"},
-	"Elixir":          {"Credo", "Dialyxir", "None"},
-	"Other":           {"Custom", "None"},
-}
-
 // errorFormatByProtocol maps a technology/protocol name to the error formats
 // that are idiomatic for it. Used to narrow the error_format dropdown based on
 // the technologies selected for a service.

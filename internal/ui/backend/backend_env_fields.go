@@ -411,4 +411,3 @@ func (be BackendEditor) rateBackendOptions() []string {
 	opts = append(opts, "In-memory", "None")
 	return opts
 }
-
