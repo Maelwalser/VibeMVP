@@ -77,8 +77,18 @@ func taskLanguage(task *dag.Task) string {
 		if len(task.Payload.AllServices) > 0 {
 			return normalizeLanguage(task.Payload.AllServices[0].Language)
 		}
-	case dag.TaskKindDataSchemas, dag.TaskKindDataMigrations:
-		// Data tasks: language determined by primary service stack; use null verifier.
+	case dag.TaskKindDataSchemas:
+		// Data schemas generate Go/TS/Python source files — verify with the
+		// appropriate language verifier. Falls back to null if no service context.
+		if task.Payload.Service != nil {
+			return normalizeLanguage(task.Payload.Service.Language)
+		}
+		if len(task.Payload.AllServices) > 0 {
+			return normalizeLanguage(task.Payload.AllServices[0].Language)
+		}
+		return ""
+	case dag.TaskKindDataMigrations:
+		// SQL migration files have no language-specific verifier yet.
 		return ""
 	case dag.TaskKindFrontend:
 		if task.Payload.Frontend != nil && task.Payload.Frontend.Tech != nil {

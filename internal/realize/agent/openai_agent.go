@@ -35,7 +35,7 @@ func NewOpenAIAgent(baseURL, apiKey, modelID string, maxTokens int64, verbose bo
 // Run calls the provider's chat completions endpoint, parses the <files> block,
 // and returns the generated files.
 func (a *OpenAIAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
-	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext)
+	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext, ac.Language())
 	userMsg, err := UserMessage(ac)
 	if err != nil {
 		return nil, fmt.Errorf("build user message: %w", err)

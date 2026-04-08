@@ -39,4 +39,24 @@ type Context struct {
 	// untruncated content at commit time, ensuring handler tasks generate
 	// compatible method calls even when file excerpts are budget-limited.
 	AllServiceMethods []memory.ServiceMethodSig
+	// AllErrorSentinels is a snapshot of every exported Err* variable declaration
+	// from upstream tasks. Injected into the prompt so agents use only defined
+	// sentinel names and do not invent new ones (e.g. ErrAlreadyExists when the
+	// plan task defined ErrUniqueConstraintViolation).
+	AllErrorSentinels []memory.ErrorSentinel
+}
+
+// Language returns the primary backend language from the task payload.
+// Returns "" when no language can be determined (e.g. infra-only tasks).
+func (c *Context) Language() string {
+	if c.Task.Payload.Service != nil {
+		return c.Task.Payload.Service.Language
+	}
+	if len(c.Task.Payload.AllServices) > 0 {
+		return c.Task.Payload.AllServices[0].Language
+	}
+	if c.Task.Payload.Frontend != nil && c.Task.Payload.Frontend.Tech != nil {
+		return c.Task.Payload.Frontend.Tech.Language
+	}
+	return ""
 }

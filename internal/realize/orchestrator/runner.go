@@ -20,6 +20,22 @@ import (
 	"github.com/vibe-menu/internal/realize/verify"
 )
 
+// testOnlyRetryGuidance is prepended to the verification error output when only
+// test files fail (go build passes). It instructs the LLM to fix test code only
+// and not touch the working implementation files.
+const testOnlyRetryGuidance = `⚠ TEST-ONLY FAILURE: go build PASSED — your implementation code is CORRECT.
+ONLY the _test.go files have errors. Fix the test files ONLY.
+DO NOT modify any non-test files (*.go without _test suffix) — they compile and work.
+Return ALL files (implementation + fixed tests) in your output.
+
+COMMON TEST MISTAKES TO FIX:
+1. "for _, t := range tests" shadows *testing.T — use "for _, tc := range tests" and tc.field for struct fields
+2. mock.ExpectQueryRow() does NOT exist — use mock.ExpectQuery() for both Query() and QueryRow()
+3. pgx.PgError does NOT exist in pgx v5 — use pgconn.PgError from "github.com/jackc/pgx/v5/pgconn"
+4. Use ONLY sentinel error names that exist in errors.go / domain files (check Shared Team Context)
+
+`
+
 // errorType classifies a verification failure for routing to the right fix strategy.
 type errorType int
 
@@ -190,10 +206,12 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			ExistingTypeRegistry: r.memory.TypeRegistry(),
 			AllConstructors:      r.memory.AllConstructors(),
 			AllServiceMethods:    r.memory.AllServiceMethods(),
+			AllErrorSentinels:    r.memory.AllErrorSentinels(),
 		}
 
 		result, err := a.Run(ctx, ac)
 		if err != nil {
+			r.log("[%s] agent error: %v", r.task.ID, err)
 			if attempt == r.maxRetries {
 				return fmt.Errorf("task %s: agent failed after %d attempts: %w", r.task.ID, attempt+1, err)
 			}
@@ -208,6 +226,27 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			}
 			lastVerifyOutput = fmt.Sprintf("Agent error: %v", err)
 			continue
+		}
+
+		// On retries, remove files from the previous attempt that are NOT in the
+		// new output. This prevents stale files (with renamed/removed symbols) from
+		// causing "undefined" errors when the retry LLM generates a different file set.
+		if attempt > 0 && len(lastFiles) > 0 {
+			newFileSet := make(map[string]bool, len(result.Files))
+			for _, f := range result.Files {
+				newFileSet[f.Path] = true
+			}
+			for _, old := range lastFiles {
+				if !newFileSet[old.Path] {
+					_ = os.Remove(filepath.Join(tmpDir, old.Path))
+				}
+			}
+			// Re-stage dependency files — the stale cleanup above may have removed
+			// files that a previous attempt overwrote (e.g. interfaces.go, errors.go)
+			// and the new attempt doesn't regenerate.
+			if err := r.stageDependencyFiles(tmpDir); err != nil {
+				r.log("[%s] warning: re-staging dependency files: %v", r.task.ID, err)
+			}
 		}
 
 		lastFiles = result.Files
@@ -229,8 +268,8 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		// etc.) before every verification — not just on retries.
 		// Use ALL files in tmpDir (including staged dependency files) so that fixes
 		// like fixDuplicateTypes and fixGofmt cover the entire compilation unit.
-		// Without this, staged files that are unformatted or contain duplicate type
-		// declarations cause verification failures that no retry can resolve.
+		// IMPORTANT: collect files AFTER WriteAllTo so deterministic fixes operate
+		// on the current agent output, not stale pre-write content.
 		allFiles := allFilesInDir(tmpDir)
 		if fixes := verify.ApplyDeterministicFixes(tmpDir, allFiles, r.verifier.Language()); fixes != "" {
 			r.log("[%s] applied deterministic fixes: %s", r.task.ID, fixes)
@@ -248,22 +287,40 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		}
 		if r.verbose {
 			r.log("%s", vResult.Output)
+		} else if !vResult.Passed {
+			// Print a brief error summary so users can diagnose failures without --verbose.
+			if summary := briefVerifyErrors(vResult.Output); summary != "" {
+				r.log("[%s] errors: %s", r.task.ID, summary)
+			}
 		}
 
 		if vResult.Passed {
 			return r.commit(ctx, tmpDir, result.Files)
 		}
 
-		// Before consuming a retry slot, try the disk-based UUID→string fix.
-		// This catches the common pattern of passing uuid.UUID where string is
-		// expected without needing an LLM call.
+		// Before consuming a retry slot, try disk-based error-driven fixes.
+		// These parse the compiler output and apply mechanical corrections
+		// without needing an LLM call.
 		if attempt < r.maxRetries {
+			anyDiskFix := false
+
+			// Fix uuid.UUID → string type mismatches.
 			if uuidFix := verify.ApplyUUIDToStringFixes(tmpDir, vResult.Output); uuidFix != "" {
 				r.log("[%s] %s", r.task.ID, uuidFix)
+				anyDiskFix = true
+			}
+
+			// Fix `:=` used where all vars are already declared.
+			if declFix := verify.ApplyShortDeclFixes(tmpDir, vResult.Output); declFix != "" {
+				r.log("[%s] %s", r.task.ID, declFix)
+				anyDiskFix = true
+			}
+
+			if anyDiskFix {
 				// Re-apply language fixes after rewriting (use all files to cover staged deps).
 				verify.ApplyDeterministicFixes(tmpDir, allFilesInDir(tmpDir), r.verifier.Language())
 				if fixResult, ferr := r.verifier.Verify(ctx, tmpDir, verify.FilePaths(lastFiles)); ferr == nil && fixResult.Passed {
-					r.log("[%s] uuid fix resolved verification — skipping LLM retry", r.task.ID)
+					r.log("[%s] disk fix resolved verification — skipping LLM retry", r.task.ID)
 					return r.commit(ctx, tmpDir, lastFiles)
 				}
 			}
@@ -290,6 +347,12 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		}
 
 		lastVerifyOutput = vResult.Output
+
+		// When only test files fail, prepend guidance so the LLM fixes tests
+		// without breaking the working implementation code.
+		if isTestOnlyFailure(vResult.Output) {
+			lastVerifyOutput = testOnlyRetryGuidance + lastVerifyOutput
+		}
 	}
 
 	return fmt.Errorf("task %s: exhausted %d retry attempts", r.task.ID, r.maxRetries)
@@ -326,6 +389,7 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	r.registerExportedTypes(files)
 	r.registerConstructors(files)
 	r.registerServiceMethods(files)
+	r.registerErrorSentinels(files)
 	// For data.schemas tasks, validate that the generated domain files include all
 	// attributes from the manifest and the input/update structs needed by repository
 	// operations. Advisory only — logs warnings but does not block the pipeline.
@@ -346,7 +410,12 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 func (r *TaskRunner) registerExportedTypes(files []dag.GeneratedFile) {
 	types := make(map[string]memory.TypeEntry)
 	for _, f := range files {
+		// Go types.
 		for name, entry := range memory.ExtractGoExportedTypeNames(f.Path, f.Content) {
+			types[name] = entry
+		}
+		// TypeScript and Python types.
+		for name, entry := range memory.ExtractExportedTypeNames(f.Path, f.Content) {
 			types[name] = entry
 		}
 	}
@@ -374,6 +443,18 @@ func (r *TaskRunner) registerServiceMethods(files []dag.GeneratedFile) {
 	for _, f := range files {
 		if sigs := memory.ExtractServiceMethodSigs(f.Path, f.Content); len(sigs) > 0 {
 			r.memory.RegisterServiceMethods(f.Path, sigs)
+		}
+	}
+}
+
+// registerErrorSentinels extracts exported error sentinels from each committed
+// file (Go Err* vars, TypeScript exported error consts/classes, Python exception
+// classes) and stores them in shared memory. This ensures downstream tasks see an
+// explicit list of available sentinel names and do not invent new ones.
+func (r *TaskRunner) registerErrorSentinels(files []dag.GeneratedFile) {
+	for _, f := range files {
+		if sentinels := memory.ExtractErrorSentinels(f.Path, f.Content); len(sentinels) > 0 {
+			r.memory.RegisterErrorSentinels(sentinels)
 		}
 	}
 }
@@ -628,6 +709,92 @@ func serviceSlug(taskID string) (string, bool) {
 // Only the bootstrap task should clean up the shared service temp directory.
 func isBootstrapTask(taskID string) bool {
 	return strings.HasSuffix(taskID, ".bootstrap")
+}
+
+// isTestOnlyFailure checks whether the verification output indicates that
+// go build and go vet passed but go test failed. In this case, the implementation
+// code is correct — only the test files have issues (typically hallucinated APIs).
+func isTestOnlyFailure(output string) bool {
+	// go build must have passed (no errors after "=== go build" section).
+	// go test must have failed.
+	hasBuildPass := true
+	hasTestFail := false
+	hasVetFail := false
+
+	sections := strings.Split(output, "=== ")
+	for _, section := range sections {
+		if strings.HasPrefix(section, "go build") {
+			// Check if there are actual errors (non-empty after the header line).
+			lines := strings.SplitN(section, "\n", 2)
+			if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
+				hasBuildPass = false
+			}
+		}
+		if strings.HasPrefix(section, "go vet") {
+			lines := strings.SplitN(section, "\n", 2)
+			if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
+				hasVetFail = true
+			}
+		}
+		if strings.HasPrefix(section, "go test") {
+			if strings.Contains(section, "FAIL") {
+				hasTestFail = true
+			}
+		}
+	}
+
+	// go vet errors in test files also count as test-only failures since
+	// vet runs on test files too.
+	if hasVetFail && !hasTestFail {
+		// Check if all vet errors are in _test.go files.
+		vetOnlyInTests := true
+		for _, section := range sections {
+			if !strings.HasPrefix(section, "go vet") {
+				continue
+			}
+			for _, line := range strings.Split(section, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "vet:") {
+					// Check if vet error references a test file.
+					if strings.Contains(trimmed, "_test.go:") || strings.Contains(trimmed, "_test.go ") {
+						continue
+					}
+					if strings.Contains(trimmed, ".go:") && !strings.Contains(trimmed, "_test.go") {
+						vetOnlyInTests = false
+					}
+				}
+			}
+		}
+		if vetOnlyInTests {
+			hasTestFail = true // treat vet-only-in-tests as test-only failure
+		}
+	}
+
+	return hasBuildPass && hasTestFail
+}
+
+// briefVerifyErrors extracts the first few unique error messages from verification
+// output for display in non-verbose mode. Returns at most 3 distinct error patterns
+// joined by "; ", or empty string if no recognizable errors are found.
+func briefVerifyErrors(output string) string {
+	seen := make(map[string]bool)
+	var errors []string
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Go compiler errors: "file.go:line:col: message"
+		if idx := strings.Index(trimmed, ".go:"); idx >= 0 {
+			// Extract just the error message after the file:line:col prefix.
+			parts := strings.SplitN(trimmed[idx:], ": ", 2)
+			if len(parts) == 2 {
+				msg := parts[1]
+				if !seen[msg] && len(errors) < 3 {
+					seen[msg] = true
+					errors = append(errors, msg)
+				}
+			}
+		}
+	}
+	return strings.Join(errors, "; ")
 }
 
 // isRateLimitError reports whether err is an API 429 rate-limit response.

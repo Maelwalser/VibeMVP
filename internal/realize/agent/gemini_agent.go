@@ -33,7 +33,7 @@ func NewGeminiAgent(apiKey, modelID string, maxTokens int64, verbose bool) *Gemi
 // Run calls the Gemini generateContent endpoint, parses the <files> block,
 // and returns the generated files.
 func (a *GeminiAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
-	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext)
+	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext, ac.Language())
 	userMsg, err := UserMessage(ac)
 	if err != nil {
 		return nil, fmt.Errorf("build user message: %w", err)

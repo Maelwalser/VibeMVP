@@ -469,7 +469,9 @@ func buildDepsContext(ctx context.Context, task *dag.Task, resolvedGoVersion str
 		return deps.InfraPromptContext(ctx, false, true)
 
 	default:
-		// Backend service tasks: inject Go module versions + library API docs.
+		// Backend service tasks and data tasks: inject Go module versions + library API docs.
+		// Data tasks now carry a Service field so they receive dependency guidance too,
+		// preventing hallucinated library versions in domain files (e.g. wrong uuid import).
 		if task.Payload.Service == nil {
 			return ""
 		}

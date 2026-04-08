@@ -81,8 +81,9 @@ type SharedMemory struct {
 	rawPaths       map[string][]string  // task ID → committed file paths (untruncated)
 	typeRegistry   map[string]TypeEntry // exported type name → first-seen location
 	typeConflicts  []TypeConflict       // types declared in multiple packages
-	constructors   []ConstructorSig     // all constructor sigs extracted at commit time
-	serviceMethods []ServiceMethodSig   // all exported method sigs extracted at commit time
+	constructors    []ConstructorSig     // all constructor sigs extracted at commit time
+	serviceMethods  []ServiceMethodSig   // all exported method sigs extracted at commit time
+	errorSentinels  []ErrorSentinel      // all Err* var declarations extracted at commit time
 }
 
 // New returns an empty SharedMemory.
@@ -215,6 +216,29 @@ func (m *SharedMemory) RegisterServiceMethods(file string, sigs []string) {
 			Signature: sig,
 		})
 	}
+}
+
+// RegisterErrorSentinels appends exported Err* variable declarations from a
+// committed file to the shared registry. Called at commit time so downstream
+// prompts receive an explicit list of available sentinel names.
+// Safe for concurrent use.
+func (m *SharedMemory) RegisterErrorSentinels(sentinels []ErrorSentinel) {
+	if len(sentinels) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.errorSentinels = append(m.errorSentinels, sentinels...)
+}
+
+// AllErrorSentinels returns a snapshot of every error sentinel registered so far.
+// Safe for concurrent use.
+func (m *SharedMemory) AllErrorSentinels() []ErrorSentinel {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ErrorSentinel, len(m.errorSentinels))
+	copy(result, m.errorSentinels)
+	return result
 }
 
 // AllServiceMethods returns a snapshot of every exported method signature registered so far.

@@ -28,8 +28,12 @@ var MaxTotalCharsByKind = map[string]int{
 	"backend.service.logic":      15000, // sees repo + data schemas
 	"backend.service.repository": 15000, // sees data schemas + plan interfaces
 	"backend.service.plan":       20000, // sees data schemas — must receive full domain structs + input types
+	"backend.service.deps":       15000, // sees plan output (go.mod + interfaces)
 	"backend.auth":               20000, // needs all service interfaces
-	"backend.gateway":            20000, // needs full service surface
+	"backend.messaging":          15000, // needs domain + event definitions
+	"backend.gateway":            20000, // needs full service surface + endpoints
+	"backend.reconciliation":     40000, // reads entire module for cross-task repair
+	"integration.repair":         40000, // reads entire module for cross-task repair
 	"contracts":                  20000, // aggregates all service + data output
 	"frontend":                   20000, // needs contracts + data types
 	"crosscut.testing":           40000, // depends on ALL prior tasks — needs constructors + types from every layer

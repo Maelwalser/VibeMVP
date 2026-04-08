@@ -486,14 +486,6 @@
     "styling": "Tailwind CSS"
   },
   "infrastructure": {
-    "cicd": {
-      "platform": "GitHub Actions",
-      "container_registry": "GHCR",
-      "deploy_strategy": "Rolling",
-      "iac_tool": "Terraform",
-      "secrets_mgmt": "GitHub Secrets",
-      "container_runtime": "scratch"
-    },
     "observability": {
       "logging": "Loki + Grafana",
       "metrics": "Prometheus + Grafana",
@@ -510,22 +502,6 @@
         "orchestrator": "Docker Compose"
       }
     ]
-  },
-  "cross_cutting": {
-    "testing": {
-      "unit": "Go testing",
-      "integration": "In-memory fakes",
-      "e2e": "Playwright",
-      "api": "Bruno",
-      "load": "k6",
-      "frontend_testing": "Vitest"
-    },
-    "docs": {
-      "per_protocol_formats": {
-        "REST": "OpenAPI/Swagger"
-      },
-      "auto_generate": true
-    }
   },
   "realize": {
     "app_name": "auth-app",

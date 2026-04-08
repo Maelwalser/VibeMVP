@@ -77,15 +77,24 @@ func PromptContext(framework string, technologies []string, goVersion string, re
 	}
 
 	// Inject library API docs for relevant technologies.
+	// Use an explicit alias map instead of bidirectional substring matching,
+	// which caused over-injection (e.g. "go" matching "godotenv", "golang-jwt").
 	injected := make(map[string]bool)
 	allTechs := append([]string{framework}, technologies...)
 	for _, tech := range allTechs {
 		lower := strings.ToLower(tech)
-		for key, doc := range LibraryAPIDocs {
+		// Direct match first.
+		if doc, ok := LibraryAPIDocs[lower]; ok && !injected[lower] {
+			b.WriteString(doc)
+			b.WriteString("\n")
+			injected[lower] = true
+		}
+		// Alias-based matching for technologies that map to different doc keys.
+		for _, key := range libraryDocAliases(lower) {
 			if injected[key] {
 				continue
 			}
-			if strings.Contains(lower, key) || strings.Contains(key, lower) {
+			if doc, ok := LibraryAPIDocs[key]; ok {
 				b.WriteString(doc)
 				b.WriteString("\n")
 				injected[key] = true
@@ -100,6 +109,16 @@ func PromptContext(framework string, technologies []string, goVersion string, re
 				b.WriteString(LibraryAPIDocs["pgxmock"])
 				injected["pgxmock"] = true
 			}
+		}
+	}
+
+	// Always inject godotenv docs for Go services — Go does not auto-load .env
+	// files, so every bootstrap task needs to know the correct loading pattern.
+	if !injected["godotenv"] {
+		if doc, ok := LibraryAPIDocs["godotenv"]; ok {
+			b.WriteString(doc)
+			b.WriteString("\n")
+			injected["godotenv"] = true
 		}
 	}
 
@@ -231,6 +250,26 @@ func LoadResolvedDeps(dir, taskID string) (*ResolvedDeps, error) {
 	}
 	var d ResolvedDeps
 	return &d, json.Unmarshal(data, &d)
+}
+
+// libraryDocAliases returns the LibraryAPIDocs keys that should be injected
+// for a given technology string. This replaces the old bidirectional substring
+// matching which caused over-injection (e.g. "go" matching "godotenv").
+func libraryDocAliases(tech string) []string {
+	aliases := map[string][]string{
+		"postgresql": {"pgxmock"},
+		"postgres":   {"pgxmock"},
+		"pgx":        {"pgxmock"},
+		"jwt":        {"golang-jwt"},
+		"fastapi":    {"sqlalchemy"},
+		"django":     {"django-drf"},
+		"next.js":    {"next"},
+		"nextjs":     {"next"},
+	}
+	if keys, ok := aliases[tech]; ok {
+		return keys
+	}
+	return nil
 }
 
 // tailwindMajor parses the major version number from a semver string such as

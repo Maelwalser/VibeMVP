@@ -46,7 +46,31 @@ per-task errors.
      build failures that are NOT auto-fixed — match the argument count exactly.
    - The "// from: <file>" comment above each signature identifies the package to import.
      For Go: strip the filename from the path to get the package directory:
-     "// from: internal/repository/postgres/user.go" → import "{module_path}/internal/repository/postgres"`
+     "// from: internal/repository/postgres/user.go" → import "{module_path}/internal/repository/postgres"
+
+7. **Import path format**: Every import for internal packages MUST use the correct, fully-qualified
+   module path — never a bare app name or relative shorthand that the language runtime cannot resolve.
+   **Go**: Use the FULL module path from go.mod for every import. NEVER use a bare app name.
+     WRONG:   import "monolith/internal/repository"   ← "is not in std" error
+     CORRECT: import "github.com/user/monolith/internal/repository"  ← full module path
+   **TypeScript/JavaScript**: Use the path aliases defined in tsconfig.json (e.g. @/...) or
+     relative paths (./service/user.service). NEVER use bare module names for internal code.
+     WRONG:   import { UserService } from "services/user"   ← module not found
+     CORRECT: import { UserService } from "@/services/user"  or  from "./services/user"
+   **Python**: Use dotted module paths relative to the project root or package.
+     WRONG:   from repository import UserRepository   ← if 'repository' is not a top-level package
+     CORRECT: from app.repository import UserRepository  ← full dotted path
+
+8. **Variable re-declaration**: Never re-declare a variable that already exists in the current scope.
+   **Go**: Use = not := when ALL variables on the left side are already declared.
+     WRONG (err already declared):  err := db.Close()   → "no new variables on left side of :="
+     CORRECT:                        err = db.Close()    → reassigns existing err
+     Rule: := declares new vars. If nothing is new on the left side, use = instead.
+   **TypeScript/JavaScript**: Do not use let/const to re-declare a variable in the same scope.
+     WRONG:   let err = await query(); let err = await close();  → "Cannot redeclare block-scoped variable"
+     CORRECT: let err = await query(); err = await close();      → reassigns existing err
+   **Python**: Python allows re-assignment freely, but avoid shadowing function parameters or
+     imported names by re-using the same identifier for a different purpose.`
 
 // taskRoleDescriptions maps each TaskKind to the system-prompt role text that
 // scopes the agent's expertise and strict file output rules.
@@ -58,7 +82,7 @@ var taskRoleDescriptions = map[dag.TaskKind]string{
 	dag.TaskKindServicePlan: `You are a Go software architect. Your ONLY job is to output the project skeleton files that ALL downstream implementation agents will depend on.
 
 STRICT SCOPE — output EXACTLY these files:
-1. go.mod — module name MUST be exactly the module_path value from the payload. List ONLY your direct (first-party) dependencies. Do NOT list transitive dependencies — a dedicated dependency resolution step will run "go mod tidy" to resolve them. Use EXACTLY the module paths and versions from the "Dependency & API Reference" section below — do NOT invent versions. Include every library that repository, service, and handler layers will need (e.g. pgx/v5, fiber/v2, jwt, uuid).
+1. go.mod — module name MUST be exactly the module_path value from the payload. List ONLY your direct (first-party) dependencies. Do NOT list transitive dependencies — a dedicated dependency resolution step will run "go mod tidy" to resolve them. Use EXACTLY the module paths and versions from the "Dependency & API Reference" section below — do NOT invent versions. Include every library that repository, service, handler, AND bootstrap layers will need (e.g. pgx/v5, fiber/v2, jwt, uuid, godotenv for .env loading).
 2. internal/repository/interfaces.go — defines every repository interface for each domain entity (e.g. UserRepository, BlogRepository). Each interface must list all CRUD methods with precise Go types derived from the domain structs in Shared Team Context. For each database driver in use, also define a connection pool/client interface (e.g. PgxPool for pgx/v5, DBPool for database/sql) so all downstream layers depend on an interface, not a concrete driver type. Use the exact method signatures from the "Dependency & API Reference" section below.
 3. internal/domain/errors.go — domain-level sentinel errors (ErrNotFound, ErrAlreadyExists, etc.)
    ONLY if NO domain files appear in the Shared Team Context. When the data.schemas task has
@@ -95,10 +119,16 @@ The PgxPool interface uses types from TWO separate packages — import BOTH:
       "github.com/jackc/pgx/v5"         // provides: pgx.Tx, pgx.Rows, pgx.Row, pgx.Batch, pgx.BatchResults
       "github.com/jackc/pgx/v5/pgconn"  // provides: pgconn.CommandTag
   )
+NEVER import "github.com/jackc/pgconn" (the standalone v4-era package) — it defines a
+DIFFERENT pgconn.CommandTag type with the SAME name. Using the wrong one makes *pgxpool.Pool
+fail to satisfy PgxPool with "wrong type for method Exec" even though the signatures look
+identical. The ONLY correct import for pgx v5 is "github.com/jackc/pgx/v5/pgconn".
 NEVER import "github.com/jackc/pgx/v5/pgxpool" in interfaces.go — pgxpool is the concrete
 pool implementation, which belongs in internal/repository/postgres/db.go, not in the
 interface file. Using "pgxpool" as the import alias makes pgx.Tx and pgconn.CommandTag
-undefined because those identifiers live in different packages.`,
+undefined because those identifiers live in different packages.
+Also ensure go.mod does NOT list "github.com/jackc/pgconn" as a dependency — only
+"github.com/jackc/pgx/v5" should be listed. The standalone pgconn module is v4-era.`,
 
 	// Data pillar — narrow scope, each task does exactly one thing.
 	dag.TaskKindDataSchemas: `You are an expert Go developer. Generate ONLY Go domain struct types for the given domain definitions.
@@ -163,7 +193,10 @@ STRICT SCOPE:
 - PostgreSQL implementations in internal/repository/postgres/<entity>_repository.go
 - A database connection/pool setup file (internal/repository/postgres/db.go)
 - Table-driven _test.go files alongside each implementation
-- Use the module path from the payload's module_path field for all imports
+- IMPORT PATHS (CRITICAL): Use the FULL module path from the "Module path:" field for ALL imports.
+  WRONG: import "monolith/internal/domain" ← bare name causes "is not in std" compile error
+  CORRECT: import "{module_path}/internal/domain" ← full path from go.mod
+  Every internal import MUST start with the complete module path (e.g. "github.com/user/app/internal/...").
 - DO NOT generate: domain structs (already in internal/domain/), service layer, handlers, main.go, or go.mod
 
 PACKAGE SEPARATION (CRITICAL):
@@ -180,8 +213,16 @@ DATABASE CLIENT (CRITICAL):
     type UserRepository struct { pool repository.PgxPool }
   Do NOT use *sql.DB, *pgxpool.Pool, or any other concrete database type directly.
   Import the interface from the repository package: "{module_path}/internal/repository"
-- Return sentinel errors from internal/repository/errors.go (e.g. repository.ErrNotFound) so
-  callers can use errors.Is() — never return fmt.Errorf("not found") for well-known conditions.
+- SENTINEL ERRORS (CRITICAL — inventing names causes compilation failures):
+  Use ONLY the error sentinels listed in the "Available Error Sentinels" section below.
+  These are the EXACT Err* variables defined by upstream tasks. Do NOT invent new names.
+  Common mistakes to AVOID:
+    ✗ Using ErrAlreadyExists when the defined sentinel is ErrUniqueConstraintViolation
+    ✗ Using domain.ErrNotFound when ErrNotFound is defined in the repository package
+    ✗ Creating new Err* variables — they already exist in errors.go from the plan task
+  If the "Available Error Sentinels" section lists ErrUniqueConstraintViolation, wrap
+  unique constraint violations with THAT name — not ErrAlreadyExists, ErrConflict, etc.
+  In tests, assert against the SAME sentinel error names used in the implementation code.
 
 STRUCT FIELD RULES (CRITICAL):
 - ONLY access fields that are EXPLICITLY shown in the Shared Team Context struct definitions.
@@ -198,6 +239,33 @@ STRUCT FIELD RULES (CRITICAL):
         UpdatedAt:    time.Now().UTC(),
     }
   Then INSERT newUser's fields — never reference input.ID, input.IsActive, input.CreatedAt, etc.
+
+PGXMOCK TEST RULES (CRITICAL — test hallucinations cause retry cascades):
+- Use mock.ExpectQuery() for BOTH Query() and QueryRow() calls — ExpectQueryRow does NOT exist.
+- Use pgconn.PgError (from "github.com/jackc/pgx/v5/pgconn") for error simulation, NOT pgx.PgError.
+- In test assertions, use the EXACT sentinel error names from errors.go and domain files shown in
+  Shared Team Context. Do NOT use ErrConflict if errors.go defines ErrAlreadyExists.
+- TABLE-DRIVEN TEST LOOP VARIABLE: NEVER use "t" as the loop variable — it shadows *testing.T.
+  CORRECT: for _, tc := range tests { t.Run(tc.name, func(t *testing.T) { ... }) }
+  WRONG:   for _, t := range tests { t.Run(t.name, ...) }  ← t is now the struct, not *testing.T
+- SQL MATCHING (CRITICAL — regex mismatch is the #1 test failure cause):
+  ExpectQuery/ExpectExec treat the argument as a REGEX. Define SQL as package-level const and
+  share between implementation and test using regexp.QuoteMeta:
+    const findByEmailSQL = ` + "`" + "SELECT id, email FROM users WHERE email = $1" + "`" + `
+    // In implementation: r.pool.QueryRow(ctx, findByEmailSQL, email)
+    // In test: mock.ExpectQuery(regexp.QuoteMeta(findByEmailSQL)).WithArgs(...)
+  NEVER use regex metacharacters (\s+, $1, .+) in SQL patterns — they silently fail to match.
+  NEVER write multi-line SQL in ExpectQuery while using single-line SQL in the implementation.
+
+VARIABLE DECLARATION RULES (CRITICAL — causes "no new variables on left side of :="):
+- Use := ONLY when at least one variable on the left is NEW (not yet declared in scope).
+- When ALL variables on the left are already declared, use = instead.
+  Repository methods typically have multiple error-returning calls in sequence:
+    row := r.pool.QueryRow(ctx, sql, args...)     // OK: row is new
+    err := row.Scan(&user.ID, &user.Email)         // OK: err is new
+    _, err = r.pool.Exec(ctx, updateSQL, args...)   // CORRECT: err already declared, use =
+    _, err := r.pool.Exec(ctx, updateSQL, args...)  // WRONG: err already exists → compile error
+  Apply this consistently throughout all repository methods and tests.
 
 PGXPOOL v5 API RULES (CRITICAL):
 - pgxpool.Config does NOT have a ConnectTimeout field — it was removed in v5.
@@ -224,7 +292,9 @@ STRICT SCOPE:
 - One service struct per domain entity (e.g. internal/service/user_service.go)
 - Services accept repository interfaces as constructor arguments (dependency injection)
 - Table-driven _test.go with mocked repositories for each service file
-- Use the module path from the payload's module_path field for all imports
+- IMPORT PATHS (CRITICAL): Use the FULL module path from the "Module path:" field for ALL imports.
+  WRONG: import "monolith/internal/domain" ← bare name causes "is not in std" compile error
+  CORRECT: import "{module_path}/internal/domain" ← full path from go.mod
 - DO NOT generate: domain structs, repository code, handlers, main.go, or go.mod
 
 AUTH INTEGRATION (when "auth" is present in the payload):
@@ -271,7 +341,9 @@ STRICT SCOPE:
 - Auth middleware when auth strategy is defined: generate BOTH internal/middleware/auth.go AND
   internal/middleware/rbac.go using the HTTP framework shown in the service payload (e.g. Fiber, Gin, Echo, net/http)
 - Table-driven _test.go for each handler file
-- Use the module path from the payload's module_path field for all imports
+- IMPORT PATHS (CRITICAL): Use the FULL module path from the "Module path:" field for ALL imports.
+  WRONG: import "monolith/internal/domain" ← bare name causes "is not in std" compile error
+  CORRECT: import "{module_path}/internal/domain" ← full path from go.mod
 - DO NOT generate: domain structs, repository code, service code, main.go, or go.mod
 
 AUTH MIDDLEWARE RULES (CRITICAL — prevents cross-task framework conflicts):
@@ -285,6 +357,17 @@ YOU own the HTTP adapter layer: internal/middleware/auth.go and internal/middlew
 - For Fiber: use c.Locals("claims") to pass *auth.Claims; return c.Status(403).JSON(...)
 - For net/http: use context.WithValue and r.Context().Value(...) to pass claims; use w.WriteHeader(...)
 - Never mix frameworks within the same package (e.g. fiber.Ctx alongside http.ResponseWriter)
+
+MIDDLEWARE CONTEXT KEY RULES (CRITICAL — undefined symbol errors):
+- Define a context key type and value in ONE file (e.g. auth.go or a shared context.go in the middleware package):
+    type contextKey string
+    const claimsKey contextKey = "claims"
+- ALL files in internal/middleware/ that reference claimsKey MUST use the SAME symbol from
+  the SAME package. Do NOT define it in auth.go and reference it from rbac.go without exporting it
+  or placing both in the same package — Go requires all symbols to be visible at compile time.
+- In tests: use context.WithValue(context.Background(), claimsKey, claims) to inject claims.
+  NEVER create a mock context using interface literals like interface{Value(any) any}{} — this
+  does not implement context.Context (missing Deadline, Done, Err methods) and will fail go vet.
 
 RESPONSE STRUCT TYPE RULES (CRITICAL):
 - Response struct fields MUST use the same Go types as the domain struct fields shown in Shared Team Context.
@@ -306,8 +389,21 @@ and a single internal/router/router.go that imports all module handlers` +
 STRICT SCOPE:
 - main.go — wires together all layers (repository → service → handler), starts the HTTP server
 - .env.example — all required environment variables with placeholder values
+- .env — copy of .env.example with the same placeholder values (so the app starts out of the box)
 - DO NOT generate go.mod or go.sum — the module was already created and all dependencies fully resolved in the project skeleton + dependency resolution phases. Regenerating go.mod would overwrite the locked dependency tree and reintroduce version conflicts.
 - DO NOT generate: domain structs, repository code, service code, or handler code (they are already generated)
+
+ENVIRONMENT LOADING (CRITICAL — Go does NOT auto-load .env files):
+- Go's os.Getenv() only reads the OS environment — it does NOT read .env files.
+  Without explicit loading, the app will fail with "required environment variable not set" even
+  when .env exists in the working directory.
+- At the very top of main() (before any os.Getenv calls), load .env using godotenv:
+    import "github.com/joho/godotenv"
+    func main() {
+        _ = godotenv.Load()  // silently ignore error — .env is optional in production
+        // ... rest of bootstrap
+    }
+- The godotenv dependency is already in go.mod from the plan phase — do NOT add it to go.mod.
 
 BOOTSTRAP WIRING RULES (CRITICAL):
 - Every New* constructor in the "Critical Constructor Signatures" section returns specific types —
@@ -572,4 +668,101 @@ func roleDescription(kind dag.TaskKind) string {
 		desc = "You are an expert software engineer. Generate production-quality code based on the provided specifications."
 	}
 	return "## Role\n\n" + desc
+}
+
+// languageAdaptation returns a preamble that adapts Go-specific role descriptions
+// to the target language. Returns "" for Go (no adaptation needed) or empty language.
+//
+// Rather than maintaining parallel role descriptions for each language (which would
+// triple the code and drift out of sync), this function tells the LLM to translate
+// the structural patterns (file layout, module system, error handling, testing) from
+// Go conventions to the target language's idiomatic equivalents.
+func languageAdaptation(language string) string {
+	switch language {
+	case "TypeScript", "JavaScript", "Node.js", "TypeScript/Node":
+		return `## Language Adaptation — TypeScript/Node.js
+
+IMPORTANT: The role description above uses Go-specific examples and file paths.
+You are generating **TypeScript/Node.js** code. Translate ALL Go patterns as follows:
+
+| Go Pattern | TypeScript Equivalent |
+|---|---|
+| internal/domain/*.go | src/domain/*.ts |
+| internal/repository/*.go | src/repository/*.ts |
+| internal/service/*.go | src/service/*.ts |
+| internal/handler/*.go | src/handler/*.ts or src/controller/*.ts |
+| go.mod | package.json |
+| go build / go vet | tsc --noEmit |
+| *_test.go (table-driven) | *.test.ts or *.spec.ts (Jest/Vitest) |
+| struct { fields } | interface or class with properties |
+| func (s *Svc) Method() | class method or standalone function |
+| fmt.Errorf("wrap: %w", err) | throw new Error("wrap", { cause: err }) |
+| errors.Is(err, ErrNotFound) | err instanceof NotFoundError |
+| uuid.UUID | string (UUID format) |
+| context.Context | no equivalent needed (use async/await) |
+| := / var | const / let |
+
+- Use ES modules (import/export), NOT CommonJS (require)
+- Use async/await for all I/O operations
+- Use class-based or functional patterns as appropriate for the framework
+- Use path aliases (@/...) or relative imports for internal modules
+- Generate tsconfig.json instead of go.mod for module configuration`
+
+	case "Python":
+		return `## Language Adaptation — Python
+
+IMPORTANT: The role description above uses Go-specific examples and file paths.
+You are generating **Python** code. Translate ALL Go patterns as follows:
+
+| Go Pattern | Python Equivalent |
+|---|---|
+| internal/domain/*.go | app/domain/*.py or app/models/*.py |
+| internal/repository/*.go | app/repository/*.py |
+| internal/service/*.go | app/service/*.py |
+| internal/handler/*.go | app/api/*.py or app/routes/*.py |
+| go.mod | requirements.in or pyproject.toml |
+| go build / go vet | mypy / ruff check |
+| *_test.go (table-driven) | test_*.py (pytest with parametrize) |
+| struct { fields } | dataclass or Pydantic BaseModel |
+| interface { methods } | Protocol (typing) or ABC |
+| func (s *Svc) Method() | class method with self |
+| fmt.Errorf("wrap: %w", err) | raise CustomError("msg") from err |
+| errors.Is(err, ErrNotFound) | except NotFoundError |
+| uuid.UUID | uuid.UUID (from uuid module) |
+| context.Context | no equivalent (use async context if needed) |
+
+- Use type hints throughout (PEP 484)
+- Use async def for I/O-bound operations with asyncio
+- Use dependency injection via constructor (__init__) parameters
+- Use Pydantic v2 for data validation (model_config = ConfigDict, NOT orm_mode)
+- Follow PEP 8 naming: snake_case for functions/variables, PascalCase for classes
+- Use __init__.py files for package structure`
+
+	case "Rust":
+		return `## Language Adaptation — Rust
+
+IMPORTANT: The role description above uses Go-specific examples and file paths.
+You are generating **Rust** code. Translate ALL Go patterns as follows:
+
+| Go Pattern | Rust Equivalent |
+|---|---|
+| internal/domain/*.go | src/domain/*.rs or src/models/*.rs |
+| internal/repository/*.go | src/repository/*.rs |
+| internal/service/*.go | src/service/*.rs |
+| go.mod | Cargo.toml |
+| go build / go vet | cargo build / cargo clippy |
+| *_test.go | #[cfg(test)] mod tests { } |
+| struct { fields } | struct with derive macros |
+| interface { methods } | trait |
+| error handling (if err != nil) | Result<T, E> with ? operator |
+
+- Use proper ownership and borrowing
+- Use async/await with tokio for I/O operations
+- Use trait objects (dyn Trait) or generics for dependency injection
+- Follow Rust naming conventions: snake_case for functions, PascalCase for types`
+
+	default:
+		// Go or unknown — no adaptation needed
+		return ""
+	}
 }

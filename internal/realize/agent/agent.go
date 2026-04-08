@@ -62,7 +62,7 @@ func NewClaudeAgentWithKey(model string, maxTokens int64, verbose bool, apiKey s
 // Run invokes Claude for the task, streams the response, parses the <files> block,
 // and returns the generated files.
 func (a *ClaudeAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
-	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext)
+	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext, ac.Language())
 	userMsg, err := UserMessage(ac)
 	if err != nil {
 		return nil, fmt.Errorf("build user message: %w", err)

@@ -33,6 +33,12 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 		if f := fixPlaceholderImportPaths(dir, files); f != "" {
 			fixes = append(fixes, f)
 		}
+		// Fix bare module imports (e.g. "monolith/internal/..." → full module path).
+		// LLMs sometimes use the app name as the import prefix instead of the full
+		// module path from go.mod, causing "package X is not in std" errors.
+		if f := fixBareModuleImports(dir, files); f != "" {
+			fixes = append(fixes, f)
+		}
 		if f := fixGoEscapeSequences(dir, files); f != "" {
 			fixes = append(fixes, f)
 		}
@@ -45,6 +51,31 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 		// Remove invalid pgxpool v5 fields before gofmt so the result is clean.
 		if f := fixInvalidPgxpoolConfig(dir, files); f != "" {
 			fixes = append(fixes, f)
+		}
+		// Fix wrong pgconn import: standalone "github.com/jackc/pgconn" (v4-era)
+		// must be "github.com/jackc/pgx/v5/pgconn" when pgx v5 is in use.
+		if f := fixPgconnImportPath(dir, files); f != "" {
+			fixes = append(fixes, f)
+		}
+		// Fix hallucinated pgxmock APIs (ExpectQueryRow, pgx.PgError) that cause
+		// test compilation failures and cascade into broken implementation retries.
+		if f := fixPgxmockHallucinations(dir, files); f != "" {
+			fixes = append(fixes, f)
+		}
+		// Fix "for _, t := range tests" shadowing the *testing.T parameter.
+		// Renames loop var to "tc" and updates field accesses accordingly.
+		if f := fixShadowedTestingT(dir, files); f != "" {
+			fixes = append(fixes, f)
+		}
+		// Fix undefined sentinel errors (e.g. ErrConflict → ErrAlreadyExists).
+		// This can make imports unused (e.g. pgx import after pgx.ErrNoRows is
+		// rewritten to repository.ErrNotFound), so we run goimports again after.
+		if f := fixUndefinedSentinels(dir, files); f != "" {
+			fixes = append(fixes, f)
+			// Re-run goimports to clean up imports left unused by sentinel rewrites.
+			if f2 := fixGoImports(dir, files); f2 != "" {
+				fixes = append(fixes, f2)
+			}
 		}
 		// Remove import statements that appear inside function bodies — always a bug.
 		if f := fixMisplacedImports(dir, files); f != "" {
@@ -84,6 +115,89 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 		return ""
 	}
 	return strings.Join(fixes, "; ")
+}
+
+// ── Short-declaration reassignment fix ────────────────────────────────────────
+//
+// LLMs frequently use := when all variables on the left side are already declared,
+// producing "no new variables on left side of :=". This is a trivial fix: replace
+// := with = on the offending line. We parse the compiler output for the exact file
+// and line number, then do the substitution.
+
+var noNewVarsRe = regexp.MustCompile(
+	`^(.+\.go):(\d+):\d+: no new variables on left side of :=`)
+
+// ApplyShortDeclFixes reads go compiler output, finds "no new variables on left
+// side of :=" errors, and replaces := with = on the reported lines.
+func ApplyShortDeclFixes(dir string, verifyOutput string) string {
+	type fix struct {
+		file string
+		line int
+	}
+	var fixes []fix
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(verifyOutput, "\n") {
+		m := noNewVarsRe.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		relFile, lineStr := m[1], m[2]
+		key := relFile + ":" + lineStr
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		lineNum := 0
+		fmt.Sscanf(lineStr, "%d", &lineNum)
+		fixes = append(fixes, fix{file: relFile, line: lineNum})
+	}
+	if len(fixes) == 0 {
+		return ""
+	}
+
+	// Group by file.
+	byFile := make(map[string][]int)
+	for _, fx := range fixes {
+		byFile[fx.file] = append(byFile[fx.file], fx.line)
+	}
+
+	applied := 0
+	for relFile, lineNums := range byFile {
+		path := filepath.Join(dir, relFile)
+		if _, err := os.Stat(path); err != nil {
+			path = relFile
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		changed := false
+		lineSet := make(map[int]bool, len(lineNums))
+		for _, n := range lineNums {
+			lineSet[n] = true
+		}
+		for i, l := range lines {
+			if !lineSet[i+1] {
+				continue
+			}
+			// Replace the first `:=` on the line with `=`.
+			idx := strings.Index(l, ":=")
+			if idx >= 0 {
+				lines[i] = l[:idx] + "=" + l[idx+2:]
+				changed = true
+			}
+		}
+		if !changed {
+			continue
+		}
+		_ = os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+		applied++
+	}
+	if applied == 0 {
+		return ""
+	}
+	return fmt.Sprintf("fixed := to = in %d file(s)", applied)
 }
 
 // ── Type-as-string conversion fix ────────────────────────────────────────────

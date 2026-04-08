@@ -5,6 +5,168 @@ import (
 	"strings"
 )
 
+// ErrorSentinel records one exported Err* variable declaration extracted from
+// a committed file. Used to build an explicit list of available error sentinels
+// in downstream agent prompts, preventing agents from inventing sentinel names.
+type ErrorSentinel struct {
+	// Name is the sentinel variable name, e.g. "ErrNotFound".
+	Name string
+	// Package is the relative package directory, e.g. "internal/repository".
+	Package string
+	// File is the relative source file path, e.g. "internal/repository/errors.go".
+	File string
+}
+
+// ExtractGoErrorSentinels returns all exported Err* variable declarations from
+// a Go source file. These are typically sentinel errors defined as:
+//
+//	var ErrNotFound = errors.New("not found")
+//
+// or inside var blocks:
+//
+//	var (
+//	    ErrNotFound = errors.New("not found")
+//	    ErrAlreadyExists = errors.New("already exists")
+//	)
+//
+// Test files are skipped.
+func ExtractGoErrorSentinels(filePath, content string) []ErrorSentinel {
+	lower := strings.ToLower(filePath)
+	if !strings.HasSuffix(lower, ".go") || strings.HasSuffix(lower, "_test.go") {
+		return nil
+	}
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+
+	var sentinels []ErrorSentinel
+	lines := strings.Split(content, "\n")
+	inVarBlock := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Track var ( ... ) blocks.
+		if trimmed == "var (" {
+			inVarBlock = true
+			continue
+		}
+		if inVarBlock && trimmed == ")" {
+			inVarBlock = false
+			continue
+		}
+
+		// Match standalone: var ErrFoo = ...
+		if strings.HasPrefix(trimmed, "var Err") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 3 && strings.HasPrefix(parts[1], "Err") {
+				name := parts[1]
+				if len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z' {
+					sentinels = append(sentinels, ErrorSentinel{Name: name, Package: pkg, File: filePath})
+				}
+			}
+			continue
+		}
+
+		// Match inside var block: ErrFoo = ...
+		if inVarBlock && strings.HasPrefix(trimmed, "Err") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				name := parts[0]
+				if len(name) > 0 && name[0] >= 'A' && name[0] <= 'Z' && strings.HasPrefix(name, "Err") {
+					sentinels = append(sentinels, ErrorSentinel{Name: name, Package: pkg, File: filePath})
+				}
+			}
+		}
+	}
+	return sentinels
+}
+
+// ExtractErrorSentinels dispatches to the language-appropriate sentinel extractor.
+// Returns nil for unrecognised file types.
+func ExtractErrorSentinels(filePath, content string) []ErrorSentinel {
+	lower := strings.ToLower(filePath)
+	switch {
+	case strings.HasSuffix(lower, ".go") && !strings.HasSuffix(lower, "_test.go"):
+		return ExtractGoErrorSentinels(filePath, content)
+	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
+		return extractTSErrorSentinels(filePath, content)
+	case strings.HasSuffix(lower, ".py"):
+		return extractPyErrorSentinels(filePath, content)
+	default:
+		return nil
+	}
+}
+
+// extractTSErrorSentinels extracts exported error-like constants from TypeScript.
+// Patterns matched:
+//
+//	export const ErrNotFound = new Error("not found")
+//	export class NotFoundError extends Error { ... }
+func extractTSErrorSentinels(filePath, content string) []ErrorSentinel {
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+	var sentinels []ErrorSentinel
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// export const ErrFoo = ...
+		if strings.HasPrefix(trimmed, "export const Err") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 4 && parts[0] == "export" && parts[1] == "const" {
+				name := parts[2]
+				// Strip trailing = or : if present
+				name = strings.TrimRight(name, "=:")
+				name = strings.TrimSpace(name)
+				if strings.HasPrefix(name, "Err") {
+					sentinels = append(sentinels, ErrorSentinel{Name: name, Package: pkg, File: filePath})
+				}
+			}
+		}
+		// export class FooError extends Error
+		if strings.HasPrefix(trimmed, "export class ") && strings.Contains(trimmed, "Error") && strings.Contains(trimmed, "extends") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 3 {
+				name := parts[2]
+				if strings.Contains(name, "Error") {
+					sentinels = append(sentinels, ErrorSentinel{Name: name, Package: pkg, File: filePath})
+				}
+			}
+		}
+	}
+	return sentinels
+}
+
+// extractPyErrorSentinels extracts custom exception classes from Python.
+// Pattern: class FooError(Exception): or class FooError(SomeBaseError):
+func extractPyErrorSentinels(filePath, content string) []ErrorSentinel {
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+	var sentinels []ErrorSentinel
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "class ") {
+			continue
+		}
+		// class FooError(Exception):
+		if strings.Contains(trimmed, "Error") || strings.Contains(trimmed, "Exception") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				name := strings.Split(parts[1], "(")[0]
+				name = strings.TrimRight(name, ":")
+				if name != "" && name[0] >= 'A' && name[0] <= 'Z' {
+					sentinels = append(sentinels, ErrorSentinel{Name: name, Package: pkg, File: filePath})
+				}
+			}
+		}
+	}
+	return sentinels
+}
+
 // ExtractGoExportedTypeNames returns a map of exported type name → TypeEntry for
 // every exported type, interface, struct alias, or const group declared in the given
 // Go source file. Test files (_test.go) are intentionally skipped.
@@ -264,8 +426,19 @@ func extractPyCtorSigs(content string) []string {
 			if inClass && strings.HasPrefix(trimmed, "def __init__(") {
 				sig := className + ".__init__" + strings.TrimPrefix(trimmed, "def __init__")
 				sigs = append(sigs, strings.TrimSuffix(sig, ":"))
-				inClass = false
-				className = ""
+				// Do NOT exit inClass — the class may have @classmethod factory methods
+				// like create() or build() that are also constructor-like.
+			}
+			// Capture @classmethod factory methods within the class.
+			if inClass {
+				isClassFactory := strings.HasPrefix(trimmed, "def create") ||
+					strings.HasPrefix(trimmed, "def build") ||
+					strings.HasPrefix(trimmed, "async def create") ||
+					strings.HasPrefix(trimmed, "async def build")
+				if isClassFactory && strings.Contains(trimmed, "(") {
+					sig := className + "." + strings.TrimPrefix(strings.TrimPrefix(trimmed, "async "), "def ")
+					sigs = append(sigs, strings.TrimSuffix(sig, ":"))
+				}
 			}
 			continue
 		}
@@ -297,6 +470,8 @@ func ExtractServiceMethodSigs(filePath, content string) []string {
 		return extractGoServiceMethodSigs(content)
 	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
 		return extractTSServiceMethodSigs(content)
+	case strings.HasSuffix(lower, ".py"):
+		return extractPyServiceMethodSigs(content)
 	default:
 		return nil
 	}
@@ -606,4 +781,188 @@ func extractTSSignatures(content string) string {
 	}
 
 	return strings.Join(out, "\n")
+}
+
+// extractPyServiceMethodSigs extracts public method signatures from Python classes.
+// Excludes __init__, __str__, and other dunder methods — only captures business-logic
+// methods that downstream tasks need to call.
+func extractPyServiceMethodSigs(content string) []string {
+	lines := strings.Split(content, "\n")
+	var sigs []string
+	inClass := false
+	className := ""
+	classIndent := 0
+
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "class ") && strings.Contains(trimmed, ":") {
+			parts := strings.Fields(trimmed)
+			if len(parts) >= 2 {
+				name := strings.Split(parts[1], "(")[0]
+				name = strings.TrimRight(name, ":")
+				className = name
+				classIndent = len(line) - len(strings.TrimLeft(line, " \t"))
+				inClass = true
+			}
+			continue
+		}
+
+		if inClass {
+			if trimmed == "" {
+				continue
+			}
+			currentIndent := len(line) - len(strings.TrimLeft(line, " \t"))
+			if currentIndent <= classIndent && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "@") {
+				inClass = false
+				className = ""
+				continue
+			}
+
+			// Skip dunder methods, private methods, and constructors.
+			isMethod := strings.HasPrefix(trimmed, "def ") || strings.HasPrefix(trimmed, "async def ")
+			if !isMethod {
+				continue
+			}
+			methodLine := strings.TrimPrefix(strings.TrimPrefix(trimmed, "async "), "def ")
+			methodName := strings.Split(methodLine, "(")[0]
+			if strings.HasPrefix(methodName, "_") {
+				continue // skip private and dunder methods
+			}
+
+			sig := className + "." + strings.TrimSuffix(trimmed, ":")
+			sigs = append(sigs, sig)
+		}
+	}
+	return sigs
+}
+
+// ExtractExportedTypeNames dispatches to the language-appropriate type registry
+// extractor for non-Go languages. Returns nil for unrecognised file types.
+// Go types are handled by ExtractGoExportedTypeNames (called separately).
+func ExtractExportedTypeNames(filePath, content string) map[string]TypeEntry {
+	lower := strings.ToLower(filePath)
+	switch {
+	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
+		return extractTSExportedTypeNames(filePath, content)
+	case strings.HasSuffix(lower, ".py"):
+		return extractPyExportedTypeNames(filePath, content)
+	default:
+		return nil
+	}
+}
+
+// extractTSExportedTypeNames extracts exported interface, type alias, enum, and class
+// declarations from TypeScript source.
+func extractTSExportedTypeNames(filePath, content string) map[string]TypeEntry {
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+	result := make(map[string]TypeEntry)
+	lines := strings.Split(content, "\n")
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+
+		isExported := strings.HasPrefix(trimmed, "export interface ") ||
+			strings.HasPrefix(trimmed, "export type ") ||
+			strings.HasPrefix(trimmed, "export class ") ||
+			strings.HasPrefix(trimmed, "export enum ") ||
+			strings.HasPrefix(trimmed, "export default class ")
+
+		if !isExported {
+			continue
+		}
+
+		// Extract the type name — skip keywords until we find a non-keyword token.
+		parts := strings.Fields(trimmed)
+		keywords := map[string]bool{"export": true, "default": true, "interface": true, "type": true, "class": true, "enum": true, "abstract": true}
+		var name string
+		for _, p := range parts {
+			if keywords[p] {
+				continue
+			}
+			name = strings.TrimRight(p, "{=<")
+			name = strings.TrimSpace(name)
+			break
+		}
+		if name == "" {
+			continue
+		}
+
+		var defBuilder strings.Builder
+		defBuilder.WriteString(lines[i] + "\n")
+		if strings.HasSuffix(trimmed, "{") {
+			depth := 1
+			for j := i + 1; j < len(lines) && depth > 0; j++ {
+				defBuilder.WriteString(lines[j] + "\n")
+				depth += strings.Count(lines[j], "{") - strings.Count(lines[j], "}")
+			}
+		}
+
+		result[name] = TypeEntry{
+			Package:    pkg,
+			File:       filePath,
+			Definition: defBuilder.String(),
+		}
+	}
+	return result
+}
+
+// extractPyExportedTypeNames extracts class definitions (including dataclasses and
+// Pydantic models) from Python source.
+func extractPyExportedTypeNames(filePath, content string) map[string]TypeEntry {
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+	result := make(map[string]TypeEntry)
+	lines := strings.Split(content, "\n")
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(trimmed, "class ") {
+			continue
+		}
+		// Only top-level classes (no indentation).
+		indent := len(lines[i]) - len(strings.TrimLeft(lines[i], " \t"))
+		if indent > 0 {
+			continue
+		}
+
+		parts := strings.Fields(trimmed)
+		if len(parts) < 2 {
+			continue
+		}
+		name := strings.Split(parts[1], "(")[0]
+		name = strings.TrimRight(name, ":")
+		if name == "" || name[0] < 'A' || name[0] > 'Z' {
+			continue
+		}
+
+		var defBuilder strings.Builder
+		defBuilder.WriteString(lines[i] + "\n")
+		for j := i + 1; j < len(lines); j++ {
+			jLine := lines[j]
+			jTrimmed := strings.TrimSpace(jLine)
+			if jTrimmed == "" {
+				defBuilder.WriteString(jLine + "\n")
+				continue
+			}
+			jIndent := len(jLine) - len(strings.TrimLeft(jLine, " \t"))
+			if jIndent <= indent && !strings.HasPrefix(jTrimmed, "#") && !strings.HasPrefix(jTrimmed, "@") {
+				break
+			}
+			defBuilder.WriteString(jLine + "\n")
+		}
+
+		result[name] = TypeEntry{
+			Package:    pkg,
+			File:       filePath,
+			Definition: defBuilder.String(),
+		}
+	}
+	return result
 }

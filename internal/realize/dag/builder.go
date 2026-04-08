@@ -88,11 +88,27 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 		dataModulePath = "monolith" // matches deriveModulePath for the synthetic "monolith" service
 	}
 
+	// Build a synthetic ServiceDef for data tasks so the verifier can determine
+	// the backend language and the deps context builder can inject library versions.
+	// Without this, data tasks get the NullVerifier and no dependency guidance.
+	var dataSvc *manifest.ServiceDef
+	if len(m.Backend.Services) > 0 {
+		svcCopy := m.Backend.Services[0]
+		inheritBackendStack(&svcCopy, m)
+		dataSvc = &svcCopy
+	} else if m.Backend.Language != "" {
+		dataSvc = &manifest.ServiceDef{
+			Language:  m.Backend.Language,
+			Framework: m.Backend.Framework,
+		}
+	}
+
 	basePayload := TaskPayload{
 		Description:  m.Description,
 		ModulePath:   dataModulePath,
 		ArchPattern:  m.Backend.ArchPattern,
 		EnvConfig:    m.Backend.Env.OrZero(),
+		Service:      dataSvc,
 		Domains:      m.Data.Domains,
 		Databases:    m.Data.Databases,
 		Cachings:     m.Data.Cachings,
@@ -114,7 +130,7 @@ func (b *Builder) addDataTasks(m *manifest.Manifest, d *DAG) {
 		ID:           "data.migrations",
 		Kind:         TaskKindDataMigrations,
 		Label:        "Generate database migration files",
-		Dependencies: nil,
+		Dependencies: []string{"data.schemas"},
 		Payload:      basePayload,
 	})
 }
@@ -239,18 +255,27 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 
 	// Messaging broker + event stubs (config-level, stays at root)
 	if m.Backend.Messaging != nil {
+		// Derive module path so agents can generate correct import paths.
+		msgModPath := ""
+		switch m.Backend.ArchPattern {
+		case manifest.ArchMonolith, manifest.ArchModularMonolith:
+			msgModPath = "monolith"
+		}
 		add(d, &Task{
 			ID:           "backend.messaging",
 			Kind:         TaskKindMessaging,
 			Label:        "Generate message broker configuration and event stubs",
 			Dependencies: dataDeps,
 			Payload: TaskPayload{
+				Description: m.Description,
+				ModulePath:  msgModPath,
 				ArchPattern: m.Backend.ArchPattern,
 				EnvConfig:   m.Backend.Env.OrZero(),
 				Domains:     m.Data.Domains,
 				AllServices: m.Backend.Services,
 				Messaging:   m.Backend.Messaging,
 				CommLinks:   m.Backend.CommLinks,
+				Events:      m.Backend.Events,
 				DTOs: mergeDTOs(
 					dtosForCommLinks(m.Backend.CommLinks, m.Contracts.DTOs),
 					dtosForEvents(m.Backend.Events, m.Contracts.DTOs),
@@ -261,15 +286,24 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 
 	// API gateway configuration (config-level, stays at root)
 	if m.Backend.APIGateway != nil {
+		// Derive module path so agents can reference service routes correctly.
+		gwModPath := ""
+		switch m.Backend.ArchPattern {
+		case manifest.ArchMonolith, manifest.ArchModularMonolith:
+			gwModPath = "monolith"
+		}
 		add(d, &Task{
 			ID:           "backend.gateway",
 			Kind:         TaskKindGateway,
 			Label:        "Generate API gateway configuration",
 			Dependencies: dataDeps,
 			Payload: TaskPayload{
+				Description: m.Description,
+				ModulePath:  gwModPath,
 				ArchPattern: m.Backend.ArchPattern,
 				EnvConfig:   m.Backend.Env.OrZero(),
 				AllServices: m.Backend.Services,
+				Endpoints:   m.Contracts.Endpoints,
 				APIGateway:  m.Backend.APIGateway,
 				WAF:         m.Backend.WAF,
 			},
@@ -694,6 +728,13 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 	svcDirs := serviceOutputDirs(m)
 	ccOutDir := crossCutOutputDir(m, svcDirs)
 
+	// Derive module path for cross-cutting tasks so test imports are correct.
+	ccModPath := ""
+	switch m.Backend.ArchPattern {
+	case manifest.ArchMonolith, manifest.ArchModularMonolith:
+		ccModPath = "monolith"
+	}
+
 	if m.CrossCut.Testing != nil && (m.CrossCut.Testing.Unit != "" || m.CrossCut.Testing.E2E != "") {
 		add(d, &Task{
 			ID:           "crosscut.testing",
@@ -701,6 +742,7 @@ func (b *Builder) addCrossCutTasks(m *manifest.Manifest, d *DAG) {
 			Label:        "Generate test scaffolding",
 			Dependencies: allDeps,
 			Payload: TaskPayload{
+				ModulePath:  ccModPath,
 				ArchPattern: m.Backend.ArchPattern,
 				AllServices: m.Backend.Services,
 				Domains:     m.Data.Domains,

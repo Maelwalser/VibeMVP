@@ -60,7 +60,13 @@ var WellKnownGoModules = map[string]ModuleInfo{
 	"ConnectRPC": {Module: "connectrpc.com/connect", Version: "v1.18.1"},
 
 	// ── Auth ───────────────────────────────────────────────────────
-	"JWT":    {Module: "github.com/golang-jwt/jwt/v5", Version: "v5.2.1"},
+	"JWT": {
+		Module: "github.com/golang-jwt/jwt/v5", Version: "v5.2.1",
+		// JWT auth strategy always needs bcrypt for password hashing.
+		TestDeps: []ModuleDep{
+			{Module: "golang.org/x/crypto", Version: "v0.31.0"},
+		},
+	},
 	"bcrypt": {Module: "golang.org/x/crypto", Version: "v0.31.0"},
 
 	// ── Testing ────────────────────────────────────────────────────
@@ -161,7 +167,10 @@ func GoModForService(modulePath, framework, goVersion string, technologies []str
 			addModule(info)
 		}
 	}
-	for _, key := range []string{"testify", "uuid"} {
+	// Always include these core dependencies for every Go service.
+	// godotenv: Go does not auto-load .env files — without this, env vars from
+	// .env are invisible to os.Getenv and the app fails on startup.
+	for _, key := range []string{"testify", "uuid", "godotenv"} {
 		if info, ok := modules_[key]; ok {
 			addModule(info)
 		}

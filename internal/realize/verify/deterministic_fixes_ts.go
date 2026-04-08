@@ -33,10 +33,52 @@ func fixTypeScript(dir string, files []string) string {
 	if m := fixTSImplicitAny(dir, files); m != "" {
 		msgs = append(msgs, m)
 	}
+	if m := fixTSMockHallucinations(dir, files); m != "" {
+		msgs = append(msgs, m)
+	}
+	if m := fixTSRedeclaration(dir, files); m != "" {
+		msgs = append(msgs, m)
+	}
 	if len(msgs) == 0 {
 		return ""
 	}
 	return strings.Join(msgs, "; ")
+}
+
+// fixTSMockHallucinations fixes common LLM hallucinations in TypeScript test files:
+//  1. Hallucinated jest/vitest mock API methods that don't exist
+//  2. Wrong import paths for test utilities
+func fixTSMockHallucinations(dir string, files []string) string {
+	tsFiles := filterByExt(dir, files, ".ts", ".tsx")
+	if len(tsFiles) == 0 {
+		return ""
+	}
+	fixed := 0
+	for _, path := range tsFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		newContent := content
+
+		// jest.fn().mockReturnValueOnce → jest.fn().mockReturnValue (common hallucination)
+		// Actually mockReturnValueOnce exists, but mockResolvedValueOnce is sometimes
+		// written as mockResolveValueOnce (missing 'd').
+		newContent = strings.ReplaceAll(newContent, ".mockResolveValue(", ".mockResolvedValue(")
+		newContent = strings.ReplaceAll(newContent, ".mockResolveValueOnce(", ".mockResolvedValueOnce(")
+		newContent = strings.ReplaceAll(newContent, ".mockRejectValue(", ".mockRejectedValue(")
+		newContent = strings.ReplaceAll(newContent, ".mockRejectValueOnce(", ".mockRejectedValueOnce(")
+
+		if newContent != content {
+			_ = os.WriteFile(path, []byte(newContent), 0644)
+			fixed++
+		}
+	}
+	if fixed == 0 {
+		return ""
+	}
+	return fmt.Sprintf("fixed TS mock hallucinations in %d file(s)", fixed)
 }
 
 // fixTSFormat runs biome (preferred) or prettier to auto-format TypeScript/TSX files.
@@ -351,4 +393,70 @@ func fixTSImplicitAny(dir string, files []string) string {
 		return ""
 	}
 	return fmt.Sprintf("annotated implicit-any parameters in %d TypeScript file(s)", applied)
+}
+
+// ── TypeScript block-scoped variable re-declaration fix ─────────────────────
+//
+// LLMs sometimes use `let x = ...` or `const x = ...` multiple times in the same
+// block scope, producing TS2451 "Cannot redeclare block-scoped variable 'x'".
+// This fix scans each function body for duplicate let/const declarations of the
+// same variable name and converts the second (and subsequent) occurrences to
+// plain assignments by removing the let/const keyword.
+
+var tsLetConstRe = regexp.MustCompile(`^(\s*)(let|const)\s+(\w+)\s*=`)
+
+func fixTSRedeclaration(dir string, files []string) string {
+	tsFiles := filterByExt(dir, files, ".ts", ".tsx")
+	if len(tsFiles) == 0 {
+		return ""
+	}
+
+	fixed := 0
+	for _, path := range tsFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		changed := false
+		// Track declared variables per scope level (approximated by brace depth).
+		// This is a conservative heuristic — it may miss some cases but avoids
+		// false positives from cross-scope declarations.
+		declared := make(map[string]bool)
+		depth := 0
+
+		for i, line := range lines {
+			// Track brace depth for basic scope awareness.
+			depth += strings.Count(line, "{") - strings.Count(line, "}")
+			if depth <= 0 {
+				// Reset at top-level scope boundaries.
+				declared = make(map[string]bool)
+				depth = 0
+			}
+
+			m := tsLetConstRe.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			indent, keyword, varName := m[1], m[2], m[3]
+			if declared[varName] {
+				// Second declaration — remove let/const, keep assignment.
+				lines[i] = strings.Replace(line, keyword+" "+varName, varName, 1)
+				// Preserve original indentation.
+				lines[i] = indent + strings.TrimLeft(lines[i], " \t")
+				changed = true
+			} else {
+				declared[varName] = true
+				_ = keyword // first declaration — keep as-is
+			}
+		}
+		if changed {
+			_ = os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+			fixed++
+		}
+	}
+	if fixed == 0 {
+		return ""
+	}
+	return fmt.Sprintf("fixed let/const re-declarations in %d TypeScript file(s)", fixed)
 }
