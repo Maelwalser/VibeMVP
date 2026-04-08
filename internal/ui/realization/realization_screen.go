@@ -65,7 +65,7 @@ func classifyLog(text string) logKind {
 
 var (
 	styleRealizeSpinner = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(core.ClrBlue)).Bold(true)
+				Foreground(lipgloss.Color(core.ClrYellow)).Bold(true)
 
 	styleRealizeAppName = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(core.ClrFg)).Bold(true)
@@ -73,7 +73,7 @@ var (
 	styleRealizeStatus = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(core.ClrComment))
 
-	styleProgressFill  = lipgloss.NewStyle().Foreground(lipgloss.Color(core.ClrBlue))
+	styleProgressFill  = lipgloss.NewStyle().Foreground(lipgloss.Color(core.ClrYellow))
 	styleProgressEmpty = lipgloss.NewStyle().Foreground(lipgloss.Color(core.ClrFgDim))
 	styleProgressLabel = lipgloss.NewStyle().Foreground(lipgloss.Color(core.ClrFg))
 	styleProgressDone  = lipgloss.NewStyle().Foreground(lipgloss.Color(core.ClrGreen))
@@ -120,6 +120,8 @@ type Screen struct {
 	wantsQuit  bool
 	totalTasks int
 	doneTasks  int
+	startedAt  time.Time
+	elapsed    time.Duration
 }
 
 func NewScreen() Screen {
@@ -135,6 +137,7 @@ func (s Screen) Start(manifestPath string, mf *manifest.Manifest) (Screen, tea.C
 	s.logCh = logCh
 	s.cancelFn = cancel
 	s.appName = mf.Realize.AppName
+	s.startedAt = time.Now()
 	s.done = false
 	s.err = nil
 	s.logs = nil
@@ -195,6 +198,7 @@ func (s Screen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case realizeTickMsg:
 		s.frame = (s.frame + 1) % len(spinnerFrames)
 		if !s.done {
+			s.elapsed = time.Since(s.startedAt)
 			return s, tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 				return realizeTickMsg{}
 			})
@@ -208,6 +212,7 @@ func (s Screen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case realizeDoneMsg:
 		s.done = true
+		s.elapsed = time.Since(s.startedAt)
 		s.err = m.err
 		if m.err != nil {
 			s.logs = append(s.logs, logEntry{
@@ -266,7 +271,9 @@ func (s *Screen) trackProgress(text string) {
 }
 
 // renderProgressBar renders a filled/empty block progress bar with a task counter.
-func renderProgressBar(done, total, w int) string {
+// When not complete, a sine-wave animation is shown at the leading edge of the
+// filled portion, giving the impression that progress is flowing into the bar.
+func renderProgressBar(done, total, w, frame int) string {
 	label := fmt.Sprintf(" %d / %d tasks", done, total)
 	barW := w - len([]rune(label)) - 6 // 2 padding + "[" + "]" + 1 space
 	if barW < 4 {
@@ -281,19 +288,46 @@ func renderProgressBar(done, total, w int) string {
 		filled = barW
 	}
 
+	complete := done >= total
 	fillStyle := styleProgressFill
-	if done >= total {
+	if complete {
 		fillStyle = styleProgressDone
 	}
 
-	bar := fillStyle.Render(strings.Repeat("█", filled)) +
-		styleProgressEmpty.Render(strings.Repeat("░", barW-filled))
+	var bar string
+	if complete {
+		bar = fillStyle.Render(strings.Repeat("█", barW))
+	} else {
+		wave := core.SineWaveFrames[frame%16]
+		waveW := len([]rune(wave)) // 8 chars
+		// Ensure the wave fits within the empty region.
+		emptyW := barW - filled
+		if waveW > emptyW {
+			waveW = emptyW
+			wave = string([]rune(wave)[:waveW])
+		}
+		bar = fillStyle.Render(strings.Repeat("█", filled)) +
+			styleProgressFill.Render(wave) +
+			styleProgressEmpty.Render(strings.Repeat("░", emptyW-waveW))
+	}
 
 	return "  " +
 		styleProgressEmpty.Render("[") +
 		bar +
 		styleProgressEmpty.Render("]") +
 		styleProgressLabel.Render(label)
+}
+
+// formatElapsed returns a human-readable mm:ss or hh:mm:ss string.
+func formatElapsed(d time.Duration) string {
+	d = d.Truncate(time.Second)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────
@@ -365,30 +399,30 @@ func (s Screen) View(w, h int) string {
 	lines = append(lines, realizeHeaderBar(s.appName, s.done, s.err, w))
 
 	// Row 1: spinner + app name + state — the live status row.
+	timer := styleRealizeStatus.Render("  " + formatElapsed(s.elapsed))
+
 	var statusLine string
 	if s.done {
 		if s.err != nil {
 			statusLine = styleRealizeErr.Render("  ✗") + "  " +
 				styleRealizeAppName.Render(s.appName) + "  " +
-				styleRealizeStatus.Render("failed")
+				styleRealizeStatus.Render("failed") + timer
 		} else {
 			statusLine = styleRealizeDone.Render("  ✓") + "  " +
 				styleRealizeAppName.Render(s.appName) + "  " +
-				styleRealizeStatus.Render("complete")
+				styleRealizeStatus.Render("complete") + timer
 		}
 	} else {
 		spin := styleRealizeSpinner.Render(spinnerFrames[s.frame%len(spinnerFrames)])
-		wave := styleRealizeStatus.Render(core.SineWaveFrames[s.frame%16])
 		statusLine = "  " + spin + "  " +
 			styleRealizeAppName.Render(s.appName) + "  " +
-			styleRealizeStatus.Render("realizing…  ") +
-			wave
+			styleRealizeStatus.Render("realizing…") + timer
 	}
 	lines = append(lines, statusLine)
 
 	// Progress bar — shown once the orchestrator reports total task count.
 	if s.totalTasks > 0 {
-		lines = append(lines, renderProgressBar(s.doneTasks, s.totalTasks, w))
+		lines = append(lines, renderProgressBar(s.doneTasks, s.totalTasks, w, s.frame))
 	}
 
 	lines = append(lines, "")
