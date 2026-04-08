@@ -1,6 +1,8 @@
 package skills
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,8 +14,9 @@ import (
 
 // FileRegistry implements Registry by reading skill markdown files from a directory.
 type FileRegistry struct {
-	skillsDir string
-	index     map[string]string // normalized key → content
+	skillsDir  string
+	index      map[string]string // normalized key → content
+	checksums  map[string]string // normalized key → SHA256 hex digest
 }
 
 // Load reads all *.md files from skillsDir and returns a FileRegistry.
@@ -22,6 +25,7 @@ func Load(skillsDir string) (*FileRegistry, error) {
 	r := &FileRegistry{
 		skillsDir: skillsDir,
 		index:     make(map[string]string),
+		checksums: make(map[string]string),
 	}
 
 	entries, err := os.ReadDir(skillsDir)
@@ -42,12 +46,31 @@ func Load(skillsDir string) (*FileRegistry, error) {
 			return nil, fmt.Errorf("read skill file %s: %w", e.Name(), err)
 		}
 		content := string(data)
+		hash := fmt.Sprintf("%x", sha256.Sum256(data))
 		if len(content) > config.MaxSkillBytes {
 			content = content[:config.MaxSkillBytes] + "\n\n[skill document truncated — core rules above are sufficient]"
 		}
 		r.index[key] = content
+		r.checksums[key] = hash
 	}
 	return r, nil
+}
+
+// WriteSkillsLock writes a JSON lock file mapping skill names to SHA256 checksums.
+// Called once per pipeline run so the exact skill versions used are reproducible.
+func (r *FileRegistry) WriteSkillsLock(outputDir string) error {
+	if len(r.checksums) == 0 {
+		return nil
+	}
+	lockDir := filepath.Join(outputDir, ".realize")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(r.checksums, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(lockDir, "skills.lock"), data, 0o644)
 }
 
 // Lookup returns the content for the given technology string, or ("", false).

@@ -5,6 +5,7 @@ import (
 
 	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/agent"
+	"github.com/vibe-menu/internal/realize/config"
 	"github.com/vibe-menu/internal/realize/dag"
 )
 
@@ -100,34 +101,92 @@ func resolveModelIDForTier(provider string, tier ModelTier, version string) stri
 	return resolveModelID(provider, names[tier], version)
 }
 
+// thinkingBudgetForTier returns the extended thinking token budget for a given
+// ModelTier. Used by Claude and Gemini agents for their respective thinking APIs.
+func thinkingBudgetForTier(tier ModelTier) int64 {
+	if b, ok := config.ThinkingBudgetByTier[int(tier)]; ok {
+		return b
+	}
+	return 0
+}
+
+// reasoningEffortForTier maps a ModelTier to OpenAI's reasoning_effort parameter.
+// Only meaningful for o-series models (o1, o3-mini). Returns "" for TierFast
+// since those tasks use gpt-4o-mini which doesn't support reasoning_effort.
+func reasoningEffortForTier(tier ModelTier) string {
+	switch tier {
+	case TierFast:
+		return "" // gpt-4o-mini — no reasoning
+	case TierMedium:
+		return "medium"
+	case TierSlow:
+		return "high"
+	default:
+		return ""
+	}
+}
+
 // buildAgentForTier constructs the appropriate agent for the given ProviderAssignment
-// and ModelTier. For Claude with no Credential, falls back to the env-var API key.
-// Add new providers to the switch without touching any other file.
+// and ModelTier. Each provider gets its tier-appropriate reasoning config:
+//   - Claude: extended thinking (adaptive for 4.6, budget-based for older)
+//   - ChatGPT: reasoning_effort for o-series models
+//   - Gemini: thinkingConfig.thinkingBudget for 2.5+ models
+//   - Mistral/Llama: no reasoning support (no-op)
 func buildAgentForTier(pa manifest.ProviderAssignment, tier ModelTier, maxTokens int64, verbose bool) agent.Agent {
 	model := resolveModelIDForTier(pa.Provider, tier, pa.Version)
-	return buildAgentWithModel(pa, model, maxTokens, verbose)
+	return buildAgentWithModel(pa, model, maxTokens, thinkingBudgetForTier(tier), reasoningEffortForTier(tier), verbose)
 }
 
 // buildAgentWithModel constructs an agent using an explicit model ID, bypassing
 // the tier → model lookup. Used when the manifest specifies per-tier model overrides.
-func buildAgentWithModel(pa manifest.ProviderAssignment, model string, maxTokens int64, verbose bool) agent.Agent {
+// thinkingBudget is used by Claude and Gemini; reasoningEffort by OpenAI o-series.
+func buildAgentWithModel(pa manifest.ProviderAssignment, model string, maxTokens, thinkingBudget int64, reasoningEffort string, verbose bool) agent.Agent {
 	switch pa.Provider {
 	case "Claude":
 		if pa.Credential != "" {
-			return agent.NewClaudeAgentWithKey(model, maxTokens, verbose, pa.Credential)
+			return agent.NewClaudeAgentWithKey(model, maxTokens, thinkingBudget, verbose, pa.Credential)
 		}
-		return agent.NewClaudeAgent(model, maxTokens, verbose)
+		return agent.NewClaudeAgent(model, maxTokens, thinkingBudget, verbose)
 	case "ChatGPT":
-		return agent.NewOpenAIAgent("https://api.openai.com", pa.Credential, model, maxTokens, verbose)
+		return agent.NewOpenAIAgent("https://api.openai.com", pa.Credential, model, maxTokens, reasoningEffort, verbose)
 	case "Mistral":
-		return agent.NewOpenAIAgent("https://api.mistral.ai", pa.Credential, model, maxTokens, verbose)
+		// Mistral has no reasoning mode — pass empty effort.
+		return agent.NewOpenAIAgent("https://api.mistral.ai", pa.Credential, model, maxTokens, "", verbose)
 	case "Llama":
-		return agent.NewOpenAIAgent("https://api.groq.com/openai", pa.Credential, model, maxTokens, verbose)
+		// Llama via Groq has no reasoning mode — pass empty effort.
+		return agent.NewOpenAIAgent("https://api.groq.com/openai", pa.Credential, model, maxTokens, "", verbose)
 	case "Gemini":
-		return agent.NewGeminiAgent(pa.Credential, model, maxTokens, verbose)
+		return agent.NewGeminiAgent(pa.Credential, model, maxTokens, thinkingBudget, verbose)
 	default:
-		return agent.NewClaudeAgent(model, maxTokens, verbose)
+		return agent.NewClaudeAgent(model, maxTokens, thinkingBudget, verbose)
 	}
+}
+
+// contextWindowTokens maps model IDs to their context window sizes in tokens.
+// Used to warn when prompts approach the limit and prevent silent truncation.
+var contextWindowTokens = map[string]int{
+	"claude-haiku-4-5-20251001": 200000,
+	"claude-sonnet-4-6":        200000,
+	"claude-opus-4-6":          200000,
+	"gpt-4o":                   128000,
+	"gpt-4o-mini":              128000,
+	"o1":                       200000,
+	"o3-mini":                  200000,
+	"gemini-2.0-flash":         1000000,
+	"gemini-2.0-pro-exp":       1000000,
+	"gemini-ultra":             1000000,
+	"mistral-large-2411":       128000,
+	"mistral-small-2409":       128000,
+	"llama-3.3-70b-versatile":  128000,
+}
+
+// ContextWindowFor returns the context window size in tokens for the given model.
+// Returns 200000 (a safe default) for unknown models.
+func ContextWindowFor(model string) int {
+	if n, ok := contextWindowTokens[model]; ok {
+		return n
+	}
+	return 200000
 }
 
 // ── Provider selection ────────────────────────────────────────────────────────

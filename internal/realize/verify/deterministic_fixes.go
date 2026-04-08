@@ -21,6 +21,12 @@ import (
 func ApplyDeterministicFixes(dir string, files []string, language string) string {
 	var fixes []string
 
+	// Apply embedded pattern fixes first — these are simple string replacements
+	// loaded from fix_patterns.json (e.g. pgxmock hallucinations, testify idioms).
+	if f := ApplyPatternFixes(dir, files, language); f != "" {
+		fixes = append(fixes, f)
+	}
+
 	switch language {
 	case "go", "":
 		// goimports adds missing stdlib/module imports and removes unused ones.

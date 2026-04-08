@@ -13,22 +13,26 @@ import (
 // OpenAIAgent implements Agent using any OpenAI-compatible chat completions API.
 // Works with OpenAI (ChatGPT), Mistral, Llama via Groq, and other compatible providers.
 type OpenAIAgent struct {
-	baseURL   string
-	apiKey    string
-	modelID   string
-	maxTokens int64
-	verbose   bool
+	baseURL          string
+	apiKey           string
+	modelID          string
+	maxTokens        int64
+	reasoningEffort  string // "low", "medium", "high", or "" (disabled). For o1/o3 models.
+	verbose          bool
 }
 
 // NewOpenAIAgent returns an agent targeting the given OpenAI-compatible base URL.
 // baseURL should be the root (e.g. "https://api.openai.com" — no trailing slash).
-func NewOpenAIAgent(baseURL, apiKey, modelID string, maxTokens int64, verbose bool) *OpenAIAgent {
+// reasoningEffort controls the o-series reasoning_effort parameter: "low", "medium",
+// "high", or "" to omit it. Ignored for non-o-series models.
+func NewOpenAIAgent(baseURL, apiKey, modelID string, maxTokens int64, reasoningEffort string, verbose bool) *OpenAIAgent {
 	return &OpenAIAgent{
-		baseURL:   strings.TrimRight(baseURL, "/"),
-		apiKey:    apiKey,
-		modelID:   modelID,
-		maxTokens: maxTokens,
-		verbose:   verbose,
+		baseURL:         strings.TrimRight(baseURL, "/"),
+		apiKey:          apiKey,
+		modelID:         modelID,
+		maxTokens:       maxTokens,
+		reasoningEffort: reasoningEffort,
+		verbose:         verbose,
 	}
 }
 
@@ -63,6 +67,11 @@ func (a *OpenAIAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 	}
 	if isOSeries {
 		reqBody["max_completion_tokens"] = a.maxTokens
+		// reasoning_effort controls how much "thinking" o1/o3 models do.
+		// Valid values: "low", "medium", "high". Omit to use the model default.
+		if a.reasoningEffort != "" {
+			reqBody["reasoning_effort"] = a.reasoningEffort
+		}
 	} else {
 		reqBody["max_tokens"] = a.maxTokens
 	}

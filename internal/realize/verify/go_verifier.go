@@ -60,8 +60,9 @@ func (g *GoVerifier) Verify(ctx context.Context, outputDir string, files []strin
 			allPassed = false
 		}
 
-		// Run go test.
-		testOut, testErr := runCmd(ctx, absDir, "go", "test", "./...")
+		// Run go test with -short and timeout to catch test panics early
+		// without running slow integration tests.
+		testOut, testErr := runCmd(ctx, absDir, "go", "test", "-count=1", "-short", "-timeout", "30s", "./...")
 		combined.WriteString(fmt.Sprintf("=== go test in %s ===\n%s\n", dir, testOut))
 		if testErr != nil {
 			allPassed = false

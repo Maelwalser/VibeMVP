@@ -217,6 +217,24 @@ func UserMessage(ac *Context) (string, error) {
 	}
 
 	// Inject constructor signatures from shared memory. Always injected (including
+	// Inject interface contracts as a hard checklist. Implementation tasks MUST match
+	// these exact method signatures — the interfaces are the binding contract between
+	// layers, defined by the plan task and authoritative for all downstream tasks.
+	if len(ac.InterfaceContracts) > 0 {
+		b.WriteString("\n## Interface Contract — MUST IMPLEMENT EXACTLY\n\n")
+		b.WriteString("These interfaces were defined by the plan task and are the **binding contract**.\n")
+		b.WriteString("Your implementation MUST satisfy every method with the **exact** parameter types and return types shown.\n")
+		b.WriteString("Do NOT add, remove, rename, or change the signature of any method.\n\n")
+		for _, ic := range ac.InterfaceContracts {
+			b.WriteString("### " + ic.InterfaceName + " (from: " + ic.File + ")\n```go\n")
+			b.WriteString("type " + ic.InterfaceName + " interface {\n")
+			for _, m := range ic.Methods {
+				b.WriteString("\t" + m + "\n")
+			}
+			b.WriteString("}\n```\n\n")
+		}
+	}
+
 	// retries) so agents can fix "too many arguments" and signature mismatch errors.
 	// Extracted at commit time from full, untruncated file content.
 	if len(ac.AllConstructors) > 0 {
@@ -291,6 +309,30 @@ func UserMessage(ac *Context) (string, error) {
 			}
 			b.WriteString("\n")
 		}
+	}
+
+	// Inject deterministic bootstrap skeleton when available. This gives the LLM
+	// a compilable starting point with correct constructor calls and import paths.
+	if ac.BootstrapSkeleton != "" {
+		b.WriteString("\n## Deterministic Bootstrap Skeleton\n\n")
+		b.WriteString("The following skeleton was generated deterministically from upstream constructor signatures.\n")
+		b.WriteString("It has the **correct import paths and constructor call sites**.\n")
+		b.WriteString("Use this as your starting point — fill in the TODO sections, add middleware, env parsing,\n")
+		b.WriteString("graceful shutdown, and any custom wiring. Do NOT change the constructor call argument counts.\n\n")
+		b.WriteString("```go\n")
+		b.WriteString(ac.BootstrapSkeleton)
+		b.WriteString("```\n")
+	}
+
+	// Inject known cross-task build errors from incremental compilation. These are
+	// advisory: the downstream task can compensate for known upstream issues.
+	if ac.CrossTaskIssues != "" {
+		b.WriteString("\n## Known Cross-Task Build Issues (Advisory)\n\n")
+		b.WriteString("Incremental compilation detected these cross-task errors. ")
+		b.WriteString("Your generated code should be compatible and avoid triggering similar issues.\n\n")
+		b.WriteString("```\n")
+		b.WriteString(ac.CrossTaskIssues)
+		b.WriteString("\n```\n")
 	}
 
 	if ac.PreviousErrors != "" {

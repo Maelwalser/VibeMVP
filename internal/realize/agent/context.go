@@ -44,6 +44,16 @@ type Context struct {
 	// sentinel names and do not invent new ones (e.g. ErrAlreadyExists when the
 	// plan task defined ErrUniqueConstraintViolation).
 	AllErrorSentinels []memory.ErrorSentinel
+	// InterfaceContracts is a snapshot of every exported Go interface extracted
+	// from upstream tasks. Injected as a hard checklist in the prompt so
+	// implementation tasks match interface method signatures exactly.
+	InterfaceContracts []memory.InterfaceContract
+	// CrossTaskIssues contains known cross-task build errors detected by
+	// incremental compilation. Advisory context for downstream tasks.
+	CrossTaskIssues string
+	// BootstrapSkeleton is a deterministically generated main.go skeleton
+	// with exact constructor calls. Only populated for bootstrap tasks.
+	BootstrapSkeleton string
 }
 
 // Language returns the primary backend language from the task payload.

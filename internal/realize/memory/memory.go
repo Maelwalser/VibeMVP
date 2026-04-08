@@ -83,7 +83,9 @@ type SharedMemory struct {
 	typeConflicts  []TypeConflict       // types declared in multiple packages
 	constructors    []ConstructorSig     // all constructor sigs extracted at commit time
 	serviceMethods  []ServiceMethodSig   // all exported method sigs extracted at commit time
-	errorSentinels  []ErrorSentinel      // all Err* var declarations extracted at commit time
+	errorSentinels      []ErrorSentinel      // all Err* var declarations extracted at commit time
+	interfaceContracts  []InterfaceContract  // all interface definitions extracted at commit time
+	crossTaskIssues     string               // build errors from incremental compilation
 }
 
 // New returns an empty SharedMemory.
@@ -231,6 +233,46 @@ func (m *SharedMemory) RegisterErrorSentinels(sentinels []ErrorSentinel) {
 	m.errorSentinels = append(m.errorSentinels, sentinels...)
 }
 
+// RegisterInterfaceContracts appends interface contracts extracted from committed Go
+// files to the shared registry. Called at commit time so downstream tasks receive
+// exact interface method signatures as a hard implementation checklist.
+// Safe for concurrent use.
+func (m *SharedMemory) RegisterInterfaceContracts(contracts []InterfaceContract) {
+	if len(contracts) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.interfaceContracts = append(m.interfaceContracts, contracts...)
+}
+
+// AllInterfaceContracts returns a snapshot of every interface contract registered so far.
+// Safe for concurrent use.
+func (m *SharedMemory) AllInterfaceContracts() []InterfaceContract {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]InterfaceContract, len(m.interfaceContracts))
+	copy(result, m.interfaceContracts)
+	return result
+}
+
+// SetCrossTaskIssues records build errors detected by incremental compilation after
+// a task commits. Downstream tasks see these as advisory context.
+// Safe for concurrent use.
+func (m *SharedMemory) SetCrossTaskIssues(issues string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.crossTaskIssues = issues
+}
+
+// CrossTaskIssues returns any known cross-task build errors from incremental compilation.
+// Safe for concurrent use.
+func (m *SharedMemory) CrossTaskIssues() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.crossTaskIssues
+}
+
 // AllErrorSentinels returns a snapshot of every error sentinel registered so far.
 // Safe for concurrent use.
 func (m *SharedMemory) AllErrorSentinels() []ErrorSentinel {
@@ -305,27 +347,58 @@ func (m *SharedMemory) CommittedPaths(depIDs []string) []string {
 }
 
 // depPriority returns a weight (0.0–1.0) indicating how important a dependency's
-// context is for downstream agents. Higher-weight dependencies get a larger share
-// of the character budget, preventing verbose but lower-priority outputs from
-// crowding out critical type signatures and method contracts.
-func depPriority(kind dag.TaskKind) float64 {
-	switch kind {
-	case dag.TaskKindAuth:
-		return 0.9 // TokenManager signatures critical for handlers
-	case dag.TaskKindDataSchemas:
-		return 0.85 // domain structs + input types are foundational for ALL downstream tasks
-	case dag.TaskKindServiceLogic:
-		return 0.8 // method signatures needed by handler
+// context is for a specific downstream consumer. Higher-weight dependencies get a
+// larger share of the character budget. The consumer task kind influences priority
+// because different layers need different upstream information — e.g. a handler
+// task needs service method signatures more than full domain struct bodies.
+func depPriority(depKind, consumerKind dag.TaskKind) float64 {
+	// Consumer-specific overrides for the most impactful task pairs.
+	switch consumerKind {
 	case dag.TaskKindServiceHandler:
-		return 0.7 // route contracts needed by bootstrap
+		switch depKind {
+		case dag.TaskKindServiceLogic:
+			return 0.95 // handler needs exact method signatures
+		case dag.TaskKindAuth:
+			return 0.9 // middleware signatures
+		case dag.TaskKindDataSchemas:
+			return 0.5 // only struct names, not full bodies
+		case dag.TaskKindServicePlan:
+			return 0.7 // interfaces for route wiring
+		}
+	case dag.TaskKindServiceBootstrap:
+		switch depKind {
+		case dag.TaskKindServiceRepository, dag.TaskKindServiceLogic,
+			dag.TaskKindServiceHandler, dag.TaskKindAuth:
+			return 0.9 // bootstrap needs constructor signatures from all layers
+		}
 	case dag.TaskKindServicePlan:
-		return 0.6 // interfaces are the binding contract for all layers
+		if depKind == dag.TaskKindDataSchemas {
+			return 0.95 // plan needs full domain attribute lists
+		}
 	case dag.TaskKindServiceRepository:
-		return 0.5 // interfaces are compact after extraction
+		if depKind == dag.TaskKindDataSchemas {
+			return 0.9 // repo needs full domain structs for SQL mapping
+		}
+	}
+
+	// Default priorities by dependency kind.
+	switch depKind {
+	case dag.TaskKindAuth:
+		return 0.9
+	case dag.TaskKindDataSchemas:
+		return 0.85
+	case dag.TaskKindServiceLogic:
+		return 0.8
+	case dag.TaskKindServiceHandler:
+		return 0.7
+	case dag.TaskKindServicePlan:
+		return 0.6
+	case dag.TaskKindServiceRepository:
+		return 0.5
 	case dag.TaskKindDataMigrations:
-		return 0.15 // SQL files — useful for reference but not needed by Go compilation
+		return 0.15
 	case dag.TaskKindDependencyResolution:
-		return 0.1 // go.mod only, very small
+		return 0.1
 	default:
 		return 0.5
 	}
@@ -358,7 +431,7 @@ func (m *SharedMemory) DepsOf(task *dag.Task) []*TaskOutput {
 		if !ok {
 			continue
 		}
-		w := depPriority(out.Kind)
+		w := depPriority(out.Kind, task.Kind)
 		slots = append(slots, depSlot{out: out, weight: w})
 		totalWeight += w
 	}

@@ -136,6 +136,17 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		return fmt.Errorf("load manifest: %w", err)
 	}
 
+	// Validate manifest cross-references before building the DAG.
+	// This catches errors (missing domains, invalid roles, stale env refs) that
+	// would otherwise waste LLM calls on tasks destined to fail.
+	if validationErrors := manifest.Validate(m); len(validationErrors) > 0 {
+		for _, ve := range validationErrors {
+			o.log("realize: manifest warning: [%s] %s: %s", ve.Code, ve.Path, ve.Message)
+		}
+		// Don't abort — log warnings so the user can fix them. The pipeline may
+		// still produce usable output for the valid parts of the manifest.
+	}
+
 	// Build execution DAG.
 	d, err := (&dag.Builder{}).Build(m)
 	if err != nil {
@@ -163,6 +174,11 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	reg, err := skills.Load(o.cfg.SkillsDir)
 	if err != nil {
 		return fmt.Errorf("load skills: %w", err)
+	}
+
+	// Write skill checksums for reproducibility.
+	if err := reg.WriteSkillsLock(o.cfg.OutputDir); err != nil {
+		o.log("realize: warning: could not write skills.lock: %v", err)
 	}
 
 	// Set up output writer.
@@ -366,7 +382,7 @@ func (o *Orchestrator) runWave(
 				state:              st,
 				memory:             mem,
 				skillDocs:          skillDocs,
-				maxRetries:         o.cfg.MaxRetries,
+				maxRetries:         MaxRetriesFor(task.Kind, o.cfg.MaxRetries),
 				verbose:            o.cfg.Verbose,
 				logFn:              o.cfg.LogFunc,
 				providerAssignment: pa,

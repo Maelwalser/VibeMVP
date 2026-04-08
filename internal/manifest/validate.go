@@ -1,6 +1,9 @@
 package manifest
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ValidationError describes a cross-pillar incompatibility in a Manifest.
 type ValidationError struct {
@@ -31,6 +34,8 @@ func Validate(m *Manifest) []ValidationError {
 	errs = append(errs, validateFileStorageServiceRef(m)...)
 	errs = append(errs, validateGovernanceDBRefs(m)...)
 	errs = append(errs, validateDBEnvRefs(m)...)
+	errs = append(errs, validateRepoSelectedFields(m)...)
+	errs = append(errs, validateEndpointAuthRolesCSV(m)...)
 	return errs
 }
 
@@ -412,6 +417,71 @@ func validateDBEnvRefs(m *Manifest) []ValidationError {
 				Code:    "stale_env_ref",
 				Message: fmt.Sprintf("database %q references unknown environment %q", db.Alias, db.Environment),
 			})
+		}
+	}
+	return errs
+}
+
+// validateRepoSelectedFields checks that selected_fields in RepositoryDef reference
+// valid attribute names on the referenced domain entity.
+func validateRepoSelectedFields(m *Manifest) []ValidationError {
+	// Build domain name → attribute name set.
+	domainAttrs := make(map[string]map[string]bool, len(m.Data.Domains))
+	for _, d := range m.Data.Domains {
+		attrs := make(map[string]bool, len(d.Attributes))
+		for _, a := range d.Attributes {
+			attrs[a.Name] = true
+		}
+		domainAttrs[d.Name] = attrs
+	}
+	if len(domainAttrs) == 0 {
+		return nil
+	}
+	var errs []ValidationError
+	for i, svc := range m.Backend.Services {
+		for j, repo := range svc.Repositories {
+			attrs, ok := domainAttrs[repo.EntityRef]
+			if !ok || len(repo.SelectedFields) == 0 {
+				continue
+			}
+			for k, field := range repo.SelectedFields {
+				if !attrs[field] {
+					errs = append(errs, ValidationError{
+						Pillar:  "backend",
+						Path:    fmt.Sprintf("backend.services[%d].repositories[%d].selected_fields[%d]", i, j, k),
+						Code:    "invalid_selected_field",
+						Message: fmt.Sprintf("repository %q selected_field %q is not an attribute of domain %q", repo.Name, field, repo.EntityRef),
+					})
+				}
+			}
+		}
+	}
+	return errs
+}
+
+// validateEndpointAuthRolesCSV checks that comma-separated auth_roles on endpoints
+// all reference valid roles defined in the backend auth configuration.
+func validateEndpointAuthRolesCSV(m *Manifest) []ValidationError {
+	if m.Backend.Auth == nil {
+		return nil
+	}
+	roles := authRoleSet(m)
+	var errs []ValidationError
+	for i, ep := range m.Contracts.Endpoints {
+		if ep.AuthRequired != "true" || ep.AuthRoles == "" {
+			continue
+		}
+		// Handle comma-separated roles (e.g. "admin,moderator").
+		for _, role := range strings.Split(ep.AuthRoles, ",") {
+			role = strings.TrimSpace(role)
+			if role != "" && !roles[role] {
+				errs = append(errs, ValidationError{
+					Pillar:  "contracts",
+					Path:    fmt.Sprintf("contracts.endpoints[%d].auth_roles", i),
+					Code:    "auth_role_mismatch_csv",
+					Message: fmt.Sprintf("endpoint %q requires role %q not defined in backend auth roles", ep.NamePath, role),
+				})
+			}
 		}
 	}
 	return errs

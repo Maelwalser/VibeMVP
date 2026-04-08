@@ -1,0 +1,44 @@
+[
+  {
+    "id": "pgxmock-expect-query-row",
+    "match": ".ExpectQueryRow(",
+    "replace": ".ExpectQuery(",
+    "file_filter": "*_test.go",
+    "language": "go"
+  },
+  {
+    "id": "pgxmock-expect-exec-result",
+    "match": ".ExpectExecResult(",
+    "replace": ".ExpectExec(",
+    "file_filter": "*_test.go",
+    "language": "go"
+  },
+  {
+    "id": "pgx-pgerror-v5",
+    "match": "pgx.PgError",
+    "replace": "pgconn.PgError",
+    "file_filter": "*.go",
+    "language": "go"
+  },
+  {
+    "id": "pgxpool-config-max-conns-field",
+    "match": ".MaxConns =",
+    "replace": "// MaxConns removed (use ConnConfig) =",
+    "file_filter": "*.go",
+    "language": "go"
+  },
+  {
+    "id": "testify-assert-nil-err",
+    "match": "assert.Nil(t, err)",
+    "replace": "assert.NoError(t, err)",
+    "file_filter": "*_test.go",
+    "language": "go"
+  },
+  {
+    "id": "testify-assert-not-nil-err",
+    "match": "assert.NotNil(t, err)",
+    "replace": "assert.Error(t, err)",
+    "file_filter": "*_test.go",
+    "language": "go"
+  }
+]

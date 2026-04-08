@@ -11,6 +11,7 @@ import (
 
 	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/agent"
+	"github.com/vibe-menu/internal/realize/codegen"
 	"github.com/vibe-menu/internal/realize/config"
 	"github.com/vibe-menu/internal/realize/dag"
 	"github.com/vibe-menu/internal/realize/memory"
@@ -48,6 +49,29 @@ const (
 	errTypeTestFail            // needs LLM retry with test output
 	errTypeDuplicate           // fixable by removing duplicate decls
 )
+
+// maxRetriesForKind overrides the default retry count for specific task kinds.
+// Bootstrap and handler tasks are the most fragile (constructor wiring, auth
+// middleware) and deserve more attempts. Boilerplate tasks (docs, contracts,
+// docker) rarely need retries.
+var maxRetriesForKind = map[dag.TaskKind]int{
+	dag.TaskKindDataMigrations:   1,
+	dag.TaskKindContracts:        1,
+	dag.TaskKindInfraDocker:      1,
+	dag.TaskKindInfraCI:          1,
+	dag.TaskKindCrossCutDocs:     1,
+	dag.TaskKindServiceBootstrap: 4, // most fragile — constructor wiring
+	dag.TaskKindServiceHandler:   3, // auth middleware is tricky
+	dag.TaskKindReconciliation:   3, // cross-task reasoning
+}
+
+// MaxRetriesFor returns the per-kind retry count if defined, otherwise the fallback.
+func MaxRetriesFor(kind dag.TaskKind, fallback int) int {
+	if n, ok := maxRetriesForKind[kind]; ok {
+		return n
+	}
+	return fallback
+}
 
 // classifyError inspects verification output and returns the dominant error type.
 func classifyError(output string) errorType {
@@ -196,6 +220,20 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		// per-section manifest override which may be a different provider).
 		a := r.agentForAttempt(attempt)
 
+		// Generate deterministic bootstrap skeleton for bootstrap tasks.
+		var bootstrapSkeleton string
+		if r.task.Kind == dag.TaskKindServiceBootstrap {
+			modulePath := ""
+			if r.task.Payload.ModulePath != "" {
+				modulePath = r.task.Payload.ModulePath
+			}
+			bootstrapSkeleton = codegen.WireBootstrap(
+				r.memory.AllConstructors(),
+				r.memory.AllServiceMethods(),
+				modulePath,
+			)
+		}
+
 		ac := &agent.Context{
 			Task:                 r.task,
 			SkillDocs:            r.skillDocs,
@@ -207,6 +245,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			AllConstructors:      r.memory.AllConstructors(),
 			AllServiceMethods:    r.memory.AllServiceMethods(),
 			AllErrorSentinels:    r.memory.AllErrorSentinels(),
+			InterfaceContracts:   r.memory.AllInterfaceContracts(),
+			CrossTaskIssues:     r.memory.CrossTaskIssues(),
+			BootstrapSkeleton:   bootstrapSkeleton,
 		}
 
 		result, err := a.Run(ctx, ac)
@@ -273,6 +314,17 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		allFiles := allFilesInDir(tmpDir)
 		if fixes := verify.ApplyDeterministicFixes(tmpDir, allFiles, r.verifier.Language()); fixes != "" {
 			r.log("[%s] applied deterministic fixes: %s", r.task.ID, fixes)
+		}
+
+		// Run AST-based structural checks before the full build — catches import
+		// consistency issues and constructor arity mismatches with targeted messages.
+		if r.verifier.Language() == "go" {
+			if importErrors := verify.CheckImportConsistency(tmpDir); len(importErrors) > 0 {
+				r.log("[%s] AST import check: %d issue(s)", r.task.ID, len(importErrors))
+			}
+			if arityErrors := verify.CheckConstructorArity(tmpDir, r.memory.AllConstructors()); len(arityErrors) > 0 {
+				r.log("[%s] AST arity check: %d issue(s): %s", r.task.ID, len(arityErrors), strings.Join(arityErrors, "; "))
+			}
 		}
 
 		// Run verification.
@@ -390,12 +442,17 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	r.registerConstructors(files)
 	r.registerServiceMethods(files)
 	r.registerErrorSentinels(files)
+	r.registerInterfaceContracts(files)
 	// For data.schemas tasks, validate that the generated domain files include all
 	// attributes from the manifest and the input/update structs needed by repository
 	// operations. Advisory only — logs warnings but does not block the pipeline.
 	if r.task.Kind == dag.TaskKindDataSchemas {
 		r.validateDomainCompleteness(files)
 	}
+	// Incremental compilation: run go build in the output directory after each task
+	// commits. If cross-task errors are found, record them as advisory context for
+	// downstream tasks — but don't fail the pipeline (reconciliation handles repairs).
+	r.runIncrementalBuild(ctx)
 	if err := r.state.MarkCompleted(r.task.ID); err != nil {
 		r.log("[%s] warning: failed to persist progress: %v", r.task.ID, err)
 	}
@@ -443,6 +500,17 @@ func (r *TaskRunner) registerServiceMethods(files []dag.GeneratedFile) {
 	for _, f := range files {
 		if sigs := memory.ExtractServiceMethodSigs(f.Path, f.Content); len(sigs) > 0 {
 			r.memory.RegisterServiceMethods(f.Path, sigs)
+		}
+	}
+}
+
+// registerInterfaceContracts extracts exported Go interface declarations from each
+// committed file and stores them in shared memory. Downstream implementation tasks
+// receive these as a hard checklist of method signatures to implement exactly.
+func (r *TaskRunner) registerInterfaceContracts(files []dag.GeneratedFile) {
+	for _, f := range files {
+		if contracts := memory.ExtractGoInterfaceContracts(f.Path, f.Content); len(contracts) > 0 {
+			r.memory.RegisterInterfaceContracts(contracts)
 		}
 	}
 }
@@ -544,15 +612,27 @@ func snakeToPascal(s string) string {
 // readLockedGoMod reads the go.mod produced by a prior phase (plan or deps resolution)
 // from the shared service temp directory. Returns "" for non-implementation tasks
 // or when no prior go.mod exists.
+//
+// For cross-service backend tasks (auth, messaging, gateway) that are not part of a
+// service chain, the locked go.mod is looked up from the monolith service chain's
+// temp directory (svc.monolith) as these tasks share the same Go module.
 func (r *TaskRunner) readLockedGoMod(tmpDir string) string {
 	if !isImplementationTask(r.task.ID) {
 		return ""
 	}
+	// Try the task's own temp dir first (service chain tasks).
 	data, err := os.ReadFile(filepath.Join(tmpDir, "go.mod"))
-	if err != nil {
-		return ""
+	if err == nil {
+		return string(data)
 	}
-	return string(data)
+	// For cross-service backend tasks, look in the monolith service chain's temp dir.
+	if _, ok := serviceSlug(r.task.ID); !ok {
+		monolithDir := filepath.Join(r.writer.BaseDir(), ".tmp", "svc.monolith")
+		if data, err := os.ReadFile(filepath.Join(monolithDir, "go.mod")); err == nil {
+			return string(data)
+		}
+	}
+	return ""
 }
 
 // stageDependencyFiles copies files committed by upstream tasks into tmpDir so
@@ -634,13 +714,41 @@ func allFilesInDir(dir string) []string {
 	return files
 }
 
+// runIncrementalBuild runs `go build ./...` in the output directory after a task
+// commits to detect cross-task compilation errors early. Errors are stored as
+// advisory context in shared memory — they don't block the pipeline.
+func (r *TaskRunner) runIncrementalBuild(ctx context.Context) {
+	outputDir := r.writer.BaseDir()
+	// Only run for Go tasks that produce compilable code.
+	if r.verifier.Language() != "go" {
+		return
+	}
+	cmd := exec.CommandContext(ctx, "go", "build", "./...")
+	cmd.Dir = outputDir
+	out, err := cmd.CombinedOutput()
+	if err != nil && len(out) > 0 {
+		// Trim to first few errors to keep context manageable.
+		lines := strings.Split(string(out), "\n")
+		if len(lines) > 20 {
+			lines = lines[:20]
+		}
+		issues := strings.Join(lines, "\n")
+		r.memory.SetCrossTaskIssues(issues)
+		r.log("[%s] incremental build: %d cross-task issue(s) detected (advisory)", r.task.ID, len(lines))
+	}
+}
+
 // isImplementationTask reports whether the task is an implementation layer that
-// should not regenerate the project's go.mod.
+// should not regenerate the project's go.mod. Includes service chain layers AND
+// cross-service backend tasks (auth, messaging, gateway) that share the same module.
 func isImplementationTask(taskID string) bool {
 	return strings.HasSuffix(taskID, ".repository") ||
 		strings.HasSuffix(taskID, ".service") ||
 		strings.HasSuffix(taskID, ".handler") ||
-		strings.HasSuffix(taskID, ".bootstrap")
+		strings.HasSuffix(taskID, ".bootstrap") ||
+		taskID == "backend.auth" ||
+		taskID == "backend.messaging" ||
+		taskID == "backend.gateway"
 }
 
 // findGoMod walks dir to find the first go.mod file.
@@ -685,7 +793,7 @@ func (r *TaskRunner) agentForAttempt(attempt int) agent.Agent {
 			if r.verbose {
 				r.log("[%s] escalating to %s (%s override) for attempt %d", r.task.ID, modelID, r.providerAssignment.Provider, attempt)
 			}
-			return buildAgentWithModel(r.providerAssignment, modelID, defaultMaxTokens, r.verbose)
+			return buildAgentWithModel(r.providerAssignment, modelID, defaultMaxTokens, thinkingBudgetForTier(tier), reasoningEffortForTier(tier), r.verbose)
 		}
 	}
 	if r.verbose {

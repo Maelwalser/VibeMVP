@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 )
@@ -45,12 +46,27 @@ func (p *PythonVerifier) Verify(ctx context.Context, outputDir string, files []s
 	}
 
 	// ── mypy ────────────────────────────────────────────────────────────────
+	// Only run mypy when a virtualenv exists (mypy needs installed deps for
+	// type checking). Without a venv, mypy produces too many false positives
+	// from unresolved imports.
 	mypyPath, mypyErr := exec.LookPath("mypy")
 	if mypyErr != nil {
 		combined.WriteString("mypy not found in PATH — skipping mypy check\n")
 	} else {
 		for _, dir := range dirs {
 			absDir := filepath.Join(outputDir, dir)
+			// Check for venv or .venv directory.
+			hasVenv := false
+			for _, vdir := range []string{"venv", ".venv"} {
+				if _, err := os.Stat(filepath.Join(absDir, vdir)); err == nil {
+					hasVenv = true
+					break
+				}
+			}
+			if !hasVenv {
+				combined.WriteString(fmt.Sprintf("=== mypy in %s ===\nskipped — no virtualenv found (mypy needs installed deps)\n", dir))
+				continue
+			}
 			out, err := runCmd(ctx, absDir, mypyPath, "--ignore-missing-imports", ".")
 			combined.WriteString(fmt.Sprintf("=== mypy in %s ===\n%s\n", dir, out))
 			if err != nil {

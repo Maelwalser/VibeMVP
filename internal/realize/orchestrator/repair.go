@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/vibe-menu/internal/manifest"
 	"github.com/vibe-menu/internal/realize/agent"
@@ -52,50 +55,81 @@ func repairIntegrationErrors(
 	var summary RepairSummary
 
 	const maxRepairAttempts = 2
+	const maxParallelRepairs = 4
+
 	for attempt := 0; attempt < maxRepairAttempts; attempt++ {
 		summary.AttemptCount++
+
+		var mu sync.Mutex
+		sem := make(chan struct{}, maxParallelRepairs)
+		g, gctx := errgroup.WithContext(ctx)
+
 		for _, ierr := range intResult.Errors {
-			dir := filepath.Join(outputDir, ierr.Dir)
+			ierr := ierr // capture for goroutine
+			g.Go(func() error {
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
-			sourceFiles, err := collectModuleFiles(dir, ierr.Language)
-			if err != nil {
-				logf("realize: repair: could not read files from %s: %v", ierr.Dir, err)
-				summary.SkippedErrors = append(summary.SkippedErrors,
-					fmt.Sprintf("module %s: read error: %v", ierr.Dir, err))
-				continue
-			}
-			if len(sourceFiles) == 0 {
-				summary.SkippedErrors = append(summary.SkippedErrors,
-					fmt.Sprintf("module %s: no %s files found", ierr.Dir, ierr.Language))
-				continue
-			}
+				dir := filepath.Join(outputDir, ierr.Dir)
 
-			ac := buildRepairContext(attempt, sourceFiles, ierr.Dir, ierr.Output)
-			result, agentErr := a.Run(ctx, ac)
-			if agentErr != nil {
-				summary.AgentErrors++
-				logf("realize: repair: agent error for %s (attempt %d): %v", ierr.Dir, attempt, agentErr)
-				summary.SkippedErrors = append(summary.SkippedErrors,
-					fmt.Sprintf("module %s: agent error: %v", ierr.Dir, agentErr))
-				continue
-			}
-
-			// Write patched files back to disk, relative to the module directory.
-			for _, f := range result.Files {
-				fullPath := filepath.Join(dir, filepath.FromSlash(f.Path))
-				if mkErr := os.MkdirAll(filepath.Dir(fullPath), 0o755); mkErr != nil {
-					summary.WriteErrors++
-					logf("realize: repair: mkdir %s: %v", filepath.Dir(fullPath), mkErr)
-					continue
+				sourceFiles, err := collectModuleFiles(dir, ierr.Language)
+				if err != nil {
+					logf("realize: repair: could not read files from %s: %v", ierr.Dir, err)
+					mu.Lock()
+					summary.SkippedErrors = append(summary.SkippedErrors,
+						fmt.Sprintf("module %s: read error: %v", ierr.Dir, err))
+					mu.Unlock()
+					return nil
 				}
-				if writeErr := os.WriteFile(fullPath, []byte(f.Content), 0o644); writeErr != nil {
-					summary.WriteErrors++
-					logf("realize: repair: write %s: %v", f.Path, writeErr)
-					continue
+				if len(sourceFiles) == 0 {
+					mu.Lock()
+					summary.SkippedErrors = append(summary.SkippedErrors,
+						fmt.Sprintf("module %s: no %s files found", ierr.Dir, ierr.Language))
+					mu.Unlock()
+					return nil
 				}
-				summary.PatchedFiles++
-			}
+
+				ac := buildRepairContext(attempt, sourceFiles, ierr.Dir, ierr.Output)
+				result, agentErr := a.Run(gctx, ac)
+				if agentErr != nil {
+					mu.Lock()
+					summary.AgentErrors++
+					mu.Unlock()
+					logf("realize: repair: agent error for %s (attempt %d): %v", ierr.Dir, attempt, agentErr)
+					mu.Lock()
+					summary.SkippedErrors = append(summary.SkippedErrors,
+						fmt.Sprintf("module %s: agent error: %v", ierr.Dir, agentErr))
+					mu.Unlock()
+					return nil
+				}
+
+				// Write patched files back to disk, relative to the module directory.
+				for _, f := range result.Files {
+					fullPath := filepath.Join(dir, filepath.FromSlash(f.Path))
+					if mkErr := os.MkdirAll(filepath.Dir(fullPath), 0o755); mkErr != nil {
+						mu.Lock()
+						summary.WriteErrors++
+						mu.Unlock()
+						logf("realize: repair: mkdir %s: %v", filepath.Dir(fullPath), mkErr)
+						continue
+					}
+					if writeErr := os.WriteFile(fullPath, []byte(f.Content), 0o644); writeErr != nil {
+						mu.Lock()
+						summary.WriteErrors++
+						mu.Unlock()
+						logf("realize: repair: write %s: %v", f.Path, writeErr)
+						continue
+					}
+					mu.Lock()
+					summary.PatchedFiles++
+					mu.Unlock()
+				}
+				return nil
+			})
 		}
+
+		// Wait for all parallel repairs to finish.
+		_ = g.Wait()
 
 		// Apply deterministic cleanup on LLM-patched output before rechecking.
 		applyIntegrationFixes(outputDir)
@@ -113,7 +147,7 @@ func repairIntegrationErrors(
 func buildRepairAgent(pa manifest.ProviderAssignment, tierOverrides map[ModelTier]string, verbose bool) agent.Agent {
 	if tierOverrides != nil {
 		if modelID, ok := tierOverrides[TierSlow]; ok {
-			return buildAgentWithModel(pa, modelID, config.DefaultMaxTokens, verbose)
+			return buildAgentWithModel(pa, modelID, config.DefaultMaxTokens, thinkingBudgetForTier(TierSlow), reasoningEffortForTier(TierSlow), verbose)
 		}
 	}
 	return buildAgentForTier(pa, TierSlow, config.DefaultMaxTokens, verbose)

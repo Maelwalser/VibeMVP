@@ -12,21 +12,32 @@ import (
 
 const geminiBaseURL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+// isGeminiThinkingModel reports whether the Gemini model supports thinkingConfig.
+// Gemini 2.5 Flash/Pro and the thinking-exp models support extended thinking.
+func isGeminiThinkingModel(modelID string) bool {
+	return strings.Contains(modelID, "2.5") ||
+		strings.Contains(modelID, "thinking") ||
+		strings.Contains(modelID, "gemini-ultra")
+}
+
 // GeminiAgent implements Agent using the Google Gemini generative language API.
 type GeminiAgent struct {
-	apiKey    string
-	modelID   string
-	maxTokens int64
-	verbose   bool
+	apiKey         string
+	modelID        string
+	maxTokens      int64
+	thinkingBudget int64 // 0 = disabled; >0 sets thinkingConfig.thinkingBudget for 2.5+ models
+	verbose        bool
 }
 
 // NewGeminiAgent returns a GeminiAgent authenticated with the given API key.
-func NewGeminiAgent(apiKey, modelID string, maxTokens int64, verbose bool) *GeminiAgent {
+// thinkingBudget sets the Gemini thinking budget for 2.5+ models. 0 disables thinking.
+func NewGeminiAgent(apiKey, modelID string, maxTokens, thinkingBudget int64, verbose bool) *GeminiAgent {
 	return &GeminiAgent{
-		apiKey:    apiKey,
-		modelID:   modelID,
-		maxTokens: maxTokens,
-		verbose:   verbose,
+		apiKey:         apiKey,
+		modelID:        modelID,
+		maxTokens:      maxTokens,
+		thinkingBudget: thinkingBudget,
+		verbose:        verbose,
 	}
 }
 
@@ -39,6 +50,18 @@ func (a *GeminiAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 		return nil, fmt.Errorf("build user message: %w", err)
 	}
 
+	genConfig := map[string]any{
+		"maxOutputTokens": a.maxTokens,
+	}
+	// Gemini 2.5+ models support thinkingConfig for extended reasoning.
+	// Set thinkingBudget > 0 to enable; the model will use up to that many
+	// tokens for internal reasoning before generating the response.
+	if a.thinkingBudget > 0 && isGeminiThinkingModel(a.modelID) {
+		genConfig["thinkingConfig"] = map[string]any{
+			"thinkingBudget": a.thinkingBudget,
+		}
+	}
+
 	reqBody := map[string]any{
 		"system_instruction": map[string]any{
 			"parts": []map[string]string{{"text": systemPrompt}},
@@ -49,9 +72,7 @@ func (a *GeminiAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 				"parts": []map[string]string{{"text": userMsg}},
 			},
 		},
-		"generationConfig": map[string]any{
-			"maxOutputTokens": a.maxTokens,
-		},
+		"generationConfig": genConfig,
 	}
 
 	body, err := json.Marshal(reqBody)

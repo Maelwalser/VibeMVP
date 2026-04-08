@@ -467,7 +467,14 @@ func ExtractServiceMethodSigs(filePath, content string) []string {
 	lower := strings.ToLower(filePath)
 	switch {
 	case strings.HasSuffix(lower, ".go") && !strings.HasSuffix(lower, "_test.go"):
-		return extractGoServiceMethodSigs(content)
+		// Extract both concrete method signatures (func (s *Svc) Method(...))
+		// and interface method signatures (type X interface { Method(...) }).
+		// Interface methods are authoritative contracts; concrete methods are
+		// the actual implementations. Including both ensures handler/bootstrap
+		// tasks see the correct signatures regardless of which file they come from.
+		sigs := extractGoServiceMethodSigs(content)
+		sigs = append(sigs, extractGoInterfaceMethodSigs(filePath, content)...)
+		return sigs
 	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
 		return extractTSServiceMethodSigs(content)
 	case strings.HasSuffix(lower, ".py"):
@@ -965,4 +972,109 @@ func extractPyExportedTypeNames(filePath, content string) map[string]TypeEntry {
 		}
 	}
 	return result
+}
+
+// extractGoInterfaceMethodSigs extracts method signatures from Go interface declarations.
+// Returns signatures formatted as "InterfaceName.MethodName(params) returns" for clarity.
+func extractGoInterfaceMethodSigs(filePath, content string) []string {
+	contracts := ExtractGoInterfaceContracts(filePath, content)
+	var sigs []string
+	for _, c := range contracts {
+		for _, m := range c.Methods {
+			sigs = append(sigs, m)
+		}
+	}
+	return sigs
+}
+
+// InterfaceContract records one Go interface definition extracted from a committed file.
+// Used to build a hard checklist for downstream implementation tasks so they match
+// the exact method signatures defined in the plan task's interfaces.go.
+type InterfaceContract struct {
+	InterfaceName string
+	Package       string
+	File          string
+	Methods       []string // full method signature lines, e.g. "FindByEmail(ctx context.Context, email string) (*User, error)"
+}
+
+// ExtractGoInterfaceContracts parses Go source for interface declarations and returns
+// one InterfaceContract per exported interface found. Only processes .go files that are
+// not test files. Uses line-by-line parsing consistent with the rest of sigscan.
+func ExtractGoInterfaceContracts(filePath, content string) []InterfaceContract {
+	lower := strings.ToLower(filePath)
+	if !strings.HasSuffix(lower, ".go") || strings.HasSuffix(lower, "_test.go") {
+		return nil
+	}
+
+	pkg := filepath.Dir(filePath)
+	if pkg == "." {
+		pkg = ""
+	}
+
+	lines := strings.Split(content, "\n")
+	var contracts []InterfaceContract
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+
+		// Match "type <Name> interface {" (exported interfaces only).
+		if !strings.HasPrefix(trimmed, "type ") {
+			continue
+		}
+		rest := strings.TrimPrefix(trimmed, "type ")
+		spaceIdx := strings.IndexByte(rest, ' ')
+		if spaceIdx < 0 {
+			continue
+		}
+		name := rest[:spaceIdx]
+		if len(name) == 0 || name[0] < 'A' || name[0] > 'Z' {
+			continue // unexported
+		}
+		after := strings.TrimSpace(rest[spaceIdx+1:])
+		if !strings.HasPrefix(after, "interface") {
+			continue
+		}
+		// Check for opening brace on same or next line.
+		if !strings.Contains(after, "{") {
+			if i+1 < len(lines) && strings.TrimSpace(lines[i+1]) == "{" {
+				i++
+			} else {
+				continue
+			}
+		}
+
+		// Collect method signatures until closing brace.
+		var methods []string
+		depth := 1
+		for j := i + 1; j < len(lines) && depth > 0; j++ {
+			line := strings.TrimSpace(lines[j])
+			if line == "}" {
+				depth--
+				continue
+			}
+			if strings.HasSuffix(line, "{") {
+				depth++
+				continue
+			}
+			// Skip blank lines, comments, and embedded interfaces.
+			if line == "" || strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") {
+				continue
+			}
+			// A method signature line contains a parenthesis (params) and no "type " prefix.
+			if strings.Contains(line, "(") && !strings.HasPrefix(line, "type ") {
+				methods = append(methods, line)
+			}
+			i = j
+		}
+
+		if len(methods) > 0 {
+			contracts = append(contracts, InterfaceContract{
+				InterfaceName: name,
+				Package:       pkg,
+				File:          filePath,
+				Methods:       methods,
+			})
+		}
+	}
+	return contracts
 }

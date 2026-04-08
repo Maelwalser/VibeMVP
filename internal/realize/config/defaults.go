@@ -27,7 +27,7 @@ var MaxTotalCharsByKind = map[string]int{
 	"backend.service.handler":    20000, // sees repo + service + auth
 	"backend.service.logic":      15000, // sees repo + data schemas
 	"backend.service.repository": 15000, // sees data schemas + plan interfaces
-	"backend.service.plan":       20000, // sees data schemas — must receive full domain structs + input types
+	"backend.service.plan":       30000, // sees data schemas — must receive full domain structs + input types
 	"backend.service.deps":       15000, // sees plan output (go.mod + interfaces)
 	"backend.auth":               20000, // needs all service interfaces
 	"backend.messaging":          15000, // needs domain + event definitions
@@ -47,6 +47,16 @@ func MaxTotalCharsFor(kind string) int {
 		return v
 	}
 	return MaxTotalChars
+}
+
+// ThinkingBudgetByTier maps abstract tier names to the extended thinking token
+// budget for Claude agents. TierFast tasks skip thinking entirely; TierMedium
+// tasks get moderate reasoning; TierSlow tasks (reconciliation, repair) get
+// deep reasoning. Budget must be >= 1024 and < MaxTokens per Anthropic API.
+var ThinkingBudgetByTier = map[int]int64{
+	0: 0,     // TierFast — no thinking (boilerplate tasks)
+	1: 8192,  // TierMedium — moderate reasoning
+	2: 16384, // TierSlow — deep cross-task reasoning
 }
 
 // RateLimitBackoffBase is the per-attempt multiplier in seconds for rate-limit backoff.
