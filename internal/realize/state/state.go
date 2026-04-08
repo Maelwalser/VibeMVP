@@ -63,6 +63,17 @@ func (s *Store) CompletedCount() int {
 	return len(s.completed)
 }
 
+// CompletedIDs returns a snapshot of all completed task IDs.
+func (s *Store) CompletedIDs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]string, 0, len(s.completed))
+	for id := range s.completed {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // flush serialises the completed set to disk. Caller must hold mu.
 func (s *Store) flush() error {
 	data, err := json.MarshalIndent(s.completed, "", "  ")

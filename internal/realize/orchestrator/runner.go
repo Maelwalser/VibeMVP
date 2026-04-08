@@ -74,25 +74,35 @@ func MaxRetriesFor(kind dag.TaskKind, fallback int) int {
 }
 
 // classifyError inspects verification output and returns the dominant error type.
+// Uses the structured CompilerError parser for Go errors so classification is
+// resilient to compiler output format changes across Go versions.
 func classifyError(output string) errorType {
+	parsed := verify.ParseGoErrors(output)
+
+	// Check structured errors first — these are precise.
+	if len(parsed) > 0 {
+		if verify.HasCode(parsed, "redeclared") {
+			return errTypeDuplicate
+		}
+		if verify.HasCode(parsed, "undefined") || verify.HasCode(parsed, "not_implemented") {
+			return errTypeUndefined
+		}
+	}
+
+	// Patterns that don't map to Go compiler errors (verifier-specific messages).
 	switch {
 	case strings.Contains(output, "unknown escape sequence"):
 		return errTypeEscape
 	case strings.Contains(output, "files not gofmt-clean") &&
-		!strings.Contains(output, "undefined:") &&
+		!verify.HasCode(parsed, "undefined") &&
 		!strings.Contains(output, "FAIL"):
 		return errTypeGofmt
 	case strings.Contains(output, "missing go.sum entry") ||
 		strings.Contains(output, "invalid version") ||
 		strings.Contains(output, "cannot find module"):
 		return errTypeDeps
-	case strings.Contains(output, "redeclared in this block"):
-		return errTypeDuplicate
 	case strings.Contains(output, "--- FAIL:"):
 		return errTypeTestFail
-	case strings.Contains(output, "undefined:") ||
-		strings.Contains(output, "does not implement"):
-		return errTypeUndefined
 	default:
 		return errTypeUnknown
 	}
@@ -227,10 +237,18 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			if r.task.Payload.ModulePath != "" {
 				modulePath = r.task.Payload.ModulePath
 			}
+			framework := ""
+			language := ""
+			if r.task.Payload.Service != nil {
+				framework = r.task.Payload.Service.Framework
+				language = r.task.Payload.Service.Language
+			}
 			bootstrapSkeleton = codegen.WireBootstrap(
 				r.memory.AllConstructors(),
 				r.memory.AllServiceMethods(),
 				modulePath,
+				framework,
+				language,
 			)
 		}
 
@@ -246,8 +264,9 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			AllServiceMethods:    r.memory.AllServiceMethods(),
 			AllErrorSentinels:    r.memory.AllErrorSentinels(),
 			InterfaceContracts:   r.memory.AllInterfaceContracts(),
-			CrossTaskIssues:     r.memory.CrossTaskIssues(),
-			BootstrapSkeleton:   bootstrapSkeleton,
+			CrossTaskIssues:      r.memory.CrossTaskIssues(),
+			BootstrapSkeleton:    bootstrapSkeleton,
+			MaxContextTokens:     contextWindowForAttempt(r.providerAssignment, r.initialTier, r.tierOverrides, attempt),
 		}
 
 		result, err := a.Run(ctx, ac)
@@ -294,6 +313,21 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 
 		if err := r.writer.WriteAllTo(tmpDir, result.Files); err != nil {
 			return fmt.Errorf("task %s: write to temp dir: %w", r.task.ID, err)
+		}
+
+		// Pre-verify structural check: catch wrong package declarations, empty
+		// files, and duplicate paths before spending time on compilation.
+		if structIssues := verify.ValidateStructure(result.Files, r.verifier.Language()); len(structIssues) > 0 {
+			r.log("[%s] structural check: %d issue(s)", r.task.ID, len(structIssues))
+			if attempt < r.maxRetries {
+				lastVerifyOutput = "Structural validation errors (fix these before compilation):\n" + strings.Join(structIssues, "\n")
+				lastFiles = result.Files
+				continue
+			}
+			// On last attempt, log but proceed to verification anyway.
+			for _, issue := range structIssues {
+				r.log("[%s] structural: %s", r.task.ID, issue)
+			}
 		}
 
 		// Restore locked go.mod if the agent overwrote it, then run go mod tidy
@@ -347,6 +381,17 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 		}
 
 		if vResult.Passed {
+			// For data.schemas tasks, enforce domain completeness before committing.
+			// If critical items are missing (domain files, attributes, Create*Input
+			// structs), treat as a verification failure and continue to retry.
+			if r.task.Kind == dag.TaskKindDataSchemas && attempt < r.maxRetries {
+				if issues := r.validateDomainCompleteness(result.Files); len(issues) > 0 {
+					r.log("[%s] domain completeness check failed (%d critical issues) — retrying", r.task.ID, len(issues))
+					lastVerifyOutput = "Domain completeness errors (generated code compiles but is incomplete):\n" + strings.Join(issues, "\n")
+					lastFiles = result.Files
+					continue
+				}
+			}
 			return r.commit(ctx, tmpDir, result.Files)
 		}
 
@@ -365,6 +410,12 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			// Fix `:=` used where all vars are already declared.
 			if declFix := verify.ApplyShortDeclFixes(tmpDir, vResult.Output); declFix != "" {
 				r.log("[%s] %s", r.task.ID, declFix)
+				anyDiskFix = true
+			}
+
+			// Fix constructor arity mismatches (too many/not enough arguments).
+			if arityFix := verify.ApplyConstructorArityFixes(tmpDir, vResult.Output, r.memory.AllConstructors()); arityFix != "" {
+				r.log("[%s] %s", r.task.ID, arityFix)
 				anyDiskFix = true
 			}
 
@@ -435,6 +486,27 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	// Record: passes prefixedFiles for rawPaths (disk staging) but Record internally
 	// strips outputDir when building excerpts for agent context.
 	r.memory.Record(r.task, prefixedFiles, outputDir)
+	// For dependency resolution tasks, store the locked go.mod and go.sum in
+	// shared memory so downstream tasks can find them even when temp dirs
+	// don't match or when parallel microservice tasks need consistent checksums.
+	if r.task.Kind == dag.TaskKindDependencyResolution {
+		var modulePath string
+		for _, f := range files {
+			if filepath.Base(f.Path) == "go.mod" {
+				modulePath = extractModulePath(f.Content)
+				r.memory.StoreLockedGoMod(modulePath, f.Content)
+			}
+		}
+		if modulePath != "" {
+			for _, f := range files {
+				if filepath.Base(f.Path) == "go.sum" {
+					r.memory.StoreLockedGoSum(modulePath, f.Content)
+					break
+				}
+			}
+		}
+	}
+
 	// Register types and constructors from un-prefixed files so package paths are
 	// module-relative. Constructors are extracted from full content here — before
 	// any excerpt truncation — so downstream prompts see accurate signatures.
@@ -443,12 +515,23 @@ func (r *TaskRunner) commit(ctx context.Context, tmpDir string, files []dag.Gene
 	r.registerServiceMethods(files)
 	r.registerErrorSentinels(files)
 	r.registerInterfaceContracts(files)
-	// For data.schemas tasks, validate that the generated domain files include all
-	// attributes from the manifest and the input/update structs needed by repository
-	// operations. Advisory only — logs warnings but does not block the pipeline.
+	// For data.schemas tasks, log any remaining completeness issues (advisory at
+	// this point — critical issues were already enforced in the retry loop).
 	if r.task.Kind == dag.TaskKindDataSchemas {
-		r.validateDomainCompleteness(files)
+		_ = r.validateDomainCompleteness(files)
 	}
+	// Check that implementations satisfy interface contracts from shared memory.
+	// Advisory only — logs warnings and records in CrossTaskIssues.
+	if contracts := r.memory.AllInterfaceContracts(); len(contracts) > 0 {
+		if issues := verify.CheckInterfaceCompliance(files, contracts); len(issues) > 0 {
+			for _, issue := range issues {
+				r.log("[%s] interface compliance: %s", r.task.ID, issue)
+			}
+			existing := r.memory.CrossTaskIssues()
+			r.memory.SetCrossTaskIssues(existing + "\n" + strings.Join(issues, "\n"))
+		}
+	}
+
 	// Incremental compilation: run go build in the output directory after each task
 	// commits. If cross-task errors are found, record them as advisory context for
 	// downstream tasks — but don't fail the pipeline (reconciliation handles repairs).
@@ -529,8 +612,12 @@ func (r *TaskRunner) registerErrorSentinels(files []dag.GeneratedFile) {
 
 // validateDomainCompleteness checks that the data.schemas output includes all domain
 // attributes from the manifest and the input/update structs needed by repository
-// operations. Logs warnings for anything missing — advisory only, does not block.
-func (r *TaskRunner) validateDomainCompleteness(files []dag.GeneratedFile) {
+// operations. Returns critical issues (missing domain files, missing attributes,
+// missing Create*Input structs) that should block the commit and trigger a retry.
+// Non-critical issues (missing update structs) are logged as warnings only.
+func (r *TaskRunner) validateDomainCompleteness(files []dag.GeneratedFile) []string {
+	var critical []string
+
 	// Build a content index by domain name using exact base filename matching.
 	fileContent := make(map[string]string) // lowercase domain name → file content
 	for _, f := range files {
@@ -546,7 +633,9 @@ func (r *TaskRunner) validateDomainCompleteness(files []dag.GeneratedFile) {
 	for _, domain := range r.task.Payload.Domains {
 		content, ok := fileContent[strings.ToLower(domain.Name)]
 		if !ok {
-			r.log("[%s] WARNING: no file generated for domain %q", r.task.ID, domain.Name)
+			msg := fmt.Sprintf("no file generated for domain %q — expected %s.go", domain.Name, strings.ToLower(domain.Name))
+			critical = append(critical, msg)
+			r.log("[%s] CRITICAL: %s", r.task.ID, msg)
 			continue
 		}
 		// Check each attribute is present as a Go struct field declaration.
@@ -556,8 +645,9 @@ func (r *TaskRunner) validateDomainCompleteness(files []dag.GeneratedFile) {
 			goField := snakeToPascal(attr.Name)
 			if !strings.Contains(content, goField+"\t") &&
 				!strings.Contains(content, goField+" ") {
-				r.log("[%s] WARNING: domain %q missing attribute %q (expected Go field %q)",
-					r.task.ID, domain.Name, attr.Name, goField)
+				msg := fmt.Sprintf("domain %q missing attribute %q (expected Go field %q)", domain.Name, attr.Name, goField)
+				critical = append(critical, msg)
+				r.log("[%s] CRITICAL: %s", r.task.ID, msg)
 			}
 		}
 	}
@@ -574,19 +664,30 @@ func (r *TaskRunner) validateDomainCompleteness(files []dag.GeneratedFile) {
 		for _, repo := range svc.Repositories {
 			for _, op := range repo.Operations {
 				var typeName string
+				isCritical := false
 				switch {
 				case op.OpType == "insert" || strings.HasPrefix(op.Name, "Create"):
 					typeName = "Create" + repo.EntityRef + "Input"
+					isCritical = true // Create inputs are critical — repos need them
 				case op.OpType == "update":
 					typeName = op.Name + "Input"
+					// Update inputs are advisory — not blocking
 				}
 				if typeName != "" && !strings.Contains(allContent, "type "+typeName+" struct") {
-					r.log("[%s] WARNING: missing input struct %q for %s.%s operation",
-						r.task.ID, typeName, repo.Name, op.Name)
+					if isCritical {
+						msg := fmt.Sprintf("missing input struct %q for %s.%s operation", typeName, repo.Name, op.Name)
+						critical = append(critical, msg)
+						r.log("[%s] CRITICAL: %s", r.task.ID, msg)
+					} else {
+						r.log("[%s] WARNING: missing input struct %q for %s.%s operation",
+							r.task.ID, typeName, repo.Name, op.Name)
+					}
 				}
 			}
 		}
 	}
+
+	return critical
 }
 
 // snakeToPascal converts a snake_case string to PascalCase.
@@ -632,6 +733,46 @@ func (r *TaskRunner) readLockedGoMod(tmpDir string) string {
 			return string(data)
 		}
 	}
+	// Fallback: check the output directory where the deps task committed go.mod.
+	outputDir := r.task.Payload.OutputDir
+	if outputDir != "" && outputDir != "." {
+		outPath := filepath.Join(r.writer.BaseDir(), outputDir, "go.mod")
+		if data, err := os.ReadFile(outPath); err == nil {
+			return string(data)
+		}
+	}
+	// Final fallback: check shared memory for any locked go.mod.
+	if content := r.memory.AnyLockedGoMod(); content != "" {
+		return content
+	}
+	return ""
+}
+
+// contextWindowForAttempt computes the context window size for the model that
+// will be used at the given attempt (accounting for tier escalation).
+func contextWindowForAttempt(pa manifest.ProviderAssignment, initialTier ModelTier, tierOverrides map[ModelTier]string, attempt int) int {
+	tier := initialTier
+	for i := 0; i < attempt; i++ {
+		next, _ := escalateTier(tier)
+		tier = next
+	}
+	if tierOverrides != nil {
+		if modelID, ok := tierOverrides[tier]; ok && modelID != "" {
+			return ContextWindowFor(modelID)
+		}
+	}
+	modelID := resolveModelIDForTier(pa.Provider, tier, pa.Version)
+	return ContextWindowFor(modelID)
+}
+
+// extractModulePath parses a go.mod content string and returns the module path.
+func extractModulePath(goModContent string) string {
+	for _, line := range strings.Split(goModContent, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
 	return ""
 }
 
@@ -661,6 +802,16 @@ func (r *TaskRunner) stageDependencyFiles(tmpDir string) error {
 			return err
 		}
 	}
+
+	// Restore locked go.sum from shared memory if no go.sum exists in tmpDir.
+	// This prevents checksum drift between parallel microservice deps tasks.
+	goSumPath := filepath.Join(tmpDir, "go.sum")
+	if _, err := os.Stat(goSumPath); os.IsNotExist(err) {
+		if goSum := r.memory.AnyLockedGoSum(); goSum != "" {
+			_ = os.WriteFile(goSumPath, []byte(goSum), 0o644)
+		}
+	}
+
 	return nil
 }
 

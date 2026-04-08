@@ -71,15 +71,23 @@ func (a *ClaudeAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 		return nil, fmt.Errorf("build user message: %w", err)
 	}
 
+	// Build system blocks. The role prompt is always cached. Cross-task reference
+	// context (constructors, methods, sentinels, contracts) is stable across retries
+	// and benefits from a separate cached block — saving ~30-40% on retry input costs.
+	systemBlocks := []anthropic.TextBlockParam{
+		{Text: systemPrompt, CacheControl: anthropic.NewCacheControlEphemeralParam()},
+	}
+	if refCtx := ReferenceContext(ac); refCtx != "" {
+		systemBlocks = append(systemBlocks, anthropic.TextBlockParam{
+			Text:         refCtx,
+			CacheControl: anthropic.NewCacheControlEphemeralParam(),
+		})
+	}
+
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(a.model),
 		MaxTokens: a.maxTokens,
-		System: []anthropic.TextBlockParam{
-			// cache_control marks this block for Anthropic prompt caching.
-			// The system prompt is stable per task kind across all invocations,
-			// so cached tokens cost 10% of base input price (breakeven at 2 requests).
-			{Text: systemPrompt, CacheControl: anthropic.NewCacheControlEphemeralParam()},
-		},
+		System:    systemBlocks,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg)),
 		},

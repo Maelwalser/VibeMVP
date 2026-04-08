@@ -467,14 +467,11 @@ func ExtractServiceMethodSigs(filePath, content string) []string {
 	lower := strings.ToLower(filePath)
 	switch {
 	case strings.HasSuffix(lower, ".go") && !strings.HasSuffix(lower, "_test.go"):
-		// Extract both concrete method signatures (func (s *Svc) Method(...))
-		// and interface method signatures (type X interface { Method(...) }).
-		// Interface methods are authoritative contracts; concrete methods are
-		// the actual implementations. Including both ensures handler/bootstrap
-		// tasks see the correct signatures regardless of which file they come from.
-		sigs := extractGoServiceMethodSigs(content)
-		sigs = append(sigs, extractGoInterfaceMethodSigs(filePath, content)...)
-		return sigs
+		// Extract only concrete method signatures (func (s *Svc) Method(...)).
+		// Interface method signatures are handled separately by InterfaceContracts
+		// and injected into their own prompt section. Mixing them here causes
+		// ambiguity (bare "FindByEmail(...)" without the interface prefix).
+		return extractGoServiceMethodSigs(content)
 	case strings.HasSuffix(lower, ".ts") || strings.HasSuffix(lower, ".tsx"):
 		return extractTSServiceMethodSigs(content)
 	case strings.HasSuffix(lower, ".py"):
@@ -975,13 +972,13 @@ func extractPyExportedTypeNames(filePath, content string) map[string]TypeEntry {
 }
 
 // extractGoInterfaceMethodSigs extracts method signatures from Go interface declarations.
-// Returns signatures formatted as "InterfaceName.MethodName(params) returns" for clarity.
+// Returns signatures prefixed with the interface name: "InterfaceName.MethodName(params) returns".
 func extractGoInterfaceMethodSigs(filePath, content string) []string {
 	contracts := ExtractGoInterfaceContracts(filePath, content)
 	var sigs []string
 	for _, c := range contracts {
 		for _, m := range c.Methods {
-			sigs = append(sigs, m)
+			sigs = append(sigs, c.InterfaceName+"."+m)
 		}
 	}
 	return sigs

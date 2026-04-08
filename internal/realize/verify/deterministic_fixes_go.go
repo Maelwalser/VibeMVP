@@ -72,9 +72,12 @@ func removeUnusedGoImports(dir string, files []string) string {
 		return ""
 	}
 
-	// Parse "imported and not used" errors.
-	// Format: <file>:<line>:<col>: "<pkg>" imported and not used
-	unusedImportRe := regexp.MustCompile(`^(.+\.go):(\d+):\d+: "([^"]+)" imported and not used`)
+	// Parse "imported and not used" errors using the structured error parser.
+	parsed := ParseGoErrors(string(out))
+	unusedErrors := WithCode(parsed, "unused_import")
+	if len(unusedErrors) == 0 {
+		return ""
+	}
 	type fix struct {
 		file string
 		line int
@@ -82,23 +85,13 @@ func removeUnusedGoImports(dir string, files []string) string {
 	}
 	var fixes []fix
 	seen := make(map[string]bool)
-	for _, line := range strings.Split(string(out), "\n") {
-		m := unusedImportRe.FindStringSubmatch(strings.TrimSpace(line))
-		if m == nil {
-			continue
-		}
-		relFile, lineStr, pkg := m[1], m[2], m[3]
-		key := relFile + ":" + lineStr
+	for _, e := range unusedErrors {
+		key := fmt.Sprintf("%s:%d", e.File, e.Line)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		lineNum := 0
-		fmt.Sscanf(lineStr, "%d", &lineNum)
-		fixes = append(fixes, fix{file: relFile, line: lineNum, pkg: pkg})
-	}
-	if len(fixes) == 0 {
-		return ""
+		fixes = append(fixes, fix{file: e.File, line: e.Line, pkg: e.Symbol})
 	}
 
 	// Group by file and remove the import lines.
@@ -631,6 +624,151 @@ func removeDuplicateVarDecls(baseDir string, files []string) bool {
 		}
 		// Clean up empty var blocks: var (\n)
 		content = regexp.MustCompile(`(?m)^var\s*\(\s*\n\s*\)\s*\n?`).ReplaceAllString(content, "")
+		_ = os.WriteFile(filepath.Join(baseDir, f), []byte(content), 0644)
+		changed = true
+	}
+	return changed
+}
+
+// ── Duplicate function fix ──────────────────────────────────────────────────
+//
+// Cross-task staging and multi-layer generation can produce duplicate function
+// declarations in the same Go package — e.g. both the plan task and the
+// repository task emit `func NewUserRepository(...)`. This causes "redeclared
+// in this block" compile errors.
+//
+// Strategy: group files by package directory, collect all package-level function
+// declarations (including methods), and when a function is declared in multiple
+// files, remove it from the file with fewer total declarations.
+
+// packageFuncRe matches package-level function declarations (not methods).
+var packageFuncRe = regexp.MustCompile(`(?m)^func\s+(\w+)\s*\(`)
+
+// methodDeclRe matches method declarations with receiver: func (r *Type) Name(...)
+var methodDeclRe = regexp.MustCompile(`(?m)^func\s+\([^)]+\)\s+(\w+)\s*\(`)
+
+func fixDuplicateFuncs(dir string, files []string) string {
+	byDir := make(map[string][]string)
+	for _, f := range files {
+		if filepath.Ext(f) != ".go" || strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		byDir[filepath.Dir(f)] = append(byDir[filepath.Dir(f)], f)
+	}
+	fixed := 0
+	for _, goFiles := range byDir {
+		if len(goFiles) < 2 {
+			continue
+		}
+		if removeDuplicateFuncDecls(dir, goFiles) {
+			fixed++
+		}
+	}
+	if fixed == 0 {
+		return ""
+	}
+	return fmt.Sprintf("fixed duplicate funcs in %d package(s)", fixed)
+}
+
+// funcDeclKey returns the deduplication key for a function declaration line.
+// For package-level functions: just the function name.
+// For methods: "ReceiverType.MethodName" to distinguish methods on different types.
+func funcDeclKey(line string) (string, bool) {
+	// Try method first: func (r *Type) Name(...)
+	if m := methodDeclRe.FindStringSubmatch(line); m != nil {
+		// Extract receiver type name.
+		recvMatch := regexp.MustCompile(`\(\w+\s+\*?(\w+)\)`).FindStringSubmatch(line)
+		if recvMatch != nil {
+			return recvMatch[1] + "." + m[1], true
+		}
+		return m[1], true
+	}
+	// Package-level function: func Name(...)
+	if m := packageFuncRe.FindStringSubmatch(line); m != nil {
+		return m[1], true
+	}
+	return "", false
+}
+
+func removeDuplicateFuncDecls(baseDir string, files []string) bool {
+	type funcInfo struct {
+		name  string
+		files []string
+	}
+
+	funcsByFile := make(map[string]int)   // file → total func count
+	allFuncs := make(map[string][]string) // func key → files declaring it
+
+	for _, f := range files {
+		data, err := os.ReadFile(filepath.Join(baseDir, f))
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		count := 0
+		for _, line := range strings.Split(content, "\n") {
+			if key, ok := funcDeclKey(line); ok {
+				allFuncs[key] = append(allFuncs[key], f)
+				count++
+			}
+		}
+		funcsByFile[f] = count
+	}
+
+	// Find duplicated function names.
+	duplicates := make(map[string][]string)
+	for name, declFiles := range allFuncs {
+		if len(declFiles) > 1 {
+			duplicates[name] = declFiles
+		}
+	}
+	if len(duplicates) == 0 {
+		return false
+	}
+
+	// Keep each function in the file with the most declarations; remove from others.
+	filesToFix := make(map[string]map[string]bool)
+	for funcName, declFiles := range duplicates {
+		bestFile, bestCount := declFiles[0], funcsByFile[declFiles[0]]
+		for _, f := range declFiles[1:] {
+			if funcsByFile[f] > bestCount {
+				bestFile, bestCount = f, funcsByFile[f]
+			}
+		}
+		for _, f := range declFiles {
+			if f != bestFile {
+				if filesToFix[f] == nil {
+					filesToFix[f] = make(map[string]bool)
+				}
+				filesToFix[f][funcName] = true
+			}
+		}
+	}
+
+	changed := false
+	for f, funcsToRemove := range filesToFix {
+		data, err := os.ReadFile(filepath.Join(baseDir, f))
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		for funcName := range funcsToRemove {
+			// Build a regex that matches the entire function declaration + body.
+			// This handles both package-level funcs and methods.
+			var funcRe *regexp.Regexp
+			if strings.Contains(funcName, ".") {
+				// Method: ReceiverType.MethodName
+				parts := strings.SplitN(funcName, ".", 2)
+				funcRe = regexp.MustCompile(
+					fmt.Sprintf(`(?ms)^func\s+\(\w+\s+\*?%s\)\s+%s\s*\([^)]*\)[^\{]*\{[^}]*\}\s*\n?`,
+						regexp.QuoteMeta(parts[0]), regexp.QuoteMeta(parts[1])))
+			} else {
+				funcRe = regexp.MustCompile(
+					fmt.Sprintf(`(?ms)^func\s+%s\s*\([^)]*\)[^\{]*\{[^}]*\}\s*\n?`,
+						regexp.QuoteMeta(funcName)))
+			}
+			content = funcRe.ReplaceAllString(content, "")
+		}
 		_ = os.WriteFile(filepath.Join(baseDir, f), []byte(content), 0644)
 		changed = true
 	}

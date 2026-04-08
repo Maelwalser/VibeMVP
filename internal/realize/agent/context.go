@@ -54,6 +54,10 @@ type Context struct {
 	// BootstrapSkeleton is a deterministically generated main.go skeleton
 	// with exact constructor calls. Only populated for bootstrap tasks.
 	BootstrapSkeleton string
+	// MaxContextTokens is the context window size for the current model.
+	// Used by UserMessage to apply progressive pruning on retries when
+	// the full message would exceed 80% of the window.
+	MaxContextTokens int
 }
 
 // Language returns the primary backend language from the task payload.

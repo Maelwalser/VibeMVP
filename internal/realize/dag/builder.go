@@ -211,9 +211,23 @@ func (b *Builder) addBackendTasks(m *manifest.Manifest, d *DAG) {
 		}
 		b.addServiceTaskChain(m, &svc, d, dataDeps, svcDirs)
 	default:
-		// microservices, event-driven, hybrid: one chain per service
+		// microservices, event-driven, hybrid: one chain per service.
+		// Deps tasks are chained sequentially (each depends on the previous
+		// service's deps task) so `go mod tidy` / `npm install` never runs
+		// in parallel across services. This prevents go.sum checksum drift
+		// when the Go module proxy returns slightly different results between
+		// concurrent calls (e.g. a version tag published mid-run).
+		var prevDepsID string
 		for i := range m.Backend.Services {
 			b.addServiceTaskChain(m, &m.Backend.Services[i], d, dataDeps, svcDirs)
+			curDepsID := svcDepsID(m.Backend.Services[i].Name)
+			if prevDepsID != "" {
+				// Add the previous deps task as an additional dependency so
+				// this deps task waits for it to complete before starting.
+				task := d.Tasks[curDepsID]
+				task.Dependencies = append(task.Dependencies, prevDepsID)
+			}
+			prevDepsID = curDepsID
 		}
 	}
 

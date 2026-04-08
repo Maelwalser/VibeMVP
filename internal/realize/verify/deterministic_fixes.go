@@ -54,6 +54,9 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 		if f := fixDuplicateVars(dir, files); f != "" {
 			fixes = append(fixes, f)
 		}
+		if f := fixDuplicateFuncs(dir, files); f != "" {
+			fixes = append(fixes, f)
+		}
 		// Remove invalid pgxpool v5 fields before gofmt so the result is clean.
 		if f := fixInvalidPgxpoolConfig(dir, files); f != "" {
 			fixes = append(fixes, f)
@@ -130,45 +133,25 @@ func ApplyDeterministicFixes(dir string, files []string, language string) string
 // := with = on the offending line. We parse the compiler output for the exact file
 // and line number, then do the substitution.
 
-var noNewVarsRe = regexp.MustCompile(
-	`^(.+\.go):(\d+):\d+: no new variables on left side of :=`)
-
 // ApplyShortDeclFixes reads go compiler output, finds "no new variables on left
 // side of :=" errors, and replaces := with = on the reported lines.
 func ApplyShortDeclFixes(dir string, verifyOutput string) string {
-	type fix struct {
-		file string
-		line int
-	}
-	var fixes []fix
-	seen := make(map[string]bool)
-	for _, line := range strings.Split(verifyOutput, "\n") {
-		m := noNewVarsRe.FindStringSubmatch(strings.TrimSpace(line))
-		if m == nil {
-			continue
-		}
-		relFile, lineStr := m[1], m[2]
-		key := relFile + ":" + lineStr
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		lineNum := 0
-		fmt.Sscanf(lineStr, "%d", &lineNum)
-		fixes = append(fixes, fix{file: relFile, line: lineNum})
-	}
-	if len(fixes) == 0 {
+	errors := WithCode(ParseGoErrors(verifyOutput), "no_new_vars")
+	if len(errors) == 0 {
 		return ""
 	}
 
-	// Group by file.
-	byFile := make(map[string][]int)
-	for _, fx := range fixes {
-		byFile[fx.file] = append(byFile[fx.file], fx.line)
+	// Group by file, deduplicating by file:line.
+	byFile := make(map[string]map[int]bool)
+	for _, e := range errors {
+		if _, ok := byFile[e.File]; !ok {
+			byFile[e.File] = make(map[int]bool)
+		}
+		byFile[e.File][e.Line] = true
 	}
 
 	applied := 0
-	for relFile, lineNums := range byFile {
+	for relFile, lineSet := range byFile {
 		path := filepath.Join(dir, relFile)
 		if _, err := os.Stat(path); err != nil {
 			path = relFile
@@ -179,10 +162,6 @@ func ApplyShortDeclFixes(dir string, verifyOutput string) string {
 		}
 		lines := strings.Split(string(data), "\n")
 		changed := false
-		lineSet := make(map[int]bool, len(lineNums))
-		for _, n := range lineNums {
-			lineSet[n] = true
-		}
 		for i, l := range lines {
 			if !lineSet[i+1] {
 				continue
@@ -219,13 +198,17 @@ func ApplyShortDeclFixes(dir string, verifyOutput string) string {
 // The same fix also handles struct literal context ("as string value in struct literal")
 // and function argument context ("as string value in argument to").
 
-var typeAsStringErrRe = regexp.MustCompile(
-	`^(.+\.go):(\d+):\d+: cannot use (\S+) \(variable of (?:array |struct )?type ([^)]+)\) as string`)
+// typeAsStringDetailRe extracts the variable name and source type from a
+// "cannot use X (variable of type T) as string" error message.
+var typeAsStringDetailRe = regexp.MustCompile(
+	`cannot use (\S+) \(variable of (?:array |struct )?type ([^)]+)\) as string`)
 
 // ApplyUUIDToStringFixes reads go compiler output, finds type-as-string errors for
 // well-known types (uuid.UUID, bool, time.Time), and patches source files in dir.
 // The name is kept for backward-compatibility with callers.
 func ApplyUUIDToStringFixes(dir string, verifyOutput string) string {
+	typeMismatchErrors := WithCode(ParseGoErrors(verifyOutput), "type_mismatch")
+	// Filter to "as string" errors only and extract variable/type details.
 	type fix struct {
 		file    string
 		line    int
@@ -234,20 +217,20 @@ func ApplyUUIDToStringFixes(dir string, verifyOutput string) string {
 	}
 	var fixes []fix
 	seen := make(map[string]bool)
-	for _, line := range strings.Split(verifyOutput, "\n") {
-		m := typeAsStringErrRe.FindStringSubmatch(strings.TrimSpace(line))
-		if m == nil {
+	for _, e := range typeMismatchErrors {
+		if !strings.Contains(e.Message, "as string") {
 			continue
 		}
-		relFile, lineStr, varName, srcType := m[1], m[2], m[3], m[4]
-		key := relFile + ":" + lineStr
+		key := fmt.Sprintf("%s:%d", e.File, e.Line)
 		if seen[key] {
 			continue
 		}
+		m := typeAsStringDetailRe.FindStringSubmatch(e.Message)
+		if m == nil {
+			continue
+		}
 		seen[key] = true
-		lineNum := 0
-		fmt.Sscanf(lineStr, "%d", &lineNum)
-		fixes = append(fixes, fix{file: relFile, line: lineNum, varName: varName, srcType: srcType})
+		fixes = append(fixes, fix{file: e.File, line: e.Line, varName: m[1], srcType: m[2]})
 	}
 	if len(fixes) == 0 {
 		return ""

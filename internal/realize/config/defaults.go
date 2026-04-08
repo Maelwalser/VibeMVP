@@ -59,6 +59,12 @@ var ThinkingBudgetByTier = map[int]int64{
 	2: 16384, // TierSlow — deep cross-task reasoning
 }
 
+// MaxRepairFilesPerCall is the maximum number of source files sent to the LLM
+// per integration repair invocation. When a failing module has more files than
+// this, only the error cluster (files mentioned in compiler errors + their
+// direct imports) is sent — preventing context window overflow.
+const MaxRepairFilesPerCall = 15
+
 // RateLimitBackoffBase is the per-attempt multiplier in seconds for rate-limit backoff.
 // Wait = (attempt+1) * RateLimitBackoffBase seconds.
 const RateLimitBackoffBase = 60

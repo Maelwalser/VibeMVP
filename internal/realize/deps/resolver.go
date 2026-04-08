@@ -147,7 +147,13 @@ func (a *Agent) resolveNode(ctx context.Context) ([]dag.GeneratedFile, error) {
 		// degrades TypeScript verification to a skip rather than a hard failure.
 		if out2, err2 := runCmd(ctx, dir, "npm", "install", "--ignore-scripts", "--legacy-peer-deps"); err2 != nil {
 			if a.verbose {
-				fmt.Printf("[deps] npm install (full) warning in %s: %s\n", dir, out2)
+				fmt.Printf("[deps] npm install (full) warning in %s: %s — retrying with --force\n", dir, out2)
+			}
+			// Retry with --force as a second fallback for peer dependency conflicts.
+			if out3, err3 := runCmd(ctx, dir, "npm", "install", "--ignore-scripts", "--force"); err3 != nil {
+				if a.verbose {
+					fmt.Printf("[deps] npm install --force also failed in %s: %s\n", dir, out3)
+				}
 			}
 		}
 
@@ -214,6 +220,26 @@ func (a *Agent) resolvePython(ctx context.Context) ([]dag.GeneratedFile, error) 
 			Path:    filepath.ToSlash(rel),
 			Content: string(content),
 		})
+
+		// Install packages into a venv so mypy/python verification can find them.
+		// Non-fatal: requirements.txt is the critical output; missing site-packages
+		// just degrades Python verification to a skip rather than a hard failure.
+		venvDir := filepath.Join(dir, ".venv")
+		if _, statErr := os.Stat(venvDir); os.IsNotExist(statErr) {
+			if out, err := runCmd(ctx, dir, "python3", "-m", "venv", ".venv"); err != nil {
+				if a.verbose {
+					fmt.Printf("[deps] venv creation warning in %s: %s\n", dir, out)
+				}
+			}
+		}
+		pipPath := filepath.Join(venvDir, "bin", "pip")
+		if _, statErr := os.Stat(pipPath); statErr == nil {
+			if out, err := runCmd(ctx, dir, pipPath, "install", "-r", "requirements.txt"); err != nil {
+				if a.verbose {
+					fmt.Printf("[deps] pip install warning in %s: %s\n", dir, out)
+				}
+			}
+		}
 	}
 
 	return result, nil

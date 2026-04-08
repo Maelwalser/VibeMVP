@@ -40,6 +40,11 @@ func NewOpenAIAgent(baseURL, apiKey, modelID string, maxTokens int64, reasoningE
 // and returns the generated files.
 func (a *OpenAIAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext, ac.Language())
+	// Non-Claude agents don't support multi-block system caching, so concatenate
+	// the reference context into the system prompt.
+	if refCtx := ReferenceContext(ac); refCtx != "" {
+		systemPrompt += "\n\n" + refCtx
+	}
 	userMsg, err := UserMessage(ac)
 	if err != nil {
 		return nil, fmt.Errorf("build user message: %w", err)

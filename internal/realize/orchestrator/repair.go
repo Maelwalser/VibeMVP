@@ -72,7 +72,7 @@ func repairIntegrationErrors(
 
 				dir := filepath.Join(outputDir, ierr.Dir)
 
-				sourceFiles, err := collectModuleFiles(dir, ierr.Language)
+				allFiles, err := collectModuleFiles(dir, ierr.Language)
 				if err != nil {
 					logf("realize: repair: could not read files from %s: %v", ierr.Dir, err)
 					mu.Lock()
@@ -81,12 +81,22 @@ func repairIntegrationErrors(
 					mu.Unlock()
 					return nil
 				}
-				if len(sourceFiles) == 0 {
+				if len(allFiles) == 0 {
 					mu.Lock()
 					summary.SkippedErrors = append(summary.SkippedErrors,
 						fmt.Sprintf("module %s: no %s files found", ierr.Dir, ierr.Language))
 					mu.Unlock()
 					return nil
+				}
+
+				// Filter to error cluster: only files mentioned in compiler errors
+				// plus files they import. This prevents context window overflow for
+				// large modules while keeping enough context for the LLM to fix.
+				sourceFiles := filterErrorCluster(allFiles, ierr.Output, ierr.Language)
+				if len(sourceFiles) > config.MaxRepairFilesPerCall {
+					logf("realize: repair: %s cluster has %d files (cap %d), truncating",
+						ierr.Dir, len(sourceFiles), config.MaxRepairFilesPerCall)
+					sourceFiles = sourceFiles[:config.MaxRepairFilesPerCall]
 				}
 
 				ac := buildRepairContext(attempt, sourceFiles, ierr.Dir, ierr.Output)
@@ -182,6 +192,104 @@ func buildRepairContext(attempt int, sourceFiles []dag.GeneratedFile, moduleDir,
 		DependencyOutputs: []*memory.TaskOutput{syntheticOutput},
 		AttemptNumber:     attempt,
 	}
+}
+
+// filterErrorCluster selects only the files mentioned in compiler errors and their
+// direct imports from the full module file list. If no files are extracted from
+// the error output (or the result is small enough), returns all files as-is.
+func filterErrorCluster(allFiles []dag.GeneratedFile, errOutput, language string) []dag.GeneratedFile {
+	// If the module is small enough, send everything.
+	if len(allFiles) <= config.MaxRepairFilesPerCall {
+		return allFiles
+	}
+
+	// Extract file names from compiler error output.
+	errorFiles := make(map[string]bool)
+	for _, line := range strings.Split(errOutput, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Go errors: "file.go:line:col: error message"
+		// TS errors: "file.ts(line,col): error TS..."
+		colon := strings.Index(line, ":")
+		if colon > 0 {
+			candidate := line[:colon]
+			if isSourceExt(candidate, language) {
+				errorFiles[filepath.ToSlash(candidate)] = true
+			}
+		}
+	}
+
+	if len(errorFiles) == 0 {
+		return allFiles
+	}
+
+	// Build a lookup by path.
+	byPath := make(map[string]dag.GeneratedFile, len(allFiles))
+	for _, f := range allFiles {
+		byPath[f.Path] = f
+	}
+
+	// Collect error cluster: files with errors + files they import.
+	cluster := make(map[string]bool)
+	for path := range errorFiles {
+		cluster[path] = true
+		// Find imports in the error file and add them to the cluster.
+		if f, ok := byPath[path]; ok {
+			for _, imp := range extractLocalImports(f.Content, language) {
+				// Match imported package to a file in the module.
+				for _, af := range allFiles {
+					if strings.Contains(af.Path, imp) {
+						cluster[af.Path] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Build result in original order, error files first.
+	var result []dag.GeneratedFile
+	for _, f := range allFiles {
+		if cluster[f.Path] {
+			result = append(result, f)
+		}
+	}
+	return result
+}
+
+// isSourceExt checks if a filename has a source extension for the given language.
+func isSourceExt(name, language string) bool {
+	switch language {
+	case "go":
+		return strings.HasSuffix(name, ".go")
+	case "typescript":
+		return strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")
+	case "python":
+		return strings.HasSuffix(name, ".py")
+	}
+	return false
+}
+
+// extractLocalImports extracts local (non-stdlib) import paths from source content.
+func extractLocalImports(content, language string) []string {
+	var imports []string
+	switch language {
+	case "go":
+		// Match import lines like: "module/internal/domain"
+		for _, line := range strings.Split(content, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, `"`) && strings.Contains(line, "/internal/") {
+				// Extract the last path component as a package match hint.
+				imp := strings.Trim(line, `"`)
+				parts := strings.Split(imp, "/")
+				if len(parts) > 0 {
+					imports = append(imports, parts[len(parts)-1])
+				}
+			}
+		}
+	}
+	return imports
 }
 
 // collectModuleFiles reads all source files matching the given language from dir,

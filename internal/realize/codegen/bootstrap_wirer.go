@@ -15,17 +15,21 @@ import (
 // signatures extracted by upstream tasks. The skeleton:
 //   - Instantiates repositories, services, and handlers in dependency order
 //   - Wires constructors with the exact argument count and types
-//   - Sets up a basic HTTP router and server
+//   - Sets up a framework-appropriate router and server
 //
 // The LLM receives this skeleton and is instructed to fill in custom parts only
 // (middleware logic, env parsing, graceful shutdown). This eliminates the most
 // common bootstrap failure: wrong constructor argument counts.
 //
+// framework is the HTTP framework (e.g. "Fiber", "Gin", "Echo", "Chi", "").
+// language is the primary language (e.g. "Go", "TypeScript", "Python").
 // Returns "" if there are insufficient constructors to generate a useful skeleton.
 func WireBootstrap(
 	ctors []memory.ConstructorSig,
 	methods []memory.ServiceMethodSig,
 	modulePath string,
+	framework string,
+	language string,
 ) string {
 	if len(ctors) == 0 || modulePath == "" {
 		return ""
@@ -54,12 +58,20 @@ func WireBootstrap(
 	importPaths[`"context"`] = true
 	importPaths[`"fmt"`] = true
 	importPaths[`"log"`] = true
-	importPaths[`"net/http"`] = true
 	importPaths[`"os"`] = true
 	for _, c := range ctors {
 		if c.Package != "" {
 			importPaths[fmt.Sprintf(`"%s/%s"`, modulePath, c.Package)] = true
 		}
+	}
+	// Add framework-specific imports.
+	fwImports := frameworkImports(framework)
+	for _, imp := range fwImports {
+		importPaths[imp] = true
+	}
+	// Fiber's error handler uses errors.As.
+	if strings.ToLower(framework) == "fiber" {
+		importPaths[`"errors"`] = true
 	}
 
 	// Sort imports for determinism.
@@ -126,24 +138,8 @@ func WireBootstrap(
 		b.WriteString("\n")
 	}
 
-	// Step 5: Router setup.
-	b.WriteString("\t// ── Router ──\n")
-	b.WriteString("\tmux := http.NewServeMux()\n")
-	for _, h := range handlers {
-		varName := ctorVarName(h.Signature)
-		b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on mux\n", varName))
-		_ = varName
-	}
-	b.WriteString("\n")
-
-	// Step 6: Server startup.
-	b.WriteString("\tport := os.Getenv(\"PORT\")\n")
-	b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
-	b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
-	b.WriteString("\tif err := http.ListenAndServe(\":\"+port, mux); err != nil {\n")
-	b.WriteString("\t\tlog.Fatalf(\"server error: %v\", err)\n")
-	b.WriteString("\t}\n")
-	b.WriteString("}\n")
+	// Step 5: Router setup + server startup (framework-specific).
+	writeRouterAndServer(&b, framework, handlers)
 
 	return b.String()
 }
@@ -189,4 +185,111 @@ func lcFirst(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// frameworkImports returns the import paths required for the given framework.
+// Returns stdlib "net/http" as the default.
+func frameworkImports(framework string) []string {
+	switch strings.ToLower(framework) {
+	case "fiber":
+		return []string{`"github.com/gofiber/fiber/v2"`}
+	case "gin":
+		return []string{`"github.com/gin-gonic/gin"`}
+	case "echo":
+		return []string{`"github.com/labstack/echo/v4"`}
+	case "chi":
+		return []string{`"net/http"`, `"github.com/go-chi/chi/v5"`}
+	default:
+		return []string{`"net/http"`}
+	}
+}
+
+// writeRouterAndServer emits the framework-specific router setup and server
+// startup code into the bootstrap skeleton.
+func writeRouterAndServer(b *strings.Builder, framework string, handlers []memory.ConstructorSig) {
+	b.WriteString("\t// ── Router ──\n")
+
+	switch strings.ToLower(framework) {
+	case "fiber":
+		b.WriteString("\tapp := fiber.New(fiber.Config{\n")
+		b.WriteString("\t\tErrorHandler: func(c *fiber.Ctx, err error) error {\n")
+		b.WriteString("\t\t\tcode := fiber.StatusInternalServerError\n")
+		b.WriteString("\t\t\tvar e *fiber.Error\n")
+		b.WriteString("\t\t\tif errors.As(err, &e) { code = e.Code }\n")
+		b.WriteString("\t\t\treturn c.Status(code).JSON(fiber.Map{\"error\": err.Error()})\n")
+		b.WriteString("\t\t},\n")
+		b.WriteString("\t})\n")
+		b.WriteString("\tapi := app.Group(\"/api\")\n")
+		for _, h := range handlers {
+			varName := ctorVarName(h.Signature)
+			b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on api group\n", varName))
+			_ = varName
+		}
+		b.WriteString("\n")
+		b.WriteString("\tport := os.Getenv(\"PORT\")\n")
+		b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
+		b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
+		b.WriteString("\tlog.Fatal(app.Listen(\":\" + port))\n")
+
+	case "gin":
+		b.WriteString("\tr := gin.Default()\n")
+		b.WriteString("\tapi := r.Group(\"/api\")\n")
+		for _, h := range handlers {
+			varName := ctorVarName(h.Signature)
+			b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on api group\n", varName))
+			_ = varName
+		}
+		b.WriteString("\n")
+		b.WriteString("\tport := os.Getenv(\"PORT\")\n")
+		b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
+		b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
+		b.WriteString("\tlog.Fatal(r.Run(\":\" + port))\n")
+
+	case "echo":
+		b.WriteString("\te := echo.New()\n")
+		b.WriteString("\tapi := e.Group(\"/api\")\n")
+		for _, h := range handlers {
+			varName := ctorVarName(h.Signature)
+			b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on api group\n", varName))
+			_ = varName
+		}
+		b.WriteString("\n")
+		b.WriteString("\tport := os.Getenv(\"PORT\")\n")
+		b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
+		b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
+		b.WriteString("\te.Logger.Fatal(e.Start(\":\" + port))\n")
+
+	case "chi":
+		b.WriteString("\tr := chi.NewRouter()\n")
+		for _, h := range handlers {
+			varName := ctorVarName(h.Signature)
+			b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on r\n", varName))
+			_ = varName
+		}
+		b.WriteString("\n")
+		b.WriteString("\tport := os.Getenv(\"PORT\")\n")
+		b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
+		b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
+		b.WriteString("\tif err := http.ListenAndServe(\":\"+port, r); err != nil {\n")
+		b.WriteString("\t\tlog.Fatalf(\"server error: %v\", err)\n")
+		b.WriteString("\t}\n")
+
+	default:
+		// stdlib net/http
+		b.WriteString("\tmux := http.NewServeMux()\n")
+		for _, h := range handlers {
+			varName := ctorVarName(h.Signature)
+			b.WriteString(fmt.Sprintf("\t// TODO: Register %s routes on mux\n", varName))
+			_ = varName
+		}
+		b.WriteString("\n")
+		b.WriteString("\tport := os.Getenv(\"PORT\")\n")
+		b.WriteString("\tif port == \"\" { port = \"8080\" }\n")
+		b.WriteString("\tlog.Printf(\"server starting on :%s\", port)\n")
+		b.WriteString("\tif err := http.ListenAndServe(\":\"+port, mux); err != nil {\n")
+		b.WriteString("\t\tlog.Fatalf(\"server error: %v\", err)\n")
+		b.WriteString("\t}\n")
+	}
+
+	b.WriteString("}\n")
 }

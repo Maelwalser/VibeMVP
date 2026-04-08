@@ -200,6 +200,14 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	verifiers := verify.NewRegistry()
 	mem := memory.New()
 
+	// Rehydrate shared memory from disk for tasks completed in prior runs.
+	// Without this, downstream tasks that depend on already-completed upstream
+	// tasks would see empty dependency outputs, type registries, and constructor
+	// signatures — causing the LLM to reinvent types with different signatures.
+	if st.CompletedCount() > 0 {
+		o.rehydrateMemory(d, st, writer, mem)
+	}
+
 	// defaultProvider is used for tasks that have no per-section manifest override.
 	// Priority: --provider flag → manifest provider → env vars → Claude.
 	defaultProvider := o.resolveDefaultProviderFromManifest(m, configuredProviders)
@@ -395,6 +403,65 @@ func (o *Orchestrator) runWave(
 	}
 
 	return g.Wait()
+}
+
+// rehydrateMemory reads completed task outputs from disk and populates shared
+// memory so downstream tasks see accurate type registries, constructor signatures,
+// service methods, error sentinels, and interface contracts from prior runs.
+func (o *Orchestrator) rehydrateMemory(d *dag.DAG, st *state.Store, writer *output.Writer, mem *memory.SharedMemory) {
+	completedIDs := st.CompletedIDs()
+	rehydrated := 0
+
+	for _, id := range completedIDs {
+		task, ok := d.Tasks[id]
+		if !ok {
+			continue // task no longer in DAG (manifest changed)
+		}
+
+		outputDir := task.Payload.OutputDir
+		moduleRelative, prefixed, err := memory.RehydrateFromDisk(writer.BaseDir(), outputDir)
+		if err != nil {
+			o.log("realize: warning: failed to rehydrate %s from disk: %v", id, err)
+			continue
+		}
+		if len(prefixed) == 0 {
+			continue
+		}
+
+		// Record in shared memory — mirrors TaskRunner.commit() logic.
+		mem.Record(task, prefixed, outputDir)
+
+		// Register types, constructors, methods, sentinels, and contracts from
+		// module-relative files (same as runner.registerExported* methods).
+		for _, f := range moduleRelative {
+			for name, entry := range memory.ExtractGoExportedTypeNames(f.Path, f.Content) {
+				types := map[string]memory.TypeEntry{name: entry}
+				mem.RegisterTypes(types)
+			}
+			for name, entry := range memory.ExtractExportedTypeNames(f.Path, f.Content) {
+				types := map[string]memory.TypeEntry{name: entry}
+				mem.RegisterTypes(types)
+			}
+			if sigs := memory.ExtractConstructorSigs(f.Path, f.Content); len(sigs) > 0 {
+				mem.RegisterConstructors(f.Path, sigs)
+			}
+			if sigs := memory.ExtractServiceMethodSigs(f.Path, f.Content); len(sigs) > 0 {
+				mem.RegisterServiceMethods(f.Path, sigs)
+			}
+			if sentinels := memory.ExtractErrorSentinels(f.Path, f.Content); len(sentinels) > 0 {
+				mem.RegisterErrorSentinels(sentinels)
+			}
+			if contracts := memory.ExtractGoInterfaceContracts(f.Path, f.Content); len(contracts) > 0 {
+				mem.RegisterInterfaceContracts(contracts)
+			}
+		}
+
+		rehydrated++
+	}
+
+	if rehydrated > 0 {
+		o.log("realize: rehydrated shared memory from %d completed task(s)", rehydrated)
+	}
 }
 
 // printPlan prints the task DAG in dry-run mode without invoking any agents.

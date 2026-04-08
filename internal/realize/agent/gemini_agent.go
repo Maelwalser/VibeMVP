@@ -45,6 +45,11 @@ func NewGeminiAgent(apiKey, modelID string, maxTokens, thinkingBudget int64, ver
 // and returns the generated files.
 func (a *GeminiAgent) Run(ctx context.Context, ac *Context) (*Result, error) {
 	systemPrompt := SystemPrompt(ac.Task.Kind, ac.SkillDocs, ac.DepsContext, ac.Language())
+	// Non-Claude agents don't support multi-block system caching, so concatenate
+	// the reference context into the system prompt.
+	if refCtx := ReferenceContext(ac); refCtx != "" {
+		systemPrompt += "\n\n" + refCtx
+	}
 	userMsg, err := UserMessage(ac)
 	if err != nil {
 		return nil, fmt.Errorf("build user message: %w", err)

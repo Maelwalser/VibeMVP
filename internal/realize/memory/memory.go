@@ -86,14 +86,18 @@ type SharedMemory struct {
 	errorSentinels      []ErrorSentinel      // all Err* var declarations extracted at commit time
 	interfaceContracts  []InterfaceContract  // all interface definitions extracted at commit time
 	crossTaskIssues     string               // build errors from incremental compilation
+	goModByModule       map[string]string    // Go module path → locked go.mod content
+	goSumByModule       map[string]string    // Go module path → locked go.sum content
 }
 
 // New returns an empty SharedMemory.
 func New() *SharedMemory {
 	return &SharedMemory{
-		outputs:      make(map[string]*TaskOutput),
-		rawPaths:     make(map[string][]string),
-		typeRegistry: make(map[string]TypeEntry),
+		outputs:       make(map[string]*TaskOutput),
+		rawPaths:      make(map[string][]string),
+		typeRegistry:  make(map[string]TypeEntry),
+		goModByModule: make(map[string]string),
+		goSumByModule: make(map[string]string),
 	}
 }
 
@@ -324,6 +328,69 @@ func (m *SharedMemory) TypeRegistry() map[string]TypeEntry {
 		result[k] = v
 	}
 	return result
+}
+
+// StoreLockedGoMod records the locked go.mod content for a given module path.
+// Called when a dependency resolution task commits its go.mod.
+// Safe for concurrent use.
+func (m *SharedMemory) StoreLockedGoMod(modulePath, content string) {
+	if modulePath == "" || content == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.goModByModule[modulePath] = content
+}
+
+// LockedGoMod returns the stored go.mod content for a module path, or "" if none.
+// Safe for concurrent use.
+func (m *SharedMemory) LockedGoMod(modulePath string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.goModByModule[modulePath]
+}
+
+// AnyLockedGoMod returns the first stored go.mod content, or "" if none.
+// Useful as a fallback when the exact module path is unknown.
+// Safe for concurrent use.
+func (m *SharedMemory) AnyLockedGoMod() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, content := range m.goModByModule {
+		return content
+	}
+	return ""
+}
+
+// StoreLockedGoSum records the locked go.sum content for a given module path.
+// Called alongside StoreLockedGoMod when a dependency resolution task commits.
+// Safe for concurrent use.
+func (m *SharedMemory) StoreLockedGoSum(modulePath, content string) {
+	if modulePath == "" || content == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.goSumByModule[modulePath] = content
+}
+
+// LockedGoSum returns the stored go.sum content for a module path, or "" if none.
+// Safe for concurrent use.
+func (m *SharedMemory) LockedGoSum(modulePath string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.goSumByModule[modulePath]
+}
+
+// AnyLockedGoSum returns the first stored go.sum content, or "" if none.
+// Safe for concurrent use.
+func (m *SharedMemory) AnyLockedGoSum() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, content := range m.goSumByModule {
+		return content
+	}
+	return ""
 }
 
 // CommittedPaths returns all file paths committed by the given dependency task IDs.

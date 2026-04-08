@@ -9,6 +9,7 @@ import (
 
 	"github.com/vibe-menu/internal/realize/dag"
 	"github.com/vibe-menu/internal/realize/skills"
+	"github.com/vibe-menu/internal/realize/verify"
 )
 
 // SystemPrompt builds the stable system prompt for a task kind.
@@ -43,6 +44,94 @@ func SystemPrompt(kind dag.TaskKind, skillDocs []skills.Doc, depsContext, langua
 		b.WriteString("\n\n## Technology Skill Guides\n\n")
 		for _, doc := range skillDocs {
 			b.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", doc.Technology, doc.Content))
+		}
+	}
+
+	return b.String()
+}
+
+// ReferenceContext builds the stable cross-task reference sections (type
+// registry, constructor signatures, service methods, error sentinels,
+// interface contracts) as a separate string suitable for a cached system block.
+// These sections are stable across retries (they come from completed upstream
+// tasks), so caching them separately from the user message saves ~30-40% on
+// retries. Returns "" when there's no reference content to inject.
+func ReferenceContext(ac *Context) string {
+	var b strings.Builder
+
+	modulePath := ac.Task.Payload.ModulePath
+
+	if len(ac.InterfaceContracts) > 0 {
+		b.WriteString("## Interface Contract — MUST IMPLEMENT EXACTLY\n\n")
+		b.WriteString("These interfaces were defined by the plan task and are the **binding contract**.\n")
+		b.WriteString("Your implementation MUST satisfy every method with the **exact** parameter types and return types shown.\n\n")
+		for _, ic := range ac.InterfaceContracts {
+			b.WriteString("### " + ic.InterfaceName + " (from: " + ic.File + ")\n```go\n")
+			b.WriteString("type " + ic.InterfaceName + " interface {\n")
+			for _, m := range ic.Methods {
+				b.WriteString("\t" + m + "\n")
+			}
+			b.WriteString("}\n```\n\n")
+		}
+	}
+
+	if len(ac.AllConstructors) > 0 {
+		b.WriteString("## Critical Constructor Signatures\n\n")
+		b.WriteString("Call these constructors/factories with the **exact** signature shown.\n\n")
+		b.WriteString("```\n")
+		prevFile := ""
+		for _, c := range ac.AllConstructors {
+			if c.File != prevFile {
+				if prevFile != "" {
+					b.WriteString("\n")
+				}
+				b.WriteString("// from: " + c.File + "\n")
+				prevFile = c.File
+			}
+			b.WriteString(c.Signature + "\n")
+		}
+		b.WriteString("```\n\n")
+	}
+
+	if len(ac.AllServiceMethods) > 0 {
+		b.WriteString("## Service Method Signatures\n\n")
+		b.WriteString("Call these methods with the **exact** parameter and return types shown.\n\n")
+		b.WriteString("```\n")
+		prevFile := ""
+		for _, m := range ac.AllServiceMethods {
+			if m.File != prevFile {
+				if prevFile != "" {
+					b.WriteString("\n")
+				}
+				b.WriteString("// from: " + m.File + "\n")
+				prevFile = m.File
+			}
+			b.WriteString(m.Signature + "\n")
+		}
+		b.WriteString("```\n\n")
+	}
+
+	if len(ac.AllErrorSentinels) > 0 {
+		b.WriteString("## Available Error Sentinels — USE ONLY THESE\n\n")
+		byPkg := make(map[string][]string)
+		var pkgOrder []string
+		for _, s := range ac.AllErrorSentinels {
+			importPath := s.Package
+			if modulePath != "" && s.Package != "" {
+				importPath = modulePath + "/" + s.Package
+			}
+			key := importPath
+			if _, seen := byPkg[key]; !seen {
+				pkgOrder = append(pkgOrder, key)
+			}
+			byPkg[key] = append(byPkg[key], s.Name)
+		}
+		for _, pkg := range pkgOrder {
+			b.WriteString(fmt.Sprintf("**`%s`**:\n", pkg))
+			for _, name := range byPkg[pkg] {
+				b.WriteString(fmt.Sprintf("- `%s`\n", name))
+			}
+			b.WriteString("\n")
 		}
 	}
 
@@ -216,100 +305,11 @@ func UserMessage(ac *Context) (string, error) {
 		}
 	}
 
-	// Inject constructor signatures from shared memory. Always injected (including
-	// Inject interface contracts as a hard checklist. Implementation tasks MUST match
-	// these exact method signatures — the interfaces are the binding contract between
-	// layers, defined by the plan task and authoritative for all downstream tasks.
-	if len(ac.InterfaceContracts) > 0 {
-		b.WriteString("\n## Interface Contract — MUST IMPLEMENT EXACTLY\n\n")
-		b.WriteString("These interfaces were defined by the plan task and are the **binding contract**.\n")
-		b.WriteString("Your implementation MUST satisfy every method with the **exact** parameter types and return types shown.\n")
-		b.WriteString("Do NOT add, remove, rename, or change the signature of any method.\n\n")
-		for _, ic := range ac.InterfaceContracts {
-			b.WriteString("### " + ic.InterfaceName + " (from: " + ic.File + ")\n```go\n")
-			b.WriteString("type " + ic.InterfaceName + " interface {\n")
-			for _, m := range ic.Methods {
-				b.WriteString("\t" + m + "\n")
-			}
-			b.WriteString("}\n```\n\n")
-		}
-	}
-
-	// retries) so agents can fix "too many arguments" and signature mismatch errors.
-	// Extracted at commit time from full, untruncated file content.
-	if len(ac.AllConstructors) > 0 {
-		b.WriteString("\n## Critical Constructor Signatures\n\n")
-		b.WriteString("Call these constructors/factories with the **exact** signature shown.\n")
-		b.WriteString("The `// from:` comment tells you where to import from:\n")
-		b.WriteString("- Go: strip filename → `internal/repository/postgres/user.go` → `import \"{module_path}/internal/repository/postgres\"`\n")
-		b.WriteString("- TypeScript: use relative import `./repository/user.repository`\n")
-		b.WriteString("- Python: use dotted module path `app.repository.user_repository`\n\n")
-		b.WriteString("```\n")
-		prevFile := ""
-		for _, c := range ac.AllConstructors {
-			if c.File != prevFile {
-				if prevFile != "" {
-					b.WriteString("\n")
-				}
-				b.WriteString("// from: " + c.File + "\n")
-				prevFile = c.File
-			}
-			b.WriteString(c.Signature + "\n")
-		}
-		b.WriteString("```\n")
-	}
-
-	// Inject service method signatures from shared memory. Always injected (including
-	// retries) so agents can fix method call errors. Extracted at commit time from
-	// full, untruncated file content.
-	if len(ac.AllServiceMethods) > 0 {
-		b.WriteString("\n## Service Method Signatures\n\n")
-		b.WriteString("Call these methods with the **exact** parameter and return types shown.\n")
-		b.WriteString("The `// from:` comment tells you where to import from (same rules as constructors above).\n\n")
-		b.WriteString("```\n")
-		prevFile := ""
-		for _, m := range ac.AllServiceMethods {
-			if m.File != prevFile {
-				if prevFile != "" {
-					b.WriteString("\n")
-				}
-				b.WriteString("// from: " + m.File + "\n")
-				prevFile = m.File
-			}
-			b.WriteString(m.Signature + "\n")
-		}
-		b.WriteString("```\n")
-	}
-
-	// Inject available error sentinels from upstream tasks. Always injected
-	// (including retries) so agents use only defined sentinel names.
-	if len(ac.AllErrorSentinels) > 0 {
-		b.WriteString("\n## Available Error Sentinels — USE ONLY THESE\n\n")
-		b.WriteString("The following `Err*` variables are defined by upstream tasks. ")
-		b.WriteString("Use **ONLY** these exact names — do NOT invent alternatives ")
-		b.WriteString("(e.g. do not use `ErrAlreadyExists` if the defined sentinel is `ErrUniqueConstraintViolation`).\n\n")
-		// Group by package for clarity.
-		byPkg := make(map[string][]string)
-		var pkgOrder []string
-		for _, s := range ac.AllErrorSentinels {
-			importPath := s.Package
-			if modulePath != "" && s.Package != "" {
-				importPath = modulePath + "/" + s.Package
-			}
-			key := importPath
-			if _, seen := byPkg[key]; !seen {
-				pkgOrder = append(pkgOrder, key)
-			}
-			byPkg[key] = append(byPkg[key], s.Name)
-		}
-		for _, pkg := range pkgOrder {
-			b.WriteString(fmt.Sprintf("**`%s`**:\n", pkg))
-			for _, name := range byPkg[pkg] {
-				b.WriteString(fmt.Sprintf("- `%s`\n", name))
-			}
-			b.WriteString("\n")
-		}
-	}
+	// NOTE: Interface contracts, constructor signatures, service method signatures,
+	// and error sentinels are injected via ReferenceContext() into a separate cached
+	// system block (for Claude) or appended to the system prompt (for other providers).
+	// This saves ~30-40% on retry input costs since these sections are stable across
+	// retries and benefit from prompt caching.
 
 	// Inject deterministic bootstrap skeleton when available. This gives the LLM
 	// a compilable starting point with correct constructor calls and import paths.
@@ -348,7 +348,100 @@ func UserMessage(ac *Context) (string, error) {
 	}
 
 	b.WriteString("\nGenerate the complete files for this task now.")
-	return b.String(), nil
+
+	msg := b.String()
+
+	// Progressive context pruning on retries: if the message exceeds 80% of
+	// the model's context window, strip the least essential sections to make
+	// room for the error context (which is the most important part on retry).
+	if ac.PreviousErrors != "" && ac.MaxContextTokens > 0 {
+		msg = pruneForRetry(msg, ac.MaxContextTokens)
+	}
+
+	return msg, nil
+}
+
+// estimateTokens returns a rough token count (4 chars ≈ 1 token).
+func estimateTokens(s string) int {
+	return len(s) / 4
+}
+
+// pruneForRetry progressively removes sections from the user message when
+// it exceeds 80% of the context window. Sections are removed in order of
+// least importance for error repair.
+func pruneForRetry(msg string, maxTokens int) string {
+	threshold := int(float64(maxTokens) * 0.8)
+
+	if estimateTokens(msg) <= threshold {
+		return msg
+	}
+
+	// Level 1: Remove bootstrap skeleton (LLM saw it on attempt 0).
+	msg = removeSectionBetween(msg, "## Deterministic Bootstrap Skeleton", "## ")
+	if estimateTokens(msg) <= threshold {
+		return msg
+	}
+
+	// Level 2: Remove service method signatures (keep constructors + contracts).
+	msg = removeSectionBetween(msg, "## Service Method Signatures", "## ")
+	if estimateTokens(msg) <= threshold {
+		return msg
+	}
+
+	// Level 3: Truncate PreviousErrors to first 50 lines.
+	msg = truncateSection(msg, "## Previous Attempt Failed", 50)
+	if estimateTokens(msg) <= threshold {
+		return msg
+	}
+
+	// Level 4: Remove dependency output file bodies (keep only headers).
+	msg = removeSectionBetween(msg, "## Shared Team Context", "## ")
+	return msg
+}
+
+// removeSectionBetween removes everything from startMarker to the next
+// section header (## ) or end of string. Returns the original if markers not found.
+func removeSectionBetween(msg, startMarker, nextPrefix string) string {
+	startIdx := strings.Index(msg, startMarker)
+	if startIdx < 0 {
+		return msg
+	}
+	// Find the next section after the start marker.
+	rest := msg[startIdx+len(startMarker):]
+	endIdx := strings.Index(rest, "\n"+nextPrefix)
+	if endIdx < 0 {
+		// Section goes to end — remove it entirely.
+		return msg[:startIdx]
+	}
+	return msg[:startIdx] + rest[endIdx+1:]
+}
+
+// truncateSection limits the content within a section to maxLines lines
+// after the section header.
+func truncateSection(msg, sectionMarker string, maxLines int) string {
+	idx := strings.Index(msg, sectionMarker)
+	if idx < 0 {
+		return msg
+	}
+	// Find the code block within the section.
+	codeStart := strings.Index(msg[idx:], "```\n")
+	if codeStart < 0 {
+		return msg
+	}
+	codeStart += idx + 4 // skip "```\n"
+	codeEnd := strings.Index(msg[codeStart:], "\n```")
+	if codeEnd < 0 {
+		return msg
+	}
+	codeEnd += codeStart
+
+	codeBlock := msg[codeStart:codeEnd]
+	lines := strings.Split(codeBlock, "\n")
+	if len(lines) <= maxLines {
+		return msg
+	}
+	truncated := strings.Join(lines[:maxLines], "\n") + "\n// ... [truncated — " + fmt.Sprintf("%d", len(lines)-maxLines) + " more error lines]"
+	return msg[:codeStart] + truncated + msg[codeEnd:]
 }
 
 // fenceLanguage returns the markdown code fence language tag for a file path.
@@ -377,14 +470,21 @@ func fenceLanguage(path string) string {
 // errorPatternHints inspects the verification error output and returns targeted
 // guidance for common, well-understood failure modes. Returns empty string when
 // no patterns are recognised.
+//
+// Uses the structured CompilerError parser for Go errors so hint generation is
+// resilient to compiler output format changes across Go versions.
 func errorPatternHints(errors string) string {
 	var matched []string
 
+	// Use the structured error parser for precise symbol extraction.
+	parsed := verify.ParseGoErrors(errors)
+
 	// Extract specific missing method names from "does not implement" errors.
-	// Go compiler format: "*ConcreteType does not implement Interface (missing method MethodName)"
-	if strings.Contains(errors, "does not implement") {
+	for _, e := range verify.WithCode(parsed, "not_implemented") {
+		// Extract concrete type and missing method from message.
+		// Format: "*ConcreteType does not implement Interface (missing method MethodName)"
 		missingMethodRe := regexp.MustCompile(`(\*?\w+) does not implement (\w+) \(missing method (\w+)\)`)
-		for _, m := range missingMethodRe.FindAllStringSubmatch(errors, -1) {
+		if m := missingMethodRe.FindStringSubmatch(e.Message); m != nil {
 			concrete, iface, method := m[1], m[2], m[3]
 			matched = append(matched,
 				fmt.Sprintf("- Interface not satisfied: `%s` is missing method `%s` required by `%s`. "+
@@ -392,26 +492,21 @@ func errorPatternHints(errors string) string {
 					"**every** method listed — do not truncate or omit any. Add `%s` with the EXACT "+
 					"signature shown in the interface.", concrete, method, iface, method))
 		}
-		// If regex didn't match (unusual format), fall through to the generic pattern below.
 	}
 
 	// Extract specific undefined symbol names from "undefined:" errors.
-	// Go compiler format: "undefined: symbolName"
-	if strings.Contains(errors, "undefined:") {
-		undefinedRe := regexp.MustCompile(`undefined: (\w+)`)
-		seen := make(map[string]bool)
-		for _, m := range undefinedRe.FindAllStringSubmatch(errors, -1) {
-			sym := m[1]
-			if seen[sym] {
-				continue
-			}
-			seen[sym] = true
-			matched = append(matched,
-				fmt.Sprintf("- Symbol `%s` is undefined. Add a top-level import for the package that "+
-					"exports `%s` (e.g. `\"net/http\"` for `http.*`, `\"context\"` for `context.*`, "+
-					"`\"fmt\"` for `fmt.*`). Every referenced symbol must have a corresponding `import` "+
-					"line in the same file — the compiler never resolves imports automatically.", sym, sym))
+	seen := make(map[string]bool)
+	for _, e := range verify.WithCode(parsed, "undefined") {
+		sym := e.Symbol
+		if sym == "" || seen[sym] {
+			continue
 		}
+		seen[sym] = true
+		matched = append(matched,
+			fmt.Sprintf("- Symbol `%s` is undefined. Add a top-level import for the package that "+
+				"exports `%s` (e.g. `\"net/http\"` for `http.*`, `\"context\"` for `context.*`, "+
+				"`\"fmt\"` for `fmt.*`). Every referenced symbol must have a corresponding `import` "+
+				"line in the same file — the compiler never resolves imports automatically.", sym, sym))
 	}
 
 	type pattern struct {
